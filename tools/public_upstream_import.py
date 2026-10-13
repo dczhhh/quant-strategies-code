@@ -78,7 +78,12 @@ def main():
                 if (
                     path.startswith(".github/workflows/")
                     or path.startswith("tools/")
-                    or path == "tests/test_private_archive_migration.py"
+                    or path
+                    in {
+                        "tests/__init__.py",
+                        "tests/test_private_archive_migration.py",
+                        "tests/test_public_upstream_import.py",
+                    }
                 ):
                     assert kind == "blob" and mode == "100644"
                     git("update-index", "--add", "--cacheinfo", mode, identity, path, env=env)
@@ -87,6 +92,8 @@ def main():
             if existing:
                 git("fetch", "--no-tags", "origin", "refs/heads/" + BRANCH, env=env)
                 assert git("rev-parse", "FETCH_HEAD^{tree}").decode().strip() == tree
+                ancestry = git("rev-list", "--parents", "-n", "1", "FETCH_HEAD").decode().split()
+                assert len(ancestry) == 2 and ancestry[1] == expected
             else:
                 commit = (
                     git(

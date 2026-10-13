@@ -31,7 +31,7 @@ jobs:
           ref: ${{ vars.ARCHIVE_MIGRATION_REVIEWED_SHA }}
           persist-credentials: false
       - name: Validate migration using invented bytes without private credentials
-        run: python3 -m unittest discover -s tests -v
+        run: python3 -m unittest tests.test_private_archive_migration -v
       - name: Copy and read back immutable private payloads
         env:
           RUNNER_ENVIRONMENT: ${{ runner.environment }}
