@@ -41,6 +41,13 @@ and [validated example configuration](config/us_cash_concentrated.yaml). It chec
 intents, sessions, earnings calendars, portfolio limits and rebalance permission; it contains no
 buy signals and leaves the upstream defaults unchanged.
 
+The opt-in [SPDR sector rotation module](docs/research-sector-rotation.md) supplies the separate
+strategy layer: monthly sector momentum, strength-weighted 15%–25% holdings, a normal 95%
+investment target, and SPY-driven defensive exposure. Import it from
+`ml4t.backtest.strategies.sector_rotation` and use `sector_rotation_engine()` to retain the
+cash-account gates, historical settlement and fee accounting. Its offline regressions verify
+implementation behavior; real-data strategy performance validation remains a separate step.
+
 [![Python 3.12-3.14](https://img.shields.io/badge/python-3.12--3.14-blue.svg)](https://www.python.org/downloads/)
 [![PyPI](https://img.shields.io/pypi/v/ml4t-backtest)](https://pypi.org/project/ml4t-backtest/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)

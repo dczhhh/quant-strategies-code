@@ -130,6 +130,7 @@ nav:
     - Rebalancing: user-guide/rebalancing.md
     - Data Feed: user-guide/data-feed.md
     - Research Data Contracts: research-data-contracts.md
+    - SPDR Sector Rotation Research: research-sector-rotation.md
     - Research Data Archives: research-data-archives.md
     - Offline Raw Validation: research-raw-validation.md
     - Synthetic PIT Provider: research-pit-provider.md
