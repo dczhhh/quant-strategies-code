@@ -153,5 +153,3 @@ recovery, execution windows, missing data, cap-boundary fees and integer shares.
 Research performance validation remains a separate step, with the accepted
 R1–R5 ablations, SPY benchmarks, costs, settlement exposure and chronological
 holdout. No real strategy CAGR, Sharpe or drawdown is claimed by this module.
-
-

@@ -158,7 +158,7 @@ class SectorRotationConfig:
         return ConstraintConfig(**settings)
 
     @classmethod
-    def from_yaml(cls, path: str | Path) -> "SectorRotationConfig":
+    def from_yaml(cls, path: "str | Path") -> "SectorRotationConfig":
         raw = yaml.safe_load(Path(path).read_text(encoding="utf-8"))
         if not isinstance(raw, dict):
             raise ValueError("Sector rotation configuration must be a mapping")

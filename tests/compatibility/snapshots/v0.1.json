@@ -3547,7 +3547,7 @@
         },
         "from_yaml": {
           "kind": "method",
-          "signature": "(cls, path: str | pathlib.Path) -> 'SectorRotationConfig'"
+          "signature": "(cls, path: 'str | Path') -> 'SectorRotationConfig'"
         },
         "history_sessions": {
           "kind": "property",
