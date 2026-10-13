@@ -29,6 +29,10 @@ CALL_LIMIT = 800
 class Stopped(Exception):
     """No provider body, credential, URL or private error text in the public log."""
 
+    def __init__(self, code: str = "CHECK_FAILED"):
+        super().__init__()
+        self.code = code
+
 
 def require(condition: bool) -> None:
     if not condition:
@@ -107,7 +111,12 @@ class GitHub:
             with error:
                 if method == "GET" and error.code == 404 and suffix.startswith("/git/ref/heads/"):
                     return None
-            raise Stopped() from None
+                code = (
+                    f"GITHUB_HTTP_{error.code}"
+                    if error.code in {401, 403, 404, 429}
+                    else "GITHUB_HTTP_FAILED"
+                )
+            raise Stopped(code) from None
         require(len(content) <= RESPONSE_LIMIT)
         result = json.loads(content)
         require(type(result) is dict)
@@ -424,18 +433,40 @@ def guarded() -> None:
 
 
 def main() -> int:
+    phase = "context"
     try:
         require(sys.argv[1:] in [["migrate"], ["verify"]])
         guarded()
+        phase = "destination_inventory"
         destination = GitHub(DESTINATION, os.environ.get("ARCHIVE_WRITE_TOKEN", ""), writable=True)
         content = inventory_bytes(destination)
         if sys.argv[1] == "migrate":
+            phase = "private_copy"
             source = GitHub(SOURCE, os.environ.get("LEGACY_SOURCE_READ_TOKEN", ""))
             migrate(source, destination, content)
         else:
+            phase = "private_readback"
             verify(destination, content)
-    except Exception:
-        print('{"status":"MIGRATION_STOPPED","vendor_requests":0}')
+    except Exception as error:
+        allowed_codes = {
+            "CHECK_FAILED",
+            "GITHUB_HTTP_401",
+            "GITHUB_HTTP_403",
+            "GITHUB_HTTP_404",
+            "GITHUB_HTTP_429",
+            "GITHUB_HTTP_FAILED",
+        }
+        code = (
+            error.code
+            if isinstance(error, Stopped) and error.code in allowed_codes
+            else "CHECK_FAILED"
+        )
+        print(
+            json.dumps(
+                {"status": "MIGRATION_STOPPED", "vendor_requests": 0, "phase": phase, "code": code},
+                separators=(",", ":"),
+            )
+        )
         return 1
     print('{"status":"MIGRATION_VERIFIED","vendor_requests":0}')
     return 0
