@@ -16,7 +16,7 @@ python3 -m unittest discover -s tests -v
 
 ## 下一步配置
 
-在本仓库创建 `private-archive` Environment，并把部署分支限定为 `main`。凭据只放该环境 Secrets，不能写入代码、聊天、普通变量或日志。
+本仓库的 `private-archive` Environment 已创建，部署范围已限定为唯一的 `main` 分支，未允许任何 tag，尚无 Secrets 或变量。凭据只放该环境 Secrets，不能写入代码、聊天、普通变量或日志。
 
 | Secret | 仓库权限 | 使用目的 |
 |---|---|---|
