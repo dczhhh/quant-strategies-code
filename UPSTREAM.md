@@ -1,5 +1,9 @@
 # Upstream provenance
 
+This records the original private project import. The public code repository uses
+a clean source history; private Git history is retained in the original project.
+See [public code migration](docs/public-code-migration.md).
+
 - Repository: https://github.com/ml4t/backtest
 - Branch: main
 - Imported commit: c1ee19c385db3cbad225822cf845832470694f2b
