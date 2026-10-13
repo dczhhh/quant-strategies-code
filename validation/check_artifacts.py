@@ -10,12 +10,17 @@ from pathlib import Path
 
 _ROOT = Path(__file__).parents[1]
 _PACKAGE = _ROOT / "src" / "ml4t" / "backtest"
+_EXTENSION = _ROOT / "src" / "quant_constraints"
 _TESTS = _ROOT / "tests"
 _INTERNAL_NAMES = {"AGENTS.md", "CLAUDE.md"}
 _APPROVED_TEST_DATA = (
     _TESTS / "compatibility" / "snapshots",
     _TESTS / "fixtures" / "artifacts",
 )
+_APPROVED_PACKAGE_DATA = {
+    "src/quant_constraints/research/data/resources/continuous_batch_v1.json": "2d28389406da6d46ff798ea46ff91927d54ea0607d62b9ebc8b804e7312f0e1a",
+    "src/quant_constraints/research/data/resources/sample_batch_v1.json": "387612d9dceb0579e62c6220c64d2f62b6845d0bbe963fc216ee3b821b8f638f",
+}
 
 
 def _python_files(root: Path) -> set[str]:
@@ -74,18 +79,52 @@ def _manifest_diff(actual: set[str], expected: set[str], label: str) -> list[str
     return failures
 
 
+def _resource_failures(wheel: Path, sdist: Path) -> list[str]:
+    """Only literal approved resources, with bounded byte reads and exact hashes."""
+    if not _APPROVED_PACKAGE_DATA:
+        return []
+    failures = []
+    with zipfile.ZipFile(wheel) as zipped, tarfile.open(sdist) as source:
+        for path, expected in _APPROVED_PACKAGE_DATA.items():
+            name = path.removeprefix("src/")
+            if name not in zipped.namelist():
+                failures.append(f"wheel is missing approved resource: {name}")
+            else:
+                with zipped.open(name) as stream:
+                    content = stream.read(65537)
+                if hashlib.sha256(content).hexdigest() != expected:
+                    failures.append(f"wheel approved resource bytes changed: {name}")
+            members = [
+                m for m in source.getmembers() if m.isfile() and m.name.split("/", 1)[-1] == path
+            ]
+            if len(members) != 1:
+                failures.append(f"sdist is missing approved resource: {path}")
+            else:
+                stream = source.extractfile(members[0])
+                if stream is None:
+                    failures.append(f"sdist approved resource is unreadable: {path}")
+                else:
+                    with stream:
+                        content = stream.read(65537)
+                    if hashlib.sha256(content).hexdigest() != expected:
+                        failures.append(f"sdist approved resource bytes changed: {path}")
+    return failures
+
+
 def artifact_failures(directory: Path) -> list[str]:
     wheel = _single(directory, "*.whl")
     sdist = _single(directory, "*.tar.gz")
     wheel_files, dist_info = _wheel_manifest(wheel)
     sdist_files = _sdist_manifest(sdist)
 
-    package_files = {path.removeprefix("src/") for path in _python_files(_PACKAGE)} | {
+    source_files = _python_files(_PACKAGE) | _python_files(_EXTENSION)
+    package_files = {path.removeprefix("src/") for path in source_files} | {
         "ml4t/backtest/py.typed"
     }
     package_data = {
         path.relative_to(_ROOT).as_posix() for path in (_PACKAGE / "example_data").glob("*.csv")
     }
+    package_data |= set(_APPROVED_PACKAGE_DATA)
     expected_wheel = (
         package_files
         | {path.removeprefix("src/") for path in package_data}
@@ -97,7 +136,7 @@ def artifact_failures(directory: Path) -> list[str]:
         }
     )
     expected_sdist = (
-        _python_files(_PACKAGE)
+        source_files
         | package_data
         | _python_files(_TESTS)
         | set().union(*(_data_files(path) for path in _APPROVED_TEST_DATA))
@@ -114,6 +153,7 @@ def artifact_failures(directory: Path) -> list[str]:
 
     failures = _manifest_diff(wheel_files, expected_wheel, "wheel")
     failures.extend(_manifest_diff(sdist_files, expected_sdist, "sdist"))
+    failures.extend(_resource_failures(wheel, sdist))
     for name in wheel_files | sdist_files:
         path = Path(name)
         if _INTERNAL_NAMES.intersection(path.parts) or any(

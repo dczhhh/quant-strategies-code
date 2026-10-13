@@ -1,0 +1,24 @@
+{
+  "schema_version": "research_demand_capture_v1",
+  "capture_id": "aapl_2026_10_09_candidate",
+  "purpose_ref": "issue5_raw_comparison_archive_smoke",
+  "storage_root_ref": "private_archive_root_pending",
+  "provider": "massive",
+  "subscription_selected": "stocks_starter",
+  "symbol": "AAPL",
+  "start_at": "2026-10-09T13:30:00+00:00",
+  "end_at": "2026-10-09T20:00:00+00:00",
+  "products": [
+    "raw",
+    "comparison"
+  ],
+  "page_limit": 5000,
+  "max_requests": 8,
+  "max_source_bytes": 524288,
+  "max_total_bytes": 4194304,
+  "timeout_seconds": 20,
+  "minimum_interval_seconds": 1,
+  "retention_days": 30,
+  "prior_manifest_sha256": null,
+  "refresh_reason_ref": null
+}

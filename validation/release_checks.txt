@@ -1,8 +1,21 @@
 validation/check_artifacts.py
 validation/check_book_links.py
 validation/check_coverage.py
+validation/check_fork_evidence.py
 validation/check_documentation_examples.py
 validation/check_documentation_links.py
+validation/check_research_documentation_links.py
+validation/check_research_raw_coverage.py
+validation/check_research_pit_coverage.py
+validation/check_research_entry_coverage.py
+validation/check_research_permission_coverage.py
+validation/check_research_demand_coverage.py
+validation/check_research_slice_preparation.py
+validation/check_private_capture_coverage.py
+validation/check_private_ingest_coverage.py
+validation/check_private_samples_coverage.py
+validation/check_continuous_preparation.py
+validation/check_continuous_coverage.py
 validation/check_documentation_identity.py
 validation/check_security.py
 validation/build_framework_env.py
@@ -11,6 +24,7 @@ validation/generate_changelog.py
 validation/generate_compatibility_snapshot.py
 validation/generate_parity_claims.py
 validation/performance_baseline.py
+validation/benchmark_research_contracts.py
 validation/release_candidate.py
 validation/run_all_correctness.py
 validation/release_preflight.py
@@ -39,3 +53,4 @@ validation/native/backtrader_behavior.py
 validation/native/zipline_behavior.py
 validation/native/lean_behavior.py
 validation/scenarios/definitions.py
+validation/test_pit_pr8_integration.py

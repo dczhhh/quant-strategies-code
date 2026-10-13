@@ -1,0 +1,133 @@
+name: Private bounded Massive sample batch
+
+on:
+  push:
+    branches: [research-execution/samples-v1]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: private-massive-samples-v1
+  cancel-in-progress: false
+
+jobs:
+  reviewed-code:
+    if: >-
+      github.repository == 'dczhhh/quant-strategies' &&
+      github.actor == 'dczhhh' &&
+      github.ref == 'refs/heads/research-execution/samples-v1' &&
+      vars.MASSIVE_SAMPLES_ENABLED == 'true' &&
+      github.sha == vars.MASSIVE_SAMPLES_REVIEWED_SHA
+    runs-on: ubuntu-latest
+    outputs:
+      commit: ${{ steps.guard.outputs.commit }}
+    steps:
+      - id: guard
+        name: Bind owner-selected source and private repository
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ github.sha }}
+          REVIEWED_SHA: ${{ vars.MASSIVE_SAMPLES_REVIEWED_SHA }}
+        run: |
+          set -euo pipefail
+          [[ "$REVIEWED_SHA" =~ ^[0-9a-f]{40}$ ]]
+          test "$SOURCE_SHA" = "$REVIEWED_SHA"
+          test "$(gh api repos/dczhhh/quant-strategies --jq '.full_name == "dczhhh/quant-strategies" and .private == true and .visibility == "private"')" = "true"
+          printf 'commit=%s\n' "$REVIEWED_SHA" >> "$GITHUB_OUTPUT"
+
+  capture-and-publish:
+    needs: reviewed-code
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        slice:
+          - batch1-nflx-2025-11-14-v1
+          - batch1-nflx-2025-11-17-v1
+          - batch1-nvda-2024-06-07-v1
+          - batch1-nvda-2024-06-10-v1
+          - batch1-spy-2025-11-28-v1
+          - batch1-aapl-2026-03-06-v1
+          - batch1-aapl-2026-03-09-v1
+    env:
+      UV_NO_SOURCES: "1"
+      MASSIVE_SAMPLES_REVIEWED_SHA: ${{ needs.reviewed-code.outputs.commit }}
+      MASSIVE_SAMPLES_ENABLED: ${{ vars.MASSIVE_SAMPLES_ENABLED }}
+      SAMPLE_ID: ${{ matrix.slice }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.reviewed-code.outputs.commit }}
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+        with:
+          python-version: "3.12"
+      - name: Install locked runtime without provider credential
+        run: uv sync --locked --no-dev
+      - name: Prepare owner-only ephemeral root outside checkout
+        env:
+          RUNNER_ENVIRONMENT: ${{ runner.environment }}
+        run: |
+          set -euo pipefail
+          test "$RUNNER_ENVIRONMENT" = "github-hosted"
+          umask 077
+          mkdir -m 700 "$RUNNER_TEMP/quant-private-sample"
+          printf 'QUANT_SAMPLE_ROOT=%s\n' "$RUNNER_TEMP/quant-private-sample" >> "$GITHUB_ENV"
+      - name: Validate frozen admission before provider credential release
+        env:
+          RUNNER_ENVIRONMENT: ${{ runner.environment }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: uv run --no-sync python -m quant_constraints.research.data.private_sample_batch preflight "$SAMPLE_ID"
+      - name: Reuse verified source products or capture bounded originals
+        env:
+          RUNNER_ENVIRONMENT: ${{ runner.environment }}
+          GITHUB_TOKEN: ${{ github.token }}
+          MASSIVE_API_KEY: ${{ secrets.massive }}
+        run: uv run --no-sync python -m quant_constraints.research.data.private_sample_batch capture "$SAMPLE_ID"
+      - name: Publish immutable private slice bundle
+        env:
+          RUNNER_ENVIRONMENT: ${{ runner.environment }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: uv run --no-sync python -m quant_constraints.research.data.private_sample_batch publish "$SAMPLE_ID"
+
+  structural-audit:
+    needs: [reviewed-code, capture-and-publish]
+    if: always() && needs.reviewed-code.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    env:
+      UV_NO_SOURCES: "1"
+      MASSIVE_SAMPLES_REVIEWED_SHA: ${{ needs.reviewed-code.outputs.commit }}
+      MASSIVE_SAMPLES_ENABLED: ${{ vars.MASSIVE_SAMPLES_ENABLED }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.reviewed-code.outputs.commit }}
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+        with:
+          python-version: "3.12"
+      - name: Install locked runtime without provider credential
+        run: uv sync --locked --no-dev
+      - name: Prepare separate owner-only audit root
+        env:
+          RUNNER_ENVIRONMENT: ${{ runner.environment }}
+        run: |
+          set -euo pipefail
+          test "$RUNNER_ENVIRONMENT" = "github-hosted"
+          umask 077
+          mkdir -m 700 "$RUNNER_TEMP/quant-private-sample-audit"
+          printf 'QUANT_SAMPLE_ROOT=%s\n' "$RUNNER_TEMP/quant-private-sample-audit" >> "$GITHUB_ENV"
+      - name: Publish untrusted non-PIT structural study including partial coverage
+        env:
+          RUNNER_ENVIRONMENT: ${{ runner.environment }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: uv run --no-sync python -m quant_constraints.research.data.private_sample_batch analyze

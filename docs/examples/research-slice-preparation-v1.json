@@ -1,0 +1,48 @@
+{
+  "schema_version": "research_slice_execution_preparation_v1",
+  "status": "preparation_only",
+  "accepted_implementation_commit": "f84115a47c84150651ade89563a494e3f6fa10ff",
+  "development_review_id": 5486454320,
+  "plan_sha256": "ab5de290a22b06f93299f9720d52a9ae2212d36b02c7ab476fe9b7e0b5052135",
+  "owner_scope": "approved_bounded_personal_noncommercial",
+  "credential_secret_name": "massive",
+  "execution_environment": "owner_private_posix_pending",
+  "requests": [
+    {
+      "product": "raw",
+      "method": "GET",
+      "url": "https://api.massive.com/v2/aggs/ticker/AAPL/range/1/minute/1791552600000/1791575999999?adjusted=false&sort=asc&limit=5000"
+    },
+    {
+      "product": "comparison",
+      "method": "GET",
+      "url": "https://api.massive.com/v2/aggs/ticker/AAPL/range/1/minute/1791552600000/1791575999999?adjusted=true&sort=asc&limit=5000"
+    }
+  ],
+  "max_requests": 8,
+  "max_source_bytes": 524288,
+  "max_total_bytes": 4194304,
+  "retention_days": 30,
+  "retention_status": "proposed_not_approved",
+  "public_sources": [
+    "https://massive.com/stocks",
+    "https://massive.com/docs/rest/stocks/aggregates/custom-bars",
+    "https://massive.com/legal/individuals-terms-of-service",
+    "https://massive.com/legal/market-data-terms-of-service"
+  ],
+  "public_sources_checked_on": "2026-10-12",
+  "pending_inputs": [
+    "account_entitlement_evidence",
+    "applicable_license_and_retention_evidence",
+    "private_posix_root_acl_and_deletion_evidence",
+    "independent_execution_review_and_registration"
+  ],
+  "account_evidence_ref": null,
+  "license_evidence_ref": null,
+  "root_path_sha256": null,
+  "root_identity_sha256": null,
+  "root_acl_evidence_ref": null,
+  "deletion_policy_ref": null,
+  "reviewed_execution_sha256": null,
+  "valid_until": null
+}

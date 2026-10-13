@@ -129,6 +129,21 @@ nav:
     - Account Policies: user-guide/accounts.md
     - Rebalancing: user-guide/rebalancing.md
     - Data Feed: user-guide/data-feed.md
+    - Research Data Contracts: research-data-contracts.md
+    - Research Data Archives: research-data-archives.md
+    - Offline Raw Validation: research-raw-validation.md
+    - Synthetic PIT Provider: research-pit-provider.md
+    - Research Verification Contracts: research-verification-contracts.md
+    - Research Verification Orchestration: research-verification-orchestration.md
+    - Research Entry: research-entry.md
+    - Research Entry E2E: research-entry-e2e.md
+    - Real Research Preparation: research-real-readiness.md
+    - Bounded Demand Capture: research-demand-capture.md
+    - Slice Execution Review: research-slice-execution-review.md
+    - Private Capture Operator: research-private-capture.md
+    - Private GitHub Archive: research-private-github.md
+    - Private First-Batch Samples: research-private-samples.md
+    - Continuous AAPL Preparation: research-continuous-preparation.md
     - Results & Analysis: user-guide/results.md
     - Market Impact: user-guide/market-impact.md
     - Stateful Strategies: user-guide/stateful-strategies.md

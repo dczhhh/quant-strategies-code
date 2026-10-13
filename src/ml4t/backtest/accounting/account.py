@@ -5,6 +5,8 @@ delegates validation to the appropriate AccountPolicy.
 """
 
 from collections import deque
+from datetime import date
+from heapq import heappop, heappush
 
 from ..types import Position
 from .policy import AccountPolicy
@@ -40,10 +42,14 @@ class AccountState:
         self._lock_notional_free_cash = initial_cash
         self._lock_notional_short_basis: dict[str, float] = {}
         self.positions: dict[str, Position] = {}
+        # Non-cash entitlements belong to this ledger, never to buying power.
+        # Empty for native accounts; opt-in corporate actions populate it.
+        self._receivables: dict[str, float] = {}
         self.policy = policy
 
         # Settlement tracking: holds are (settle_bar, amount) pairs
         self._settlement_holds: deque[tuple[int, float]] = deque()
+        self._dated_settlement_holds: list[tuple[date, float]] = []
         self._total_held: float = 0.0
 
     @property
@@ -51,12 +57,21 @@ class AccountState:
         """Calculate total account equity (Net Liquidating Value).
 
         For both cash and margin accounts:
-            NLV = Cash + Σ(position.market_value)
+            NLV = Cash + non-cash receivables + Σ(position.market_value)
 
         Returns:
             Total account equity
         """
-        return self.cash + sum(p.market_value for p in self.positions.values())
+        return (
+            self.cash
+            + self._receivable_value
+            + sum(p.market_value for p in self.positions.values())
+        )
+
+    @property
+    def _receivable_value(self) -> float:
+        """Recognized non-cash income; excluded from cash and settlement holds."""
+        return sum(self._receivables.values())
 
     @property
     def buying_power(self) -> float:
@@ -123,6 +138,24 @@ class AccountState:
         """Total cash held in unsettled transactions."""
         return self._total_held
 
+    @property
+    def settled_cash(self) -> float:
+        """Cash excluding receivable sale proceeds; reservations are held by orders."""
+        return self.cash - self.unsettled_cash
+
+    def add_dated_settlement_hold(self, settlement_date: date, amount: float) -> None:
+        if amount > 0:
+            heappush(self._dated_settlement_holds, (settlement_date, amount))
+            self._total_held += amount
+
+    def release_settled_on(self, current_date: date) -> None:
+        """Release matured receivables even when intermediate data bars are absent."""
+        while self._dated_settlement_holds and self._dated_settlement_holds[0][0] <= current_date:
+            _, amount = heappop(self._dated_settlement_holds)
+            self._total_held -= amount
+        if not self._dated_settlement_holds and not self._settlement_holds:
+            self._total_held = 0.0
+
     def add_settlement_hold(self, bar_index: int, delay: int, amount: float) -> None:
         """Hold cash from a sale until settlement completes.
 
@@ -147,7 +180,7 @@ class AccountState:
             _, amount = self._settlement_holds.popleft()
             self._total_held -= amount
         # Guard against floating-point drift
-        if not self._settlement_holds:
+        if not self._settlement_holds and not self._dated_settlement_holds:
             self._total_held = 0.0
 
     def __repr__(self) -> str:

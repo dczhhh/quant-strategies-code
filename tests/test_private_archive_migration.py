@@ -607,7 +607,13 @@ class MigrationTests(unittest.TestCase):
             self.assertEqual(m.main(), 1)
         self.assertNotIn("PRIVATE_SECRET", output.getvalue())
         self.assertEqual(
-            json.loads(output.getvalue()), {"status": "MIGRATION_STOPPED", "vendor_requests": 0}
+            json.loads(output.getvalue()),
+            {
+                "status": "MIGRATION_STOPPED",
+                "vendor_requests": 0,
+                "phase": "context",
+                "code": "CHECK_FAILED",
+            },
         )
 
     def test_public_ci_and_privileged_job_have_separate_credentials(self):
@@ -620,9 +626,11 @@ class MigrationTests(unittest.TestCase):
         self.assertNotIn("workflow_run", privileged)
         self.assertNotIn("workflow_call", privileged)
         self.assertEqual(privileged.count("secrets.LEGACY_SOURCE_READ_TOKEN"), 1)
+        # Public CI retains code, documentation and synthetic coverage evidence.
+        # The credential-bearing migration workflow must never upload/cache data.
+        self.assertNotIn("upload-artifact", privileged)
+        self.assertNotIn("actions/cache", privileged)
         for text in (ci, privileged):
-            self.assertNotIn("upload-artifact", text)
-            self.assertNotIn("actions/cache", text)
             self.assertNotIn("secrets.massive", text)
             self.assertIn("persist-credentials: false", text)
 

@@ -1,4 +1,45 @@
+# quant-strategies-code
+
+量化策略研究仓库，基座来自 [ml4t/backtest](https://github.com/ml4t/backtest)。
+
+公开源码从原私有项目已测试的 5F-4A 源码快照迁入，包含现金账户限制、研究数据校验及离线测试。原项目历史和真实采集资料保存在私有仓库；公开 CI 使用合成输入，不读取私有归档。策略尚未接入。
+
+迁移范围及验证方式见 [迁移说明](docs/public-code-migration.md)。
+
+```python
+from ml4t.backtest import BacktestConfig
+
+config = BacktestConfig.from_preset("us_cash_equities")
+config.initial_cash = 10_000
+```
+
+该配置只做多、不融资、允许小数股，只用已结算资金买入；挂单预留资金，
+卖出净款按结算日历释放。当前 T+1，并按成交日期兼容历史 T+2/T+3。
+配置默认未启用交易费用，研究回测需显式设置佣金和滑点。
+使用方式、日历边界与第一步范围见 [现金账户说明](docs/us-cash-account.md)。
+
+## 使用本仓库源码
+
+需要 Python 3.12+ 和 uv。
+
+```bash
+git clone https://github.com/dczhhh/quant-strategies-code.git
+cd quant-strategies-code
+uv sync --locked --dev
+uv run pytest
+```
+
+来源与更新方法见 [UPSTREAM.md](UPSTREAM.md)。上游 README 保留如下。
+其中跨框架对照和性能成绩属于移植提交的历史记录；新增现金账户配置未做跨框架认证。
+
+---
+
 # ml4t-backtest
+
+This fork adds an opt-in [US cash concentrated-account constraint layer](docs/us-cash-concentrated.md)
+and [validated example configuration](config/us_cash_concentrated.yaml). It checks external order
+intents, sessions, earnings calendars, portfolio limits and rebalance permission; it contains no
+buy signals and leaves the upstream defaults unchanged.
 
 [![Python 3.12-3.14](https://img.shields.io/badge/python-3.12--3.14-blue.svg)](https://www.python.org/downloads/)
 [![PyPI](https://img.shields.io/pypi/v/ml4t-backtest)](https://pypi.org/project/ml4t-backtest/)

@@ -202,13 +202,20 @@ def test_release_reuses_all_ci_gates_and_publishes_the_exact_candidate() -> None
     assert set(jobs["build"]["needs"]) == {
         "lint",
         "typecheck",
+        "archived-evidence",
         "compatibility",
         "security",
         "coverage",
         "runtime",
         "public-parity",
         "documentation",
+        "pit-pr8-integration",
     }
+    integration = jobs["pit-pr8-integration"]
+    sibling = next(step for step in integration["steps"] if "ref" in step.get("with", {}))
+    assert sibling["with"]["ref"] == "b5ecfd8527fe8eb6398a09b7f74e802e4324789c"
+    assert sibling["with"]["persist-credentials"] == "false"
+    assert "validation/test_pit_pr8_integration.py" in integration["steps"][-1]["run"]
     parity = jobs["public-parity"]
     assert {entry["framework"] for entry in parity["strategy"]["matrix"]["include"]} == {
         "vectorbt_oss",

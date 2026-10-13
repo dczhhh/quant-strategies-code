@@ -1,0 +1,74 @@
+name: Private bounded AAPL reference materials
+
+on:
+  push:
+    branches: [research-execution/continuous-materials-v1]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: private-continuous-materials-v1
+  cancel-in-progress: false
+
+jobs:
+  reference-only:
+    if: >-
+      github.repository == 'dczhhh/quant-strategies' &&
+      github.actor == 'dczhhh' &&
+      github.ref == 'refs/heads/research-execution/continuous-materials-v1' &&
+      vars.MASSIVE_CONTINUOUS_ENABLED == 'true' &&
+      github.sha == vars.MASSIVE_CONTINUOUS_REVIEWED_SHA
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    env:
+      UV_NO_SOURCES: '1'
+      MASSIVE_CONTINUOUS_ENABLED: ${{ vars.MASSIVE_CONTINUOUS_ENABLED }}
+      MASSIVE_CONTINUOUS_REVIEWED_SHA: ${{ vars.MASSIVE_CONTINUOUS_REVIEWED_SHA }}
+    steps:
+      - name: Verify pinned source and private repository
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          [[ "$MASSIVE_CONTINUOUS_REVIEWED_SHA" =~ ^[0-9a-f]{40}$ ]]
+          test "$SOURCE_SHA" = "$MASSIVE_CONTINUOUS_REVIEWED_SHA"
+          test "$(gh api repos/dczhhh/quant-strategies --jq '.full_name == "dczhhh/quant-strategies" and .private == true and .visibility == "private"')" = "true"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ vars.MASSIVE_CONTINUOUS_REVIEWED_SHA }}
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+        with:
+          python-version: '3.12'
+      - name: Install locked runtime without provider credential
+        run: uv sync --locked --no-dev
+      - name: Prepare owner-only root outside checkout
+        env:
+          RUNNER_ENVIRONMENT: ${{ runner.environment }}
+        run: |
+          set -euo pipefail
+          test "$RUNNER_ENVIRONMENT" = 'github-hosted'
+          umask 077
+          mkdir -m 700 "$RUNNER_TEMP/quant-continuous-materials"
+          printf 'QUANT_CONTINUOUS_ROOT=%s\n' "$RUNNER_TEMP/quant-continuous-materials" >> "$GITHUB_ENV"
+      - name: Validate frozen scope before provider credential release
+        env:
+          RUNNER_ENVIRONMENT: ${{ runner.environment }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: uv run python -m quant_constraints.research.data.continuous_materials preflight
+      - name: Capture one reference or reuse immutable bytes
+        env:
+          RUNNER_ENVIRONMENT: ${{ runner.environment }}
+          GITHUB_TOKEN: ${{ github.token }}
+          MASSIVE_API_KEY: ${{ secrets.massive }}
+        run: uv run python -m quant_constraints.research.data.continuous_materials capture
+      - name: Independently read back the source without provider credential
+        env:
+          RUNNER_ENVIRONMENT: ${{ runner.environment }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: uv run python -m quant_constraints.research.data.continuous_materials verify

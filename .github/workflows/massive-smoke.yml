@@ -1,0 +1,73 @@
+name: Massive Basic permissions preflight
+
+on:
+  workflow_dispatch:
+    inputs:
+      suite:
+        description: Memory-only recent Basic or NFLX split comparison
+        type: choice
+        options: [basic, split]
+        default: basic
+      day:
+        description: Optional completed Basic trading date (YYYY-MM-DD); leave empty for latest
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: massive-basic-preflight
+  cancel-in-progress: false
+
+jobs:
+  reviewed-code:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      commit: ${{ steps.guard.outputs.commit }}
+    steps:
+      - id: guard
+        name: Require owner-reviewed branch and exact source SHA before releasing the secret
+        env:
+          REPOSITORY: ${{ github.repository }}
+          REF: ${{ github.ref }}
+          COMMIT: ${{ github.sha }}
+          REVIEWED_COMMIT: ${{ vars.MASSIVE_SMOKE_REVIEWED_SHA }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          test "$REPOSITORY" = "dczhhh/quant-strategies"
+          test "$REF" = "refs/heads/issue-5b-archive"
+          [[ "$REVIEWED_COMMIT" =~ ^[0-9a-f]{40}$ ]]
+          test "$COMMIT" = "$REVIEWED_COMMIT"
+          test "$(gh api repos/dczhhh/quant-strategies/environments/massive-smoke --jq '.protection_rules | any(.type == "required_reviewers" and (.reviewers | length) > 0)')" = "true"
+          printf 'commit=%s\n' "$REVIEWED_COMMIT" >> "$GITHUB_OUTPUT"
+
+  permissions-preflight:
+    needs: reviewed-code
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    environment: massive-smoke
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.reviewed-code.outputs.commit }}
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+        with:
+          python-version: "3.12"
+      - name: Install locked runtime without a credential
+        env:
+          UV_NO_SOURCES: "1"
+        run: uv sync --locked --no-dev
+      - name: Run memory-only preflight with a sanitized metadata report
+        env:
+          MASSIVE_API_KEY: ${{ secrets.massive }}
+          SMOKE_SUITE: ${{ inputs.suite }}
+          SMOKE_DAY: ${{ inputs.day }}
+        run: |
+          args=(--suite "$SMOKE_SUITE")
+          if test -n "$SMOKE_DAY"; then args+=(--day "$SMOKE_DAY"); fi
+          uv run --no-sync python -m quant_constraints.research.data.smoke "${args[@]}"

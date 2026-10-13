@@ -1,0 +1,82 @@
+{
+  "schema_version": "research_sample_plan_v1",
+  "sample_id": "aapl_2026_10_09_candidate",
+  "provider": "massive",
+  "product": "us_stocks",
+  "subscription_selected": "stocks_starter",
+  "symbol": "AAPL",
+  "security_id": null,
+  "identity": "pending",
+  "calendar": "NYSE",
+  "timezone": "America/New_York",
+  "start_at": "2026-10-09T00:00:00+00:00",
+  "end_at": "2026-10-10T00:00:00+00:00",
+  "source_market": "us_consolidated",
+  "execution_venue": "unresolved_smart",
+  "products": [
+    {
+      "interval": "1m",
+      "adjusted": false,
+      "price_basis": "raw_execution",
+      "session": "rth",
+      "price_unit": "usd_per_share",
+      "share_unit": "raw_shares",
+      "volume_unit": "unknown",
+      "volume_policy": "pending"
+    },
+    {
+      "interval": "1m",
+      "adjusted": true,
+      "price_basis": "split_adjusted",
+      "session": "rth",
+      "price_unit": "usd_per_share",
+      "share_unit": "split_adjusted_shares",
+      "volume_unit": "unknown",
+      "volume_policy": "pending"
+    },
+    {
+      "interval": "1d",
+      "adjusted": false,
+      "price_basis": "raw_execution",
+      "session": "vendor_daily",
+      "price_unit": "usd_per_share",
+      "share_unit": "raw_shares",
+      "volume_unit": "unknown",
+      "volume_policy": "pending"
+    },
+    {
+      "interval": "1d",
+      "adjusted": true,
+      "price_basis": "split_adjusted",
+      "session": "vendor_daily",
+      "price_unit": "usd_per_share",
+      "share_unit": "split_adjusted_shares",
+      "volume_unit": "unknown",
+      "volume_policy": "pending"
+    }
+  ],
+  "endpoints": [
+    "minute_aggregates",
+    "reference",
+    "corporate_actions",
+    "day_aggregates"
+  ],
+  "clocks": {
+    "effective": "pending",
+    "published": "pending",
+    "historically_known": "pending",
+    "provider_available": "pending",
+    "ingested": "pending"
+  },
+  "corrections": "pending",
+  "split_sample": false,
+  "independent_factor": "pending",
+  "private_cloud": false,
+  "ci": false,
+  "redistribution": false,
+  "post_termination_retention": false,
+  "storage_root_ref": "private_archive_root_pending",
+  "max_requests": 8,
+  "max_source_bytes": 524288,
+  "max_total_bytes": 4194304
+}

@@ -3,10 +3,14 @@
 from __future__ import annotations
 
 import importlib.util
+import io
+import tarfile
 import tomllib
+import zipfile
 from pathlib import Path
 from types import ModuleType
 
+import pytest
 import yaml
 
 _ROOT = Path(__file__).parents[2]
@@ -47,6 +51,101 @@ def test_manifest_comparison_rejects_unexpected_and_missing_files() -> None:
     )
     assert "wheel has unexpected files: ['secret.env']" in failures
     assert "wheel is missing files: ['py.typed']" in failures
+
+
+@pytest.mark.parametrize("change", ["clean", "missing_wheel", "missing_sdist", "extra", "internal"])
+def test_cash_extension_is_required_without_allowing_extra_distribution_files(
+    tmp_path, monkeypatch, change
+):
+    checker = _load_artifact_checker()
+    source_files = {
+        "src/ml4t/backtest/__init__.py",
+        "src/quant_constraints/__init__.py",
+        "src/quant_constraints/adapter.py",
+    }
+    for relative in source_files:
+        path = tmp_path / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("# packaged module\n")
+    monkeypatch.setattr(checker, "_ROOT", tmp_path)
+    monkeypatch.setattr(checker, "_PACKAGE", tmp_path / "src/ml4t/backtest")
+    monkeypatch.setattr(checker, "_EXTENSION", tmp_path / "src/quant_constraints")
+    monkeypatch.setattr(checker, "_TESTS", tmp_path / "tests")
+    monkeypatch.setattr(checker, "_APPROVED_TEST_DATA", ())
+    monkeypatch.setattr(checker, "_APPROVED_PACKAGE_DATA", {})
+    dist_info = "test.dist-info"
+    wheel_files = {path.removeprefix("src/") for path in source_files} | {
+        "ml4t/backtest/py.typed",
+        *(
+            f"{dist_info}/{suffix}"
+            for suffix in ("METADATA", "WHEEL", "RECORD", "licenses/LICENSE")
+        ),
+    }
+    sdist_files = source_files | {
+        ".gitignore",
+        "CHANGELOG.md",
+        "LICENSE",
+        "README.md",
+        "PKG-INFO",
+        "pyproject.toml",
+        "src/ml4t/backtest/py.typed",
+    }
+    if change == "missing_wheel":
+        wheel_files.remove("quant_constraints/adapter.py")
+    elif change == "missing_sdist":
+        sdist_files.remove("src/quant_constraints/adapter.py")
+    elif change == "extra":
+        wheel_files.add("unapproved_plugin.py")
+    elif change == "internal":
+        sdist_files.add("src/quant_constraints/AGENTS.md")
+    monkeypatch.setattr(checker, "_single", lambda *_args: tmp_path / "unused")
+    monkeypatch.setattr(checker, "_wheel_manifest", lambda *_args: (wheel_files, dist_info))
+    monkeypatch.setattr(checker, "_sdist_manifest", lambda *_args: sdist_files)
+    failures = checker.artifact_failures(tmp_path)
+    assert bool(failures) == (change != "clean")
+    if change.startswith("missing"):
+        assert any("missing files" in failure and "adapter.py" in failure for failure in failures)
+    elif change in {"extra", "internal"}:
+        assert any("unexpected files" in failure for failure in failures)
+
+
+@pytest.mark.parametrize(
+    "change", ["clean", "wheel_bytes", "sdist_bytes", "wheel_missing", "sdist_missing", "oversize"]
+)
+def test_only_exact_frozen_plan_resource_is_packaged_and_hash_verified(tmp_path, change):
+    from quant_constraints.research.data.continuous_preparation import PLAN_SHA256
+    from quant_constraints.research.data.sample_contracts import FROZEN_SHA256
+
+    checker = _load_artifact_checker()
+    path = "src/quant_constraints/research/data/resources/sample_batch_v1.json"
+    continuous = "src/quant_constraints/research/data/resources/continuous_batch_v1.json"
+    expected_resources = {path: FROZEN_SHA256, continuous: PLAN_SHA256}
+    assert expected_resources == checker._APPROVED_PACKAGE_DATA
+    content = (_ROOT / path).read_bytes()
+    wheel, sdist = tmp_path / "sample.whl", tmp_path / "sample.tar.gz"
+    with zipfile.ZipFile(wheel, "w") as archive:
+        archive.writestr(continuous.removeprefix("src/"), (_ROOT / continuous).read_bytes())
+        if change != "wheel_missing":
+            data = (
+                b" " * 65537
+                if change == "oversize"
+                else content + b" "
+                if change == "wheel_bytes"
+                else content
+            )
+            archive.writestr(path.removeprefix("src/"), data)
+    with tarfile.open(sdist, "w:gz") as archive:
+        extra = (_ROOT / continuous).read_bytes()
+        extra_member = tarfile.TarInfo("package/" + continuous)
+        extra_member.size = len(extra)
+        archive.addfile(extra_member, io.BytesIO(extra))
+        if change != "sdist_missing":
+            data = content + b" " if change == "sdist_bytes" else content
+            member = tarfile.TarInfo("package/" + path)
+            member.size = len(data)
+            archive.addfile(member, io.BytesIO(data))
+    assert bool(checker._resource_failures(wheel, sdist)) == (change != "clean")
+    assert checker._manifest_diff({path, path.replace("sample_batch_v1", "other")}, {path}, "sdist")
 
 
 def test_ci_checks_both_distribution_formats_and_reproducibility() -> None:
