@@ -1,0 +1,47 @@
+name: Reviewed five-request private pull test
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: private-bounded-pull-test-v1
+  cancel-in-progress: false
+
+jobs:
+  capture:
+    if: >-
+      github.repository == 'dczhhh/quant-strategies-code' &&
+      github.actor == 'dczhhh' &&
+      github.event_name == 'workflow_dispatch' &&
+      github.ref == 'refs/heads/main' &&
+      vars.PRIVATE_PULL_ENABLED == 'true' &&
+      github.sha == vars.PRIVATE_PULL_REVIEWED_SHA
+    environment: private-archive
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      PRIVATE_PULL_ENABLED: ${{ vars.PRIVATE_PULL_ENABLED }}
+      PRIVATE_PULL_REVIEWED_SHA: ${{ vars.PRIVATE_PULL_REVIEWED_SHA }}
+      ACTIONS_STEP_DEBUG: ${{ secrets.ACTIONS_STEP_DEBUG }}
+      ACTIONS_RUNNER_DEBUG: ${{ secrets.ACTIONS_RUNNER_DEBUG }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ vars.PRIVATE_PULL_REVIEWED_SHA }}
+          persist-credentials: false
+      - name: Validate invented responses without provider or archive credentials
+        run: python3 -m unittest tests.test_bounded_pull_test -v
+      - name: Capture five fixed products directly into private Git objects
+        env:
+          RUNNER_ENVIRONMENT: ${{ runner.environment }}
+          ARCHIVE_WRITE_TOKEN: ${{ secrets.ARCHIVE_WRITE_TOKEN }}
+          MASSIVE_API_KEY: ${{ secrets.MASSIVE }}
+        run: python3 -I tools/bounded_pull_test.py capture
+      - name: Independently read back without provider credential
+        env:
+          RUNNER_ENVIRONMENT: ${{ runner.environment }}
+          ARCHIVE_WRITE_TOKEN: ${{ secrets.ARCHIVE_WRITE_TOKEN }}
+        run: python3 -I tools/bounded_pull_test.py verify
