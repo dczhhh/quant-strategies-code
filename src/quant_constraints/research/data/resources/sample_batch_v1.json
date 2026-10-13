@@ -1,0 +1,200 @@
+{
+  "schema_version": "research_private_sample_batch_v1",
+  "batch_id": "samples-v1",
+  "owner_authorization_ref": "https://github.com/dczhhh/quant-strategies/issues/5#issuecomment-6126651670",
+  "expected_market_requests": 12,
+  "max_market_attempts": 14,
+  "max_response_bytes": 524288,
+  "max_source_reserved_bytes": 7340032,
+  "maximum_attempts_per_product": 2,
+  "timeout_seconds": 20,
+  "minimum_interval_seconds": 1,
+  "source_metadata_scope": "reviewed_public_classification_not_daily_cap_or_PIT",
+  "securities": [
+    {
+      "symbol": "AAPL",
+      "security_id": "CIK:0000320193",
+      "security_type": "CS",
+      "currency": "USD",
+      "wsb_status": "reviewed_non_meme",
+      "cap_basis": "nonaffiliate_lower_bound",
+      "cap_lower_bound_usd": 3253431000000,
+      "cap_basis_date": "2025-03-28",
+      "valid_from": "2026-03-06",
+      "valid_to": "2026-03-09",
+      "reviewed_on": "2026-10-13",
+      "source_kind": "reviewed_public_fact_summary",
+      "source_ref": "https://www.sec.gov/Archives/edgar/data/320193/000032019325000079/aapl-20250927.htm",
+      "historical_universe_PIT_verified": false
+    },
+    {
+      "symbol": "NFLX",
+      "security_id": "CIK:0001065280",
+      "security_type": "CS",
+      "currency": "USD",
+      "wsb_status": "reviewed_non_meme",
+      "cap_basis": "nonaffiliate_lower_bound",
+      "cap_lower_bound_usd": 565657747980,
+      "cap_basis_date": "2025-06-30",
+      "valid_from": "2025-11-14",
+      "valid_to": "2025-11-17",
+      "reviewed_on": "2026-10-13",
+      "source_kind": "reviewed_public_fact_summary",
+      "source_ref": "https://www.sec.gov/Archives/edgar/data/1065280/000106528026000034/nflx-20251231.htm",
+      "historical_universe_PIT_verified": false
+    },
+    {
+      "symbol": "NVDA",
+      "security_id": "CIK:0001045810",
+      "security_type": "CS",
+      "currency": "USD",
+      "wsb_status": "reviewed_non_meme",
+      "cap_basis": "nonaffiliate_lower_bound",
+      "cap_lower_bound_usd": 1000000000000,
+      "cap_basis_date": "2023-07-28",
+      "valid_from": "2024-06-07",
+      "valid_to": "2024-06-10",
+      "reviewed_on": "2026-10-13",
+      "source_kind": "reviewed_public_fact_summary",
+      "source_ref": "https://www.sec.gov/Archives/edgar/data/1045810/000104581024000029/nvda-20240128.htm",
+      "historical_universe_PIT_verified": false
+    },
+    {
+      "symbol": "SPY",
+      "security_id": "ISIN:US78462F1030",
+      "security_type": "ETF",
+      "currency": "USD",
+      "wsb_status": "reviewed_non_meme",
+      "cap_basis": "issuer_etf",
+      "cap_lower_bound_usd": null,
+      "cap_basis_date": null,
+      "valid_from": "2025-11-28",
+      "valid_to": "2025-11-28",
+      "reviewed_on": "2026-10-13",
+      "source_kind": "reviewed_public_fact_summary",
+      "source_ref": "https://www.ssga.com/us/en/intermediary/etfs/state-street-spdr-sp-500-etf-trust-spy",
+      "historical_universe_PIT_verified": false
+    }
+  ],
+  "slices": [
+    {
+      "capture_id": "batch1-nflx-2025-11-14-v1",
+      "symbol": "NFLX",
+      "day": "2025-11-14",
+      "start_at": "2025-11-14T14:30:00+00:00",
+      "end_at": "2025-11-14T21:00:00+00:00",
+      "expected_minutes": 390,
+      "products": [
+        "raw",
+        "comparison"
+      ],
+      "purpose": "split_before"
+    },
+    {
+      "capture_id": "batch1-nflx-2025-11-17-v1",
+      "symbol": "NFLX",
+      "day": "2025-11-17",
+      "start_at": "2025-11-17T14:30:00+00:00",
+      "end_at": "2025-11-17T21:00:00+00:00",
+      "expected_minutes": 390,
+      "products": [
+        "raw",
+        "comparison"
+      ],
+      "purpose": "split_after"
+    },
+    {
+      "capture_id": "batch1-nvda-2024-06-07-v1",
+      "symbol": "NVDA",
+      "day": "2024-06-07",
+      "start_at": "2024-06-07T13:30:00+00:00",
+      "end_at": "2024-06-07T20:00:00+00:00",
+      "expected_minutes": 390,
+      "products": [
+        "raw",
+        "comparison"
+      ],
+      "purpose": "split_before"
+    },
+    {
+      "capture_id": "batch1-nvda-2024-06-10-v1",
+      "symbol": "NVDA",
+      "day": "2024-06-10",
+      "start_at": "2024-06-10T13:30:00+00:00",
+      "end_at": "2024-06-10T20:00:00+00:00",
+      "expected_minutes": 390,
+      "products": [
+        "raw",
+        "comparison"
+      ],
+      "purpose": "split_after"
+    },
+    {
+      "capture_id": "batch1-spy-2025-11-28-v1",
+      "symbol": "SPY",
+      "day": "2025-11-28",
+      "start_at": "2025-11-28T14:30:00+00:00",
+      "end_at": "2025-11-28T18:00:00+00:00",
+      "expected_minutes": 210,
+      "products": [
+        "raw",
+        "comparison"
+      ],
+      "purpose": "early_close"
+    },
+    {
+      "capture_id": "batch1-aapl-2026-03-06-v1",
+      "symbol": "AAPL",
+      "day": "2026-03-06",
+      "start_at": "2026-03-06T14:30:00+00:00",
+      "end_at": "2026-03-06T21:00:00+00:00",
+      "expected_minutes": 390,
+      "products": [
+        "raw"
+      ],
+      "purpose": "dst_before"
+    },
+    {
+      "capture_id": "batch1-aapl-2026-03-09-v1",
+      "symbol": "AAPL",
+      "day": "2026-03-09",
+      "start_at": "2026-03-09T13:30:00+00:00",
+      "end_at": "2026-03-09T20:00:00+00:00",
+      "expected_minutes": 390,
+      "products": [
+        "raw"
+      ],
+      "purpose": "dst_after"
+    }
+  ],
+  "issuer_facts": [
+    {
+      "symbol": "NFLX",
+      "new_shares": 10,
+      "old_shares": 1,
+      "first_new_unit_session": "2025-11-17",
+      "public_announcement_day": "2025-10-30",
+      "source_ref": "https://ir.netflix.net/investor-news-and-events/financial-releases/press-release-details/2025/Netflix-Announces-Ten-For-One-Stock-Split/default.aspx",
+      "source_kind": "reviewed_public_issuer_summary",
+      "source_document_sha256": null,
+      "published_at": null,
+      "historically_known_at": null
+    },
+    {
+      "symbol": "NVDA",
+      "new_shares": 10,
+      "old_shares": 1,
+      "first_new_unit_session": "2024-06-10",
+      "public_announcement_day": "2024-05-22",
+      "source_ref": "https://nvidianews.nvidia.com/news/nvidia-announces-financial-results-for-first-quarter-fiscal-2025",
+      "source_kind": "reviewed_public_issuer_summary",
+      "source_document_sha256": null,
+      "published_at": null,
+      "historically_known_at": null
+    }
+  ],
+  "calendar_refs": [
+    "https://ir.theice.com/press/news-details/2024/NYSE-Group-Announces-2025-2026-and-2027-Holiday-and-Early-Closings-Calendar/default.aspx",
+    "https://www.nist.gov/pml/time-and-frequency-division/popular-links/daylight-saving-time-dst"
+  ]
+}

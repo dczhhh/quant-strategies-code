@@ -1,0 +1,78 @@
+{
+  "schema_version": "reviewed_source_snapshot_v1",
+  "source_revision": "b5ecfd8527fe8eb6398a09b7f74e802e4324789c",
+  "files": [
+    {
+      "path": "src/quant_constraints/__init__.py",
+      "git_blob_sha": "ae870157c48bc9cc9b0cf479c5ca37669fb2d5aa"
+    },
+    {
+      "path": "src/quant_constraints/adapter.py",
+      "git_blob_sha": "eaa8c75a2ce7f23d5ff271700a5f272950bafc1a"
+    },
+    {
+      "path": "src/quant_constraints/calendar.py",
+      "git_blob_sha": "ca80bc05745c713f131fc4092bbf02075fb8aab6"
+    },
+    {
+      "path": "src/quant_constraints/config.py",
+      "git_blob_sha": "3c64842bc101a0713490e6415e82ea5453f2a157"
+    },
+    {
+      "path": "src/quant_constraints/controller.py",
+      "git_blob_sha": "40ee143c10e84c3334bc7ffe6caaed4f9d080f60"
+    },
+    {
+      "path": "src/quant_constraints/dividend_tax.py",
+      "git_blob_sha": "c95680e43965017e07fabef0ed61b2da9596019b"
+    },
+    {
+      "path": "src/quant_constraints/events.py",
+      "git_blob_sha": "fbd11a225607b89e2173cc4080d3cbd3f90273cc"
+    },
+    {
+      "path": "src/quant_constraints/gates.py",
+      "git_blob_sha": "9ed9a2dd1554839b34429bc3ee4871ee0700fb34"
+    },
+    {
+      "path": "src/quant_constraints/macro.py",
+      "git_blob_sha": "145f37a4ced7d649b5d5486fdb15192b633226de"
+    },
+    {
+      "path": "src/quant_constraints/models.py",
+      "git_blob_sha": "6b7623b65390aacea2979bf0351116d640cf0772"
+    },
+    {
+      "path": "src/quant_constraints/plans.py",
+      "git_blob_sha": "ca4d5a991db7d3f4ddeae5a17295c24466f81937"
+    },
+    {
+      "path": "src/quant_constraints/slippage.py",
+      "git_blob_sha": "a6bf719f45d563a1c8e5e50b859a4154fceaf99e"
+    },
+    {
+      "path": "src/quant_constraints/corporate_actions/__init__.py",
+      "git_blob_sha": "416fc909e9112244af35407b5cc7d8439a585d2e"
+    },
+    {
+      "path": "src/quant_constraints/corporate_actions/events.py",
+      "git_blob_sha": "96a1329ad98e2a8eeeeecad08ca09f5658cd8536"
+    },
+    {
+      "path": "src/quant_constraints/corporate_actions/processor.py",
+      "git_blob_sha": "d3119b493d0b86231d36fbffa764ba11221726c1"
+    },
+    {
+      "path": "src/quant_constraints/fees/__init__.py",
+      "git_blob_sha": "873742be1c9c6967e666c5b4c2cbccc58210cf95"
+    },
+    {
+      "path": "src/quant_constraints/fees/bridge.py",
+      "git_blob_sha": "ff38516cd32e2f411932037860f85118d308b432"
+    },
+    {
+      "path": "src/quant_constraints/fees/ibkr_tiered.py",
+      "git_blob_sha": "c0336ce4309cab933d00d2f931dba50bbed8338b"
+    }
+  ]
+}

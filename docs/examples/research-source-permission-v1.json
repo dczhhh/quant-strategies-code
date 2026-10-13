@@ -1,0 +1,51 @@
+{
+  "schema_version": "research_source_permission_v1",
+  "permission_id": "starter_permission_preparation",
+  "revision": 1,
+  "provider": "massive",
+  "product": "us_stocks",
+  "subscription_selected": "stocks_starter",
+  "credential_upgrade": "user_reported",
+  "entitlement_verified": "pending",
+  "license_verified": "pending",
+  "license_state": "unknown",
+  "terms_version": "market_data_terms_2025_08_28",
+  "effective_at": null,
+  "expires_at": null,
+  "reviewed_at": null,
+  "contact_ref": "massive_support_pending",
+  "open_questions": [
+    "algorithmic_non_display",
+    "private_l0_l1_parquet",
+    "cloud_ci_access",
+    "termination_deletion",
+    "endpoint_history"
+  ],
+  "endpoints": [],
+  "history_start": null,
+  "history_end": null,
+  "delay_seconds": 900,
+  "sample_ids": [],
+  "security_ids": [],
+  "rights": {
+    "personal_algorithmic_backtest": "unknown",
+    "non_display": "unknown",
+    "raw_response": "unknown",
+    "l0": "unknown",
+    "l1": "unknown",
+    "parquet": "unknown",
+    "private_storage": "unknown",
+    "private_cloud": "unknown",
+    "ci": "unknown",
+    "derived_data": "unknown",
+    "redistribution": "unknown",
+    "post_termination_retention": "unknown"
+  },
+  "storage": {
+    "root_ref": "private_archive_root_pending",
+    "location": "local_private",
+    "retention_days": 30,
+    "acl": "pending",
+    "deletion_policy": "pending"
+  }
+}

@@ -1,0 +1,84 @@
+name: Private bounded Massive research archive
+
+on:
+  push:
+    branches: [research-execution/aapl-v1]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: private-massive-aapl-v1
+  cancel-in-progress: false
+
+jobs:
+  reviewed-code:
+    if: >-
+      github.repository == 'dczhhh/quant-strategies' &&
+      github.actor == 'dczhhh' &&
+      github.ref == 'refs/heads/research-execution/aapl-v1' &&
+      vars.MASSIVE_ARCHIVE_ENABLED == 'true' &&
+      github.sha == vars.MASSIVE_ARCHIVE_REVIEWED_SHA
+    runs-on: ubuntu-latest
+    outputs:
+      commit: ${{ steps.guard.outputs.commit }}
+    steps:
+      - id: guard
+        name: Bind the owner-selected source and require a private repository
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ github.sha }}
+          REVIEWED_SHA: ${{ vars.MASSIVE_ARCHIVE_REVIEWED_SHA }}
+        run: |
+          set -euo pipefail
+          [[ "$REVIEWED_SHA" =~ ^[0-9a-f]{40}$ ]]
+          test "$SOURCE_SHA" = "$REVIEWED_SHA"
+          test "$(gh api repos/dczhhh/quant-strategies --jq '.full_name == "dczhhh/quant-strategies" and .private == true and .visibility == "private"')" = "true"
+          printf 'commit=%s\n' "$REVIEWED_SHA" >> "$GITHUB_OUTPUT"
+
+  capture-and-publish:
+    needs: reviewed-code
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    env:
+      UV_NO_SOURCES: "1"
+      MASSIVE_ARCHIVE_REVIEWED_SHA: ${{ needs.reviewed-code.outputs.commit }}
+      MASSIVE_ARCHIVE_ENABLED: ${{ vars.MASSIVE_ARCHIVE_ENABLED }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.reviewed-code.outputs.commit }}
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+        with:
+          python-version: "3.12"
+      - name: Install locked runtime without the provider key
+        run: uv sync --locked --no-dev
+      - name: Prepare an ephemeral owner-only root outside the checkout
+        env:
+          RUNNER_ENVIRONMENT: ${{ runner.environment }}
+        run: |
+          set -euo pipefail
+          test "$RUNNER_ENVIRONMENT" = "github-hosted"
+          umask 077
+          mkdir -m 700 "$RUNNER_TEMP/quant-private-aapl"
+          printf 'QUANT_CAPTURE_ROOT=%s\n' "$RUNNER_TEMP/quant-private-aapl" >> "$GITHUB_ENV"
+      - name: Check the current job and private repository before provider credential release
+        env:
+          RUNNER_ENVIRONMENT: ${{ runner.environment }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: uv run --no-sync python -m quant_constraints.research.data.private_repo_ingest preflight
+      - name: Reuse the private archive or acquire the fixed original response pair
+        env:
+          RUNNER_ENVIRONMENT: ${{ runner.environment }}
+          GITHUB_TOKEN: ${{ github.token }}
+          MASSIVE_API_KEY: ${{ secrets.massive }}
+        run: uv run --no-sync python -m quant_constraints.research.data.private_repo_ingest capture
+      - name: Publish only the bounded derived bundle to the private data branch
+        env:
+          RUNNER_ENVIRONMENT: ${{ runner.environment }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: uv run --no-sync python -m quant_constraints.research.data.private_repo_ingest publish

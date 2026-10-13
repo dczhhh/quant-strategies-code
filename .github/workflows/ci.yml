@@ -1,22 +1,537 @@
-name: Archive isolation tests
+name: CI
 
 on:
+  workflow_call:
+    inputs:
+      release-version:
+        description: Exact package version for a release-candidate build
+        required: false
+        type: string
   workflow_dispatch:
   push:
-    branches: [main]
+    branches: [main, develop]
   pull_request:
-    branches: [main]
+    branches: [main, issue-3-us-cash-constraints, issue-5a-data-contracts, issue-5b-archive, issue-5c-offline-validator, issue-5d-pit-core, issue-5e1-verification-contracts, issue-5e2-verification-orchestration, issue-5e3-research-entry, issue-5e4-entry-e2e, issue-5f0-readiness-plan, issue-5f1-demand-archive, issue-5f1-slice-preparation, issue-5f1-private-operator, issue-5f2-private-intake, issue-5f3-private-samples]
 
 permissions:
   contents: read
 
+env:
+  PYTHON_VERSION: "3.12"
+  UV_NO_SOURCES: "1"
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  synthetic-tests:
-    if: github.event.repository.private == false
-    runs-on: ubuntu-24.04
-    timeout-minutes: 5
+  dependency-review:
+    name: Dependency Review
+    if: github.event_name == 'pull_request'
+    needs: [security]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+        if: github.repository == 'ml4t/backtest'
+      # The research fork lacks GitHub's Dependency Review feature.
+      # Its locked runtime dependency audit remains mandatory and blocks every CVE.
+      - name: Require the fork's locked dependency and source audit
+        if: github.repository != 'ml4t/backtest'
+        run: test "${{ needs.security.result }}" = "success"
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+        with:
+          version: "latest"
+
+      - name: Set up Python
+        run: uv python install ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: uv sync --dev --locked
+
+      - name: Prove lint failures do not mutate files
+        run: |
+          violation="$RUNNER_TEMP/ruff-violation.py"
+          printf 'import os\n' > "$violation"
+          before="$(sha256sum "$violation")"
+          if uv run ruff check --no-fix "$violation"; then
+            echo "Ruff accepted an intentional lint violation" >&2
+            exit 1
+          fi
+          after="$(sha256sum "$violation")"
+          test "$before" = "$after"
+
+      - name: Run ruff check
+        run: xargs uv run ruff check --no-fix src/ tests/ < validation/release_checks.txt
+
+      - name: Run ruff format check
+        run: xargs uv run ruff format --check src/ tests/ < validation/release_checks.txt
+
+      - name: Validate private sample workflow expressions without executing capture
+        run: |
+          set -euo pipefail
+          sample_lint_dir="$(mktemp -d "$RUNNER_TEMP/private-sample-lint.XXXXXX")"
+          curl --fail --location --silent --show-error --max-time 30 \
+            https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz \
+            --output "$sample_lint_dir/actionlint.tar.gz"
+          printf '%s  %s\n' \
+            '8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8' \
+            "$sample_lint_dir/actionlint.tar.gz" | sha256sum --check --strict
+          tar --no-same-owner -xzf "$sample_lint_dir/actionlint.tar.gz" -C "$sample_lint_dir" actionlint
+          "$sample_lint_dir/actionlint" -shellcheck='' -pyflakes='' .github/workflows/private-samples.yml .github/workflows/continuous-materials.yml
+
+      - name: Fetch immutable public upstream evidence
+        run: git fetch --no-tags --depth=1 https://github.com/ml4t/backtest.git c1ee19c385db3cbad225822cf845832470694f2b
+
+      - name: Verify parity claims match retained evidence
+        run: uv run python validation/check_fork_evidence.py
+
+      - name: Verify generated release history
+        run: uv run python validation/generate_changelog.py --check
+
+      - name: Verify the stable compatibility snapshot
+        run: uv run python validation/generate_compatibility_snapshot.py
+
+      - name: Verify pending slice preparation without real acquisition
+        run: uv run python validation/check_research_slice_preparation.py
+
+      - name: Verify the committed checkout is unchanged
+        run: git diff --exit-code
+
+  typecheck:
+    name: Type Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+        with:
+          version: "latest"
+
+      - name: Set up Python
+        run: uv python install ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: uv sync --dev --locked
+
+      - name: Run ty check
+        run: xargs uv run ty check src/ < validation/release_checks.txt
+
+      - name: Build the wheel for consumer type checking
+        run: uv build --wheel
+
+      - name: Type-check a public API consumer against the wheel
+        run: |
+          cp tests/typing/public_api_consumer.py "$RUNNER_TEMP/public_api_consumer.py"
+          cd "$RUNNER_TEMP"
+          uvx --python "${{ env.PYTHON_VERSION }}" --from ty \
+            --with "$GITHUB_WORKSPACE"/dist/*.whl \
+            ty check public_api_consumer.py
+
+  archived-evidence:
+    name: Archived Upstream Evidence
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+        with:
+          version: "latest"
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Verify frozen evidence against its immutable source
+        run: |
+          git fetch --no-tags --depth=1 https://github.com/ml4t/backtest.git c1ee19c385db3cbad225822cf845832470694f2b
+          archive="$RUNNER_TEMP/upstream-archive"
+          git worktree add --detach "$archive" c1ee19c385db3cbad225822cf845832470694f2b
+          cd "$archive"
+          uv sync --dev --locked
+          uv run python validation/generate_parity_claims.py --check
+          uv run pytest -q -o addopts='' --no-cov \
+            tests/contracts/test_lean_case_study_evidence.py \
+            tests/contracts/test_parity_claim_generation.py \
+            tests/contracts/test_real_strategy_runner.py
+
+  compatibility:
+    name: Compatibility
+    uses: ./.github/workflows/compatibility.yml
+
+  security:
+    name: Security
+    uses: ./.github/workflows/security.yml
+
+  coverage:
+    name: Coverage
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+        with:
+          version: "latest"
+
+      - name: Set up Python
+        run: uv python install ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: uv sync --dev --locked
+
+      - name: Run branch coverage suite
+        run: >-
+          uv run pytest tests/ -q -m "not benchmark and not upstream_evidence"
+          --cov=quant_constraints
+          --cov-branch --cov-report=term --cov-report=json:coverage.json
+
+      - name: Enforce global and critical-module coverage
+        run: uv run python validation/check_coverage.py coverage.json
+
+      - name: Enforce additional offline raw-validator coverage without changing frozen evidence
+        run: uv run python validation/check_research_raw_coverage.py coverage.json
+
+      - name: Enforce additional synthetic PIT-provider coverage
+        run: uv run python validation/check_research_pit_coverage.py coverage.json
+
+      - name: Enforce additional research-entry contract coverage
+        run: uv run python validation/check_research_entry_coverage.py coverage.json
+
+      - name: Enforce additional offline permission-preparation coverage
+        run: uv run python validation/check_research_permission_coverage.py coverage.json
+
+      - name: Enforce additional bounded demand-capture coverage
+        run: uv run python validation/check_research_demand_coverage.py coverage.json
+
+      - name: Enforce additional private capture operator coverage
+        run: uv run python validation/check_private_capture_coverage.py coverage.json
+
+      - name: Enforce additional private repository intake coverage
+        run: uv run python validation/check_private_ingest_coverage.py coverage.json
+
+      - name: Enforce additional private sample and instrument admission coverage
+        run: uv run python validation/check_private_samples_coverage.py coverage.json
+
+      - name: Check continuous preparation without credentials or acquisition
+        run: uv run python validation/check_continuous_preparation.py --synthetic
+
+      - name: Enforce additional continuous preparation and reference-material coverage
+        run: uv run python validation/check_continuous_coverage.py coverage.json
+
+      - name: Retain coverage evidence
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: coverage
+          path: coverage.json
+          if-no-files-found: error
+
+  runtime:
+    name: Runtime Regression
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+        with:
+          version: "latest"
+
+      - name: Set up Python
+        run: uv python install ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: uv sync --dev --locked
+
+      - name: Run runtime regression benchmark
+        env:
+          ML4T_PERFORMANCE_EVIDENCE: performance-evidence.json
+        run: >-
+          uv run pytest
+          tests/benchmark/test_hotpath_benchmarks.py::test_optimized_feed_runtime_vs_legacy_baseline
+          -v --tb=short --no-cov
+
+      - name: Run stable-release performance baselines
+        run: >-
+          uv run python validation/performance_baseline.py
+          --manifest validation/performance_baselines.json
+          --output release-performance-evidence.json
+          --samples 3
+
+      - name: Retain performance evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: performance-evidence
+          path: |
+            performance-evidence.json
+            release-performance-evidence.json
+          if-no-files-found: error
+
+      # Identity query work is gated by regular regression tests; timings are evidence.
+      - name: Measure offline research contract normalization
+        run: >-
+          uv run python validation/benchmark_research_contracts.py
+          --samples 1 --output research-contract-performance.json
+
+      - name: Retain research contract performance evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: research-contract-performance
+          path: research-contract-performance.json
+          if-no-files-found: error
+
+  public-parity:
+    name: Public Parity (${{ matrix.framework }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - framework: vectorbt_oss
+            environment: .venv-vectorbt-oss
+          - framework: backtrader
+            environment: .venv-backtrader
+          - framework: zipline
+            environment: .venv-zipline
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+        with:
+          version: "latest"
+
+      - name: Set up Python
+        run: uv python install ${{ env.PYTHON_VERSION }}
+
+      - name: Build the locked framework environment
+        run: >-
+          python validation/build_framework_env.py
+          --framework ${{ matrix.framework }}
+          --evidence-output environment-evidence.json
+
+      - name: Measure native VectorBT OSS behavior
+        if: matrix.framework == 'vectorbt_oss'
+        run: >-
+          "${{ matrix.environment }}/bin/python"
+          validation/native/vectorbt_behavior.py
+          --framework vectorbt_oss
+          --output native-evidence.json
+
+      - name: Measure native Backtrader behavior
+        if: matrix.framework == 'backtrader'
+        run: >-
+          "${{ matrix.environment }}/bin/python"
+          validation/native/backtrader_behavior.py
+          --output native-evidence.json
+
+      - name: Measure native Zipline behavior
+        if: matrix.framework == 'zipline'
+        run: >-
+          "${{ matrix.environment }}/bin/python"
+          validation/native/zipline_behavior.py
+          --output native-evidence.json
+
+      - name: Run the complete required scenario matrix
+        run: >-
+          "${{ matrix.environment }}/bin/python"
+          validation/run_all_correctness.py
+          --framework ${{ matrix.framework }}
+          --output correctness-candidate.json
+
+      - name: Retain public parity evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: parity-${{ matrix.framework }}
+          path: |
+            environment-evidence.json
+            correctness-candidate.json
+            native-evidence.json
+          if-no-files-found: error
+
+  documentation:
+    name: Documentation
+    runs-on: ubuntu-latest
+    env:
+      RELEASE_VERSION: ${{ inputs.release-version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+        with:
+          version: "latest"
+
+      - name: Set up Python
+        run: uv python install ${{ env.PYTHON_VERSION }}
+
+      - name: Install documentation dependencies
+        run: uv sync --dev --extra docs --locked
+
+      - name: Record documentation identity
+        run: |
+          version="$RELEASE_VERSION"
+          if test -z "$version"; then
+            version="$(uv run python -c 'import ml4t.backtest as package; print(package.__version__)')"
+          fi
+          echo "ML4T_DOCS_VERSION=$version" >> "$GITHUB_ENV"
+          echo "ML4T_DOCS_COMMIT=$GITHUB_SHA" >> "$GITHUB_ENV"
+
+      - name: Build documentation with strict validation
+        run: uv run mkdocs build --strict
+
+      - name: Check rendered guide links
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: uv run python validation/check_research_documentation_links.py --site site
+
+      - name: Verify rendered documentation identity
+        run: >-
+          uv run python validation/check_documentation_identity.py
+          --site site
+          --expected-library backtest
+          --expected-version "$ML4T_DOCS_VERSION"
+          --expected-commit "$ML4T_DOCS_COMMIT"
+
+      - name: Retain immutable documentation artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: docs-${{ github.sha }}
+          path: site/
+          if-no-files-found: error
+          retention-days: 90
+
+  pit-pr8-integration:
+    name: PIT compatibility with pinned PR 8
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - run: python3 -m unittest tests.test_private_archive_migration tests.test_public_upstream_import -v
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+      - name: Install pinned dependencies
+        run: uv sync --dev --locked
+      # Exact PR8 b5ecfd8527fe8eb6398a09b7f74e802e4324789c bytes are carried as a hash-bound snapshot.
+      - name: Exercise existing macro gate, tax resolver and dividend ledger
+        env:
+          PIT_PR8_SOURCE: ${{ github.workspace }}/reviewed_sources/pit-pr8
+        run: uv run pytest validation/test_pit_pr8_integration.py -q --no-cov
+
+  build:
+    name: Build Package
+    runs-on: ubuntu-latest
+    needs:
+      [lint, typecheck, archived-evidence, compatibility, security, coverage, runtime, public-parity, documentation, pit-pr8-integration]
+    env:
+      RELEASE_VERSION: ${{ inputs.release-version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+        with:
+          version: "latest"
+
+      - name: Set up Python
+        run: uv python install ${{ env.PYTHON_VERSION }}
+
+      - name: Build package
+        run: |
+          if test -n "$RELEASE_VERSION"; then
+            export SETUPTOOLS_SCM_PRETEND_VERSION="$RELEASE_VERSION"
+          fi
+          uv build
+
+      - name: Rebuild package for reproducibility
+        run: |
+          if test -n "$RELEASE_VERSION"; then
+            export SETUPTOOLS_SCM_PRETEND_VERSION="$RELEASE_VERSION"
+          fi
+          uv build --out-dir dist-rebuild
+
+      - name: Validate distribution contents and reproducibility
+        run: uv run python validation/check_artifacts.py dist --compare dist-rebuild
+
+      - name: Validate package metadata and long description
+        run: uvx twine check dist/*
+
+      - name: Install the candidate wheel in a clean environment
+        run: |
+          uv venv --clear --python "${{ env.PYTHON_VERSION }}" "$RUNNER_TEMP/candidate-venv"
+          uv pip install \
+            --python "$RUNNER_TEMP/candidate-venv/bin/python" \
+            dist/*.whl
+
+      - name: Check pinned book companion links
+        run: uv run python validation/check_book_links.py
+
+      - name: Execute the documented quick starts against the wheel
+        run: >-
+          "$RUNNER_TEMP/candidate-venv/bin/python"
+          validation/check_documentation_examples.py
+
+      - name: Exercise the optional diagnostic handoff against the wheel
+        run: |
+          uv pip install --python "$RUNNER_TEMP/candidate-venv/bin/python" "ml4t-diagnostic[viz]==0.1.4"
+          "$RUNNER_TEMP/candidate-venv/bin/python" validation/check_documentation_examples.py docs/tutorials/diagnostic-handoff.md
+          "$RUNNER_TEMP/candidate-venv/bin/python" validation/check_documentation_examples.py docs/user-guide/results.md
+
+      - name: Verify source provenance
+        run: |
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          git diff --exit-code
+
+      - name: Create commit-bound release candidate
+        run: |
+          mkdir -p release-candidate/dist
+          cp dist/* release-candidate/dist/
+          version_args=()
+          if test -n "$RELEASE_VERSION"; then
+            version_args=(--expected-version "$RELEASE_VERSION")
+          fi
+          uv run python validation/release_candidate.py create \
+            --dist release-candidate/dist \
+            --commit "$GITHUB_SHA" \
+            --repository "$GITHUB_REPOSITORY" \
+            "${version_args[@]}" \
+            --gate compatibility=${{ needs.compatibility.result }} \
+            --gate correctness=${{ needs.public-parity.result }} \
+            --gate coverage=${{ needs.coverage.result }} \
+            --gate documentation=${{ needs.documentation.result }} \
+            --gate lint=${{ needs.lint.result }} \
+            --gate packaging=success \
+            --gate parity=${{ needs.public-parity.result }} \
+            --gate performance=${{ needs.runtime.result }} \
+            --gate security=${{ needs.security.result }} \
+            --gate typecheck=${{ needs.typecheck.result }} \
+            --output release-candidate/release-candidate.json
+          uv run python validation/release_candidate.py verify \
+            --dist release-candidate/dist \
+            --manifest release-candidate/release-candidate.json \
+            --expected-commit "$GITHUB_SHA" \
+            --expected-repository "$GITHUB_REPOSITORY" \
+            "${version_args[@]}"
+
+      - name: Upload exact release candidate
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-candidate-${{ github.sha }}
+          path: release-candidate/
+          if-no-files-found: error
+          retention-days: 90
