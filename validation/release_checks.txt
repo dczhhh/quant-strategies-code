@@ -54,4 +54,3 @@ validation/native/zipline_behavior.py
 validation/native/lean_behavior.py
 validation/scenarios/definitions.py
 validation/test_pit_pr8_integration.py
-tools/bounded_pull_test.py

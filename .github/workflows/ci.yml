@@ -80,6 +80,11 @@ jobs:
       - name: Run ruff format check
         run: xargs uv run ruff format --check src/ tests/ < validation/release_checks.txt
 
+      - name: Lint and format-check the bounded private pull operator
+        run: |
+          uv run ruff check --no-fix tools/bounded_pull_test.py
+          uv run ruff format --check tools/bounded_pull_test.py
+
       - name: Validate private sample workflow expressions without executing capture
         run: |
           set -euo pipefail
@@ -130,6 +135,9 @@ jobs:
 
       - name: Run ty check
         run: xargs uv run ty check src/ < validation/release_checks.txt
+
+      - name: Type-check the bounded private pull operator
+        run: uv run ty check tools/bounded_pull_test.py
 
       - name: Build the wheel for consumer type checking
         run: uv build --wheel
