@@ -70,7 +70,11 @@ def test_exact_plan_metadata_and_censored_settlement_are_read_only(monkeypatch):
 
 
 @pytest.mark.parametrize("key", preparation.INPUT_HASHES)
-@pytest.mark.parametrize("bad", [b"", b" ", b"x" * 32769, None, "not bytes"])
+@pytest.mark.parametrize(
+    "bad",
+    [b"", b" ", b"x" * 32769, None, "not bytes"],
+    ids=["empty", "whitespace", "oversize", "missing", "wrong_type"],
+)
 def test_wrong_bounded_metadata_never_produces_readiness(key, bad):
     data = inputs()
     data[key] = bad
