@@ -1,0 +1,12 @@
+__pycache__/
+*.py[cod]
+.venv/
+.coverage
+coverage.json
+research/data/
+research/sources/
+research/reports/
+*.csv
+*.parquet
+*.zip
+.env

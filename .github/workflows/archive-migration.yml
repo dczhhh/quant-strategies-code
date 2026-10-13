@@ -1,0 +1,49 @@
+name: Reviewed private archive migration
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: private-archive-migration-v1
+  cancel-in-progress: false
+
+jobs:
+  migrate:
+    if: >-
+      github.repository == 'dczhhh/quant-strategies-code' &&
+      github.actor == 'dczhhh' &&
+      github.event_name == 'workflow_dispatch' &&
+      github.ref == 'refs/heads/main' &&
+      vars.ARCHIVE_MIGRATION_ENABLED == 'true' &&
+      github.sha == vars.ARCHIVE_MIGRATION_REVIEWED_SHA
+    environment: private-archive
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      ARCHIVE_MIGRATION_ENABLED: ${{ vars.ARCHIVE_MIGRATION_ENABLED }}
+      ARCHIVE_MIGRATION_REVIEWED_SHA: ${{ vars.ARCHIVE_MIGRATION_REVIEWED_SHA }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ vars.ARCHIVE_MIGRATION_REVIEWED_SHA }}
+          persist-credentials: false
+      - name: Validate migration using invented bytes without private credentials
+        run: python3 -m unittest discover -s tests -v
+      - name: Copy and read back immutable private payloads
+        env:
+          RUNNER_ENVIRONMENT: ${{ runner.environment }}
+          ARCHIVE_WRITE_TOKEN: ${{ secrets.ARCHIVE_WRITE_TOKEN }}
+          LEGACY_SOURCE_READ_TOKEN: ${{ secrets.LEGACY_SOURCE_READ_TOKEN }}
+          ACTIONS_STEP_DEBUG: ${{ secrets.ACTIONS_STEP_DEBUG }}
+          ACTIONS_RUNNER_DEBUG: ${{ secrets.ACTIONS_RUNNER_DEBUG }}
+        run: python3 -I tools/private_archive_migration.py migrate
+      - name: Independently read back without source credential
+        env:
+          RUNNER_ENVIRONMENT: ${{ runner.environment }}
+          ARCHIVE_WRITE_TOKEN: ${{ secrets.ARCHIVE_WRITE_TOKEN }}
+          ACTIONS_STEP_DEBUG: ${{ secrets.ACTIONS_STEP_DEBUG }}
+          ACTIONS_RUNNER_DEBUG: ${{ secrets.ACTIONS_RUNNER_DEBUG }}
+        run: python3 -I tools/private_archive_migration.py verify

@@ -1,0 +1,35 @@
+name: Import reviewed public upstream
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: public-upstream-import-v1
+  cancel-in-progress: false
+
+jobs:
+  import-public:
+    if: >-
+      github.repository == 'dczhhh/quant-strategies-code' &&
+      github.actor == 'dczhhh' &&
+      github.ref == 'refs/heads/main' &&
+      github.sha == vars.PUBLIC_UPSTREAM_IMPORT_REVIEWED_SHA &&
+      vars.PUBLIC_UPSTREAM_IMPORT_ENABLED == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Import the public upstream tree without private credentials
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          RUNNER_ENVIRONMENT: ${{ runner.environment }}
+          PUBLIC_UPSTREAM_IMPORT_REVIEWED_SHA: ${{ vars.PUBLIC_UPSTREAM_IMPORT_REVIEWED_SHA }}
+          PUBLIC_UPSTREAM_IMPORT_ENABLED: ${{ vars.PUBLIC_UPSTREAM_IMPORT_ENABLED }}
+        run: python3 -I tools/public_upstream_import.py
