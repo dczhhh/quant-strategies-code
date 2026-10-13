@@ -64,11 +64,9 @@ def decode(body: bytes) -> dict:
 
 
 def numeric(value: object, positive: bool = False) -> bool:
-    return (
-        type(value) in {int, float}
-        and math.isfinite(value)
-        and (value > 0 if positive else value >= 0)
-    )
+    if not isinstance(value, (int, float)) or isinstance(value, bool):
+        return False
+    return math.isfinite(value) and (value > 0 if positive else value >= 0)
 
 
 def checks(product: dict, body: bytes, status: int) -> dict:
