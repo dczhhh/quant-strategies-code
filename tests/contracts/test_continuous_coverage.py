@@ -111,7 +111,7 @@ def test_secret_is_one_step_and_scope_never_accepts_user_inputs():
 
 
 def test_fixed_metadata_cli_reports_only_preparation(capsys):
-    assert cli.main() == 0
+    assert cli.main(["--synthetic"]) == 0
     text = capsys.readouterr().out
     assert '"status":"PREPARATION_ONLY"' in text and '"market_requests":0' in text
     assert '"may_acquire_aggregates":false' in text and '"may_build_engine":false' in text
@@ -122,6 +122,6 @@ def test_cli_redacts_unreadable_input_and_never_grants_execution(monkeypatch, ca
         raise OSError("PRIVATE_PATH_DO_NOT_PRINT")
 
     monkeypatch.setattr(cli.Path, "open", stopped)
-    assert cli.main() == 1
+    assert cli.main(["--synthetic"]) == 1
     text = capsys.readouterr().out
     assert "PRIVATE_PATH" not in text and "CONTINUOUS_INPUT_STOPPED" in text

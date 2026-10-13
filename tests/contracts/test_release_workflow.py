@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import hashlib
 import importlib.util
 import io
+import json
 import tarfile
 import zipfile
 from pathlib import Path
@@ -212,9 +214,20 @@ def test_release_reuses_all_ci_gates_and_publishes_the_exact_candidate() -> None
         "pit-pr8-integration",
     }
     integration = jobs["pit-pr8-integration"]
-    sibling = next(step for step in integration["steps"] if "ref" in step.get("with", {}))
-    assert sibling["with"]["ref"] == "b5ecfd8527fe8eb6398a09b7f74e802e4324789c"
-    assert sibling["with"]["persist-credentials"] == "false"
+    sibling = next(step for step in integration["steps"] if "PIT_PR8_SOURCE" in step.get("env", {}))
+    assert sibling["env"]["PIT_PR8_SOURCE"] == "${{ github.workspace }}/reviewed_sources/pit-pr8"
+    snapshot = (_ROOT / "reviewed_sources/pit-pr8/source-snapshot.json").read_bytes()
+    assert (
+        hashlib.sha256(snapshot).hexdigest()
+        == "e5d23cf891c1955be4525acdc451451f400e654e9eee0361b9962cc780984110"
+    )
+    assert json.loads(snapshot)["source_revision"] == "b5ecfd8527fe8eb6398a09b7f74e802e4324789c"
+    checkout = next(
+        step
+        for step in integration["steps"]
+        if step.get("uses", "").startswith("actions/checkout@")
+    )
+    assert checkout["with"]["persist-credentials"] == "false"
     assert "validation/test_pit_pr8_integration.py" in integration["steps"][-1]["run"]
     parity = jobs["public-parity"]
     assert {entry["framework"] for entry in parity["strategy"]["matrix"]["include"]} == {

@@ -420,13 +420,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
       - name: Install pinned dependencies
         run: uv sync --dev --locked
-      # Exact reviewed interface bytes are carried as a hash-bound code snapshot.
+      # Exact PR8 b5ecfd8527fe8eb6398a09b7f74e802e4324789c bytes are carried as a hash-bound snapshot.
       - name: Exercise existing macro gate, tax resolver and dividend ledger
         env:
-          PIT_PR8_SOURCE: ${{ github.workspace }}/validation/fixtures/pit-pr8-source
+          PIT_PR8_SOURCE: ${{ github.workspace }}/reviewed_sources/pit-pr8
         run: uv run pytest validation/test_pit_pr8_integration.py -q --no-cov
 
   build:

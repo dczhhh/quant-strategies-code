@@ -15,8 +15,9 @@ from quant_constraints.research.data.demand import DemandError
 from quant_constraints.research.data.private_capture_cli import FLAGS
 
 
-def main() -> int:
-    synthetic = sys.argv[1:] == ["--synthetic"]
+def main(argv: list[str] | None = None) -> int:
+    args = [] if argv is None else argv
+    synthetic = args == ["--synthetic"]
     filename = (
         "research-continuous-inputs-synthetic-v1.json"
         if synthetic
@@ -24,7 +25,7 @@ def main() -> int:
     )
     path = Path(__file__).resolve().parents[1] / "docs/examples" / filename
     try:
-        if sys.argv[1:] not in [[], ["--synthetic"]]:
+        if args not in [[], ["--synthetic"]]:
             raise ValueError("unsupported validation mode")
         with path.open("rb") as stream:
             content = stream.read(32769)
@@ -56,4 +57,4 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(main(sys.argv[1:]))
