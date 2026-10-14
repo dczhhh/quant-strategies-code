@@ -37,16 +37,16 @@ jobs:
         run: uv sync --dev --locked --python 3.12
       - name: Validate invented source/archive/return fixtures without credentials
         run: uv run python -m unittest tests.test_real_etf_probe -v
-      - name: Capture three fixed issuer files and privately probe existing ETF data
+      - name: Inspect retained issuer files and unknown reservations without source requests
         env:
           RUNNER_ENVIRONMENT: ${{ runner.environment }}
           ARCHIVE_WRITE_TOKEN: ${{ secrets.ARCHIVE_WRITE_TOKEN }}
-        run: python3 -I tools/real_etf_probe.py probe
+        run: python3 -I tools/real_etf_probe.py inspect
       - name: Recompute report with no source requests
         env:
           RUNNER_ENVIRONMENT: ${{ runner.environment }}
           ARCHIVE_WRITE_TOKEN: ${{ secrets.ARCHIVE_WRITE_TOKEN }}
-        run: python3 -I tools/real_etf_probe.py verify
+        run: python3 -I tools/real_etf_probe.py verify-inspection
 
   verify:
     needs: probe
@@ -67,4 +67,4 @@ jobs:
         env:
           RUNNER_ENVIRONMENT: ${{ runner.environment }}
           ARCHIVE_WRITE_TOKEN: ${{ secrets.ARCHIVE_WRITE_TOKEN }}
-        run: python3 -I tools/real_etf_probe.py verify
+        run: python3 -I tools/real_etf_probe.py verify-inspection
