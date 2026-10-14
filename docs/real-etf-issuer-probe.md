@@ -63,6 +63,12 @@ Source rows and differences stay private; the public summary reports counts
 and outcomes only. A field match is retrospective, not an independently
 established share-basis, ROC/special/final tax classification or cash admission.
 
+The historical worksheet also contains 1990s observations. The date parser
+accepts the observed 1900--2099 civil-year range in both exact date formats,
+while still rejecting ambiguous formats and impossible Gregorian dates. A
+valid pre-2000 row cannot poison the unique 2024 event match. This date support
+does not broaden market-data acquisition windows or backdate historical trust.
+
 Every public fixture is invented. This operator does not construct Engine or
 issue a real/PIT certificate, does not authenticate a personal account replay,
 and does not merge or unlock strategy PR #6. Its summary separates issuer
