@@ -1,0 +1,88 @@
+name: Reviewed private split component probe
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: real-action-capture-v1
+  cancel-in-progress: false
+
+env:
+  UV_NO_SOURCES: "1"
+
+jobs:
+  probe:
+    if: >-
+      github.repository == 'dczhhh/quant-strategies-code' &&
+      github.actor == 'dczhhh' &&
+      github.event_name == 'workflow_dispatch' &&
+      github.ref == 'refs/heads/main' &&
+      vars.REAL_SPLIT_PROBE_ENABLED == 'true' &&
+      github.sha == vars.REAL_SPLIT_PROBE_REVIEWED_SHA
+    environment: private-archive
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      REAL_SPLIT_PROBE_ENABLED: ${{ vars.REAL_SPLIT_PROBE_ENABLED }}
+      REAL_SPLIT_PROBE_REVIEWED_SHA: ${{ vars.REAL_SPLIT_PROBE_REVIEWED_SHA }}
+      ACTIONS_STEP_DEBUG: ${{ secrets.ACTIONS_STEP_DEBUG }}
+      ACTIONS_RUNNER_DEBUG: ${{ secrets.ACTIONS_RUNNER_DEBUG }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ vars.REAL_SPLIT_PROBE_REVIEWED_SHA }}
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: d2115c9780e9613b84e44939e25a7e7a2fc4a8cc
+          path: runtime
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+      - name: Install immutable public runtime without archive credentials
+        run: uv sync --project runtime --locked --python 3.12
+      - name: Validate invented component fixtures without archive credentials
+        run: runtime/.venv/bin/python -m unittest tests.test_real_split_probe tests.real_split_component_cases -v
+      - name: Probe existing private inputs and archive only a new immutable report
+        env:
+          RUNNER_ENVIRONMENT: ${{ runner.environment }}
+          ARCHIVE_WRITE_TOKEN: ${{ secrets.ARCHIVE_WRITE_TOKEN }}
+        run: runtime/.venv/bin/python -I tools/real_split_probe.py probe
+      - name: Independent report readback with no provider credential
+        env:
+          RUNNER_ENVIRONMENT: ${{ runner.environment }}
+          ARCHIVE_WRITE_TOKEN: ${{ secrets.ARCHIVE_WRITE_TOKEN }}
+        run: runtime/.venv/bin/python -I tools/real_split_probe.py verify
+
+  verify:
+    needs: probe
+    environment: private-archive
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      REAL_SPLIT_PROBE_ENABLED: ${{ vars.REAL_SPLIT_PROBE_ENABLED }}
+      REAL_SPLIT_PROBE_REVIEWED_SHA: ${{ vars.REAL_SPLIT_PROBE_REVIEWED_SHA }}
+      ACTIONS_STEP_DEBUG: ${{ secrets.ACTIONS_STEP_DEBUG }}
+      ACTIONS_RUNNER_DEBUG: ${{ secrets.ACTIONS_RUNNER_DEBUG }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ vars.REAL_SPLIT_PROBE_REVIEWED_SHA }}
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: d2115c9780e9613b84e44939e25a7e7a2fc4a8cc
+          path: runtime
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+      - name: Install pinned public runtime without archive credentials
+        run: uv sync --project runtime --locked --python 3.12
+      - name: Fresh runner recompute and compare immutable private report without provider credential
+        env:
+          RUNNER_ENVIRONMENT: ${{ runner.environment }}
+          ARCHIVE_WRITE_TOKEN: ${{ secrets.ARCHIVE_WRITE_TOKEN }}
+        run: runtime/.venv/bin/python -I tools/real_split_probe.py verify
