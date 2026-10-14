@@ -375,6 +375,16 @@ def reservation(doc, source):
     )
 
 
+def document_secret_free(body, credentials):
+    """Whole-document limit, including patterns crossing the original blob boundary."""
+    need(0 < len(body) <= DOC_LIMIT, "DOCUMENT_TOO_LARGE")
+    need(not b.CREDENTIAL_PATTERN.search(body), "DOCUMENT_CREDENTIAL_PATTERN")
+    need(
+        all(not credential or credential.encode() not in body for credential in credentials),
+        "DOCUMENT_CREDENTIAL_FOUND",
+    )
+
+
 def read_document(destination, doc):
     path = DOCUMENT_PREFIX + doc["id"] + "/"
     ref = document_ref(doc)
@@ -416,7 +426,7 @@ def read_document(destination, doc):
         "DOCUMENT_HASH_MISMATCH",
     )
     need(len(body) <= DOC_LIMIT, "DOCUMENT_TOO_LARGE")
-    b.secret_free(body, (destination.token,))
+    document_secret_free(body, (destination.token,))
     return {"body": body, "receipt": receipt, "commit": commit}
 
 
@@ -441,6 +451,7 @@ def capture_documents(destination, source, verify_only=False, fetch=fetch_docume
                 type(status) is int and 100 <= status <= 599 and 0 < len(body) <= DOC_LIMIT,
                 "DOCUMENT_FETCH_INVALID",
             )
+            document_secret_free(body, (destination.token,))
             parts = [body[i : i + m.FILE_LIMIT] for i in range(0, len(body), m.FILE_LIMIT)]
             receipt = {
                 "schema": "real_etf_issuer_receipt_v1",
@@ -604,7 +615,7 @@ def report(captured, documents, source):
             cases[ticker] = {
                 "signal": return_probe(raw, adjusted, dividends),
                 "classification": "ISSUER_CLASSIFICATION_MAPPING_UNVERIFIED",
-                "unknown_distribution_cash_admission": "REJECTED",
+                "unknown_distribution_cash_admission": "NOT_GRANTED",
                 "ex_record_pay": [
                     {
                         "ex": v["ex"].isoformat(),
