@@ -1,0 +1,68 @@
+name: Reviewed append-only ETF input recovery
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: real-action-capture-v1
+  cancel-in-progress: false
+
+jobs:
+  capture:
+    if: >-
+      github.repository == 'dczhhh/quant-strategies-code' &&
+      github.actor == 'dczhhh' &&
+      github.event_name == 'workflow_dispatch' &&
+      github.ref == 'refs/heads/main' &&
+      vars.REAL_ACTION_RECOVERY_ENABLED == 'true' &&
+      github.sha == vars.REAL_ACTION_RECOVERY_REVIEWED_SHA
+    environment: private-archive
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      REAL_ACTION_RECOVERY_ENABLED: ${{ vars.REAL_ACTION_RECOVERY_ENABLED }}
+      REAL_ACTION_RECOVERY_REVIEWED_SHA: ${{ vars.REAL_ACTION_RECOVERY_REVIEWED_SHA }}
+      ACTIONS_STEP_DEBUG: ${{ secrets.ACTIONS_STEP_DEBUG }}
+      ACTIONS_RUNNER_DEBUG: ${{ secrets.ACTIONS_RUNNER_DEBUG }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ vars.REAL_ACTION_RECOVERY_REVIEWED_SHA }}
+          persist-credentials: false
+      - name: Validate invented recovery fixtures without credentials
+        run: python3 -m unittest tests.test_real_action_recovery -v
+      - name: Append missing inputs without resetting old reservations
+        env:
+          RUNNER_ENVIRONMENT: ${{ runner.environment }}
+          ARCHIVE_WRITE_TOKEN: ${{ secrets.ARCHIVE_WRITE_TOKEN }}
+          MASSIVE_API_KEY: ${{ secrets.MASSIVE }}
+        run: python3 -I tools/real_action_recovery.py capture
+      - name: Independent readback without provider credential
+        env:
+          RUNNER_ENVIRONMENT: ${{ runner.environment }}
+          ARCHIVE_WRITE_TOKEN: ${{ secrets.ARCHIVE_WRITE_TOKEN }}
+        run: python3 -I tools/real_action_recovery.py verify
+
+  verify:
+    needs: capture
+    environment: private-archive
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      REAL_ACTION_RECOVERY_ENABLED: ${{ vars.REAL_ACTION_RECOVERY_ENABLED }}
+      REAL_ACTION_RECOVERY_REVIEWED_SHA: ${{ vars.REAL_ACTION_RECOVERY_REVIEWED_SHA }}
+      ACTIONS_STEP_DEBUG: ${{ secrets.ACTIONS_STEP_DEBUG }}
+      ACTIONS_RUNNER_DEBUG: ${{ secrets.ACTIONS_RUNNER_DEBUG }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ vars.REAL_ACTION_RECOVERY_REVIEWED_SHA }}
+          persist-credentials: false
+      - name: Fresh runner read-only replay without provider credential
+        env:
+          RUNNER_ENVIRONMENT: ${{ runner.environment }}
+          ARCHIVE_WRITE_TOKEN: ${{ secrets.ARCHIVE_WRITE_TOKEN }}
+        run: python3 -I tools/real_action_recovery.py verify
