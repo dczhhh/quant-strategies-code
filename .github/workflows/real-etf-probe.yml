@@ -1,0 +1,70 @@
+name: Reviewed issuer files and private ETF return probe
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: real-action-capture-v1
+  cancel-in-progress: false
+
+jobs:
+  probe:
+    if: >-
+      github.repository == 'dczhhh/quant-strategies-code' &&
+      github.actor == 'dczhhh' &&
+      github.event_name == 'workflow_dispatch' &&
+      github.ref == 'refs/heads/main' &&
+      vars.REAL_ETF_PROBE_ENABLED == 'true' &&
+      github.sha == vars.REAL_ETF_PROBE_REVIEWED_SHA
+    environment: private-archive
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      REAL_ETF_PROBE_ENABLED: ${{ vars.REAL_ETF_PROBE_ENABLED }}
+      REAL_ETF_PROBE_REVIEWED_SHA: ${{ vars.REAL_ETF_PROBE_REVIEWED_SHA }}
+      ACTIONS_STEP_DEBUG: ${{ secrets.ACTIONS_STEP_DEBUG }}
+      ACTIONS_RUNNER_DEBUG: ${{ secrets.ACTIONS_RUNNER_DEBUG }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ vars.REAL_ETF_PROBE_REVIEWED_SHA }}
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4
+      - name: Install locked fixture dependencies before archive credential exposure
+        run: uv sync --dev --locked --python 3.12
+      - name: Validate invented source/archive/return fixtures without credentials
+        run: uv run python -m unittest tests.test_real_etf_probe -v
+      - name: Capture three fixed issuer files and privately probe existing ETF data
+        env:
+          RUNNER_ENVIRONMENT: ${{ runner.environment }}
+          ARCHIVE_WRITE_TOKEN: ${{ secrets.ARCHIVE_WRITE_TOKEN }}
+        run: python3 -I tools/real_etf_probe.py probe
+      - name: Recompute report with no source requests
+        env:
+          RUNNER_ENVIRONMENT: ${{ runner.environment }}
+          ARCHIVE_WRITE_TOKEN: ${{ secrets.ARCHIVE_WRITE_TOKEN }}
+        run: python3 -I tools/real_etf_probe.py verify
+
+  verify:
+    needs: probe
+    environment: private-archive
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      REAL_ETF_PROBE_ENABLED: ${{ vars.REAL_ETF_PROBE_ENABLED }}
+      REAL_ETF_PROBE_REVIEWED_SHA: ${{ vars.REAL_ETF_PROBE_REVIEWED_SHA }}
+      ACTIONS_STEP_DEBUG: ${{ secrets.ACTIONS_STEP_DEBUG }}
+      ACTIONS_RUNNER_DEBUG: ${{ secrets.ACTIONS_RUNNER_DEBUG }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ vars.REAL_ETF_PROBE_REVIEWED_SHA }}
+          persist-credentials: false
+      - name: Fresh runner recompute from privately archived bytes only
+        env:
+          RUNNER_ENVIRONMENT: ${{ runner.environment }}
+          ARCHIVE_WRITE_TOKEN: ${{ secrets.ARCHIVE_WRITE_TOKEN }}
+        run: python3 -I tools/real_etf_probe.py verify
