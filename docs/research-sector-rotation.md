@@ -174,8 +174,11 @@ cannot be relabelled historical knowledge.
 The formal constraint package now exposes the reviewed PR #8 versioned country
 tax rules and investor qualification. Legacy defaults remain compatible, but
 qualified profiles require visible source-country/classification evidence and
-explicit eligibility. US 10% and CA 15% are conditional ordinary-stock treaty
-scenarios, never deductions inferred from USD or a US listing. ETF distributions,
+explicit eligibility. US 10% is a conditional ordinary-stock treaty scenario,
+never a deduction inferred from USD or a US listing. Canadian stocks and all ADRs
+are excluded from new buys in the owner profiles; the Canadian tax/FX workstream
+was removed on 2026-10-14. Existing positions can still sell and receive confirmed
+credits. ETF distributions,
 special dividends, capital returns and unknown classification fail closed for
 these profiles. Actual sourced withholding has priority; unexplained conflicts
 can be rejected. Non-legacy credits require explicit gross/withheld/fee/net
@@ -190,12 +193,18 @@ fixtures are invented and count as zero real cases.
 The opt-in `config/cn_mainland_ordinary_dividend.yaml` leaves qualification null,
 uses the current review clock (not a fabricated 2021/2024 PIT clock), and stops
 without visible country, distribution and account-scenario evidence. The original
-legacy profile file and constructor defaults remain unchanged for compatibility.
+constructor defaults remain compatible for legacy fixture users. The owner cash
+profile file and rotation factory enable `exclude_canada_and_adrs`; unknown,
+future or mismatched security metadata rejects new buys and additions. The
+rotation factory also rejects an externally supplied controller disabling it.
 
 The synthetic verifier keeps every original 5A–5E source fingerprint unchanged
 as legacy provenance. The formal tax overlay pins four modules separately to
 source commit `9938de9c441e289b9eb5b5e5bf3814e2ff726ebb` and has a distinct synthetic
-orchestration version. Old snapshots naming the legacy implementation fail with
+orchestration version. The new security entry overlay pins the changed runtime
+separately to `f38b3e8b75e1e555d3d66d8dad0b609371515e22`; all preceding source
+fingerprints remain unchanged as provenance. Old snapshots naming either older
+implementation fail with
 `VERSION_MISMATCH` rather than silently approving new runtime source. Refreshing
 synthetic input bindings is not new market evidence or historical PIT validation;
 existing private capture bytes and budget reservations do not change.
@@ -239,3 +248,10 @@ events and identity transitions fail closed; vendor-adjusted bars cannot turn
 that event into a supported split. GE's 2021 event remains outside the current
 Starter five-year bars window. Window-covered ordinary reverse splits need
 separate issuer terms, raw/comparison captures and fractional-cash evidence.
+
+The current scope and unified evidence matrix are recorded in
+[research-unified-acceptance.md](research-unified-acceptance.md). Scope exclusion
+is not evidence of a passing Canadian or ADR tax scenario. Source URL/hash/time
+fields on `MarketContext` are metadata declarations, not authenticators or real
+historical PIT certificates. The real factory and trusted entry remain blocked
+until independent economic and source/PIT acceptance is complete.

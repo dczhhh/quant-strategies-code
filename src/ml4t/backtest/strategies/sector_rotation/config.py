@@ -153,6 +153,7 @@ class SectorRotationConfig:
             "weekly_entries": 11,
             "drift_reduction": "next_session",
             "signal_data_mode": "total_return_signal",
+            "security_entry_policy": "exclude_canada_and_adrs",
         }
         settings.update(changes)
         return ConstraintConfig(**settings)

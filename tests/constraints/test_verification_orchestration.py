@@ -484,7 +484,12 @@ def test_every_declared_software_version_is_checked(field):
 
 
 def test_tax_runtime_overlay_preserves_legacy_pins_and_rejects_old_code_identity():
-    from quant_constraints.research.data.verification import BASE_SOURCE_SHA256, _versions
+    from quant_constraints.research.data.verification import (
+        BASE_SOURCE_SHA256,
+        ENTRY_RUNTIME_SOURCE_SHA256,
+        TAX_RUNTIME_SOURCE_REVISION,
+        _versions,
+    )
 
     req, records = fixture()
     proof = _versions(freeze(req, records))
@@ -494,11 +499,25 @@ def test_tax_runtime_overlay_preserves_legacy_pins_and_rejects_old_code_identity
         "ea1cdddd7e599bf8e192e741c970bd623f226817d369c1036d82d18c2cb96ae4"
     )
     assert proof["tax_runtime_source_sha256"] == TAX_RUNTIME_SOURCE_SHA256
+    assert proof["entry_runtime_source_sha256"] == ENTRY_RUNTIME_SOURCE_SHA256
+    assert proof["tax_runtime_source_revision"] == TAX_RUNTIME_SOURCE_REVISION
+    previous = freeze(req, records, pipeline=versions(code_revision=TAX_RUNTIME_SOURCE_REVISION))
+    rejected(run(previous), "VERSION_MISMATCH", "versions")
     old = freeze(req, records, pipeline=versions(code_revision=LEGACY_IMPLEMENTATION_BASE))
     rejected(run(old), "VERSION_MISMATCH", "versions")
 
 
-@pytest.mark.parametrize("name", tuple(TAX_RUNTIME_SOURCE_SHA256))
+@pytest.mark.parametrize(
+    "name",
+    tuple(TAX_RUNTIME_SOURCE_SHA256)
+    + (
+        "quant_constraints.models",
+        "quant_constraints.controller",
+        "quant_constraints.security_policy",
+        "ml4t.backtest.strategies.sector_rotation.config",
+        "ml4t.backtest.strategies.sector_rotation.adapter",
+    ),
+)
 def test_every_pinned_tax_runtime_module_is_checked_before_domain_replay(name, monkeypatch):
     from quant_constraints.research.data import verification
 

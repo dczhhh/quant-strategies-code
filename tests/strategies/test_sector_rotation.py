@@ -89,6 +89,16 @@ def context(timestamp, asset, phase):
         spread=0.0001,
         volume=10000,
         liquidity_available_at=timestamp,
+        security_id=f"invented:{asset}",
+        issuer_country="US",
+        tax_source_country="US",
+        security_type="ETF" if asset in SECTORS else "CS",
+        is_depositary_receipt=False,
+        security_metadata_available_at=timestamp,
+        security_metadata_source="https://example.invalid/invented-security-facts",
+        security_metadata_sha256="a" * 64,
+        security_metadata_symbol=asset,
+        security_metadata_security_id=f"invented:{asset}",
     )
 
 
@@ -164,6 +174,18 @@ def test_unverified_real_entry_is_blocked_before_engine_or_broker_construction(m
     strategy = SectorRotationStrategy(CausalCloseSource(source_rows()), settings())
     with pytest.raises(ValueError, match="UNVERIFIED.*real-corporate-actions"):
         sector_rotation_engine(None, strategy, None, validation_mode=mode)
+
+
+def test_external_controller_cannot_disable_owner_security_exclusion():
+    strategy = SectorRotationStrategy(CausalCloseSource(source_rows()), settings())
+    controller = ConstraintController(
+        replace(strategy.config.constraints(), security_entry_policy="legacy"),
+        InMemoryEarningsProvider(),
+    )
+    with pytest.raises(ValueError, match="Controller does not match"):
+        sector_rotation_engine(
+            None, strategy, context, controller=controller, validation_mode="synthetic"
+        )
 
 
 @pytest.mark.parametrize(
