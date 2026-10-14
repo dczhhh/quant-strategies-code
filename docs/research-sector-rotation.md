@@ -167,7 +167,8 @@ PR #6's real-corporate-actions and real-tax-reconciliation gates remain blocked
 pending archived official event/classification evidence, independently verified
 raw/split-adjusted/total-return chains and historical PIT evidence. Actual IBKR
 gross, withheld tax, fee and net credits cannot be inferred from a payable date.
-No real broker statement has been supplied. Historical revised API responses
+No complete broker history has been supplied; owner-provided statement excerpts
+support isolated credit-component checks only. Historical revised API responses
 cannot be relabelled historical knowledge.
 
 The formal constraint package now exposes the reviewed PR #8 versioned country
@@ -193,7 +194,7 @@ legacy profile file and constructor defaults remain unchanged for compatibility.
 
 The synthetic verifier keeps every original 5A–5E source fingerprint unchanged
 as legacy provenance. The formal tax overlay pins four modules separately to
-source commit `bed2c5b737bf69dc55700857234ec9ada2505c95` and has a distinct synthetic
+source commit `9938de9c441e289b9eb5b5e5bf3814e2ff726ebb` and has a distinct synthetic
 orchestration version. Old snapshots naming the legacy implementation fail with
 `VERSION_MISMATCH` rather than silently approving new runtime source. Refreshing
 synthetic input bindings is not new market evidence or historical PIT validation;
@@ -204,3 +205,37 @@ positions, pending orders and risk-exit quantities even when the source event's
 default policy says `retain`. No virtual fraction or cash-in-lieu amount is
 inferred. Integral reverse splits retain total cost and cash. Legacy invented
 fixture behavior remains compatible and is not a real-data admission path.
+
+### Sourced gross corrections at first cash credit
+
+An actual credit may reconcile a corrected gross dividend above or below the
+original estimate. A difference above the existing one-cent gross tolerance
+requires complete correction metadata: original dividend version, locked share
+quantity, prior gross, correction source and its knowledge clock. The correction
+must bind the original security/event entitlement and be visible at processing;
+actual gross/withheld/fee/net must still reconcile. This is not a boolean waiver
+or a tax rate inferred from currency. Missing or conflicting terms fail before
+cash changes. Original entitlement amounts remain in the audit record.
+
+Cash increases once by confirmed net; the receivable is consumed once. The net
+estimate difference adjusts income/NAV and tax/fee differences are recorded
+without another deduction. A changed paid event remains unsupported and is
+rejected for explicit reconciliation rather than credited twice. Legacy profiles
+cannot silently activate the new correction path. No new fields are routed
+through the frozen synthetic PIT supply schema or relabelled historical evidence.
+
+Private owner-supplied statement images can support isolated production-ledger
+component checks. Controlled starting balances and manually seeded receivables
+are not the owner's full account replay. Statement observation clocks must not
+be backdated to historical ex/payment dates, and screenshot checks do not grant
+PIT, market-data, strategy-performance or real-entry acceptance. Public fixtures
+remain invented; account images and transcribed personal amounts are not public
+repository inputs.
+
+The WOLF event documented in the SEC's September 29, 2025 8-K cancelled old
+shares and issued replacement shares with contingent further distribution.
+It is not an ordinary value-preserving reverse split. Exposed reorganization
+events and identity transitions fail closed; vendor-adjusted bars cannot turn
+that event into a supported split. GE's 2021 event remains outside the current
+Starter five-year bars window. Window-covered ordinary reverse splits need
+separate issuer terms, raw/comparison captures and fractional-cash evidence.

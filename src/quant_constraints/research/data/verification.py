@@ -66,9 +66,9 @@ from .verification_contracts import (
 )
 from .verification_wire import RECORD_TYPES, _encode, decode_records, safe_field
 
-VERIFICATION_VERSION = "research_verification_orchestration_synthetic_v3_reverse_fraction_policy"
+VERIFICATION_VERSION = "research_verification_orchestration_synthetic_v4_sourced_credit_corrections"
 LEGACY_IMPLEMENTATION_BASE = "fb870fd70a5d3438c20adcdb3c606c04533719a0"
-REVIEWED_IMPLEMENTATION_BASE = "bed2c5b737bf69dc55700857234ec9ada2505c95"
+REVIEWED_IMPLEMENTATION_BASE = "9938de9c441e289b9eb5b5e5bf3814e2ff726ebb"
 # Source bytes of the accepted 5A/B/C/D implementations and their direct contracts.
 # Wheel source files must match too; a declared git SHA alone is not evidence.
 BASE_SOURCE_SHA256 = {
@@ -99,8 +99,8 @@ BASE_SOURCE_SHA256 = {
 TAX_RUNTIME_SOURCE_SHA256 = {
     "quant_constraints.config": "85c6b0fa6712208c6e210defa5aa872a6527d9cc5a1f9645c7427895abae7e67",
     "quant_constraints.dividend_tax": "822e144f2e35c26f57d38234d55b55f28a47307d6afac004a25dc9d047ce3991",
-    "quant_constraints.corporate_actions.events": "004ee55f73cbcc6a47fffb72cc0da501951e3b1351bb931b04b5822cbd0e6839",
-    "quant_constraints.corporate_actions.processor": "42ec73647bbc6b40f655fbe8bb25db35353744dac649b55decb83eff3ff32804",
+    "quant_constraints.corporate_actions.events": "84f9a54dc6c6252bb4661d65773be03d920ce3aad1d43398a605391145c2ae42",
+    "quant_constraints.corporate_actions.processor": "36cb7e98c52efb9629d98d0a73ef884a347fbbb21c22cb26dff9d3c3983d8e3e",
 }
 ROLE_DEPENDENCIES = {
     EvidenceRole.RAW: {EvidenceRole.IDENTITIES},
