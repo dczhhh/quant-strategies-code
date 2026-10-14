@@ -258,6 +258,19 @@ def test_tax_yaml_restores_immutable_rules_and_typed_qualification(tmp_path):
     assert ConstraintConfig.from_yaml(path) == original
 
 
+def test_project_ordinary_profile_never_assumes_personal_eligibility_or_early_pit():
+    config = ConstraintConfig.from_yaml("config/cn_mainland_ordinary_dividend.yaml")
+    assert {rule.source_country: rule.rate for rule in config.dividend_tax_rules} == {
+        "US": 0.10,
+        "CA": 0.15,
+    }
+    assert config.dividend_tax_qualification is None
+    with pytest.raises(ValueError, match="eligibility unconfirmed"):
+        resolve_dividend_tax_rate(config, dividend(), at("2026-10-16"))
+    with pytest.raises(ValueError, match="Unknown.*historical rate"):
+        resolve_dividend_tax_rate(config, dividend(), at("2026-10-12"))
+
+
 @pytest.mark.parametrize(
     "changes",
     [

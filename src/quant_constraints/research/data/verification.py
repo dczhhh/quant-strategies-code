@@ -66,8 +66,9 @@ from .verification_contracts import (
 )
 from .verification_wire import RECORD_TYPES, _encode, decode_records, safe_field
 
-VERIFICATION_VERSION = "research_verification_orchestration_synthetic_v1"
-REVIEWED_IMPLEMENTATION_BASE = "fb870fd70a5d3438c20adcdb3c606c04533719a0"
+VERIFICATION_VERSION = "research_verification_orchestration_synthetic_v2_tax_runtime"
+LEGACY_IMPLEMENTATION_BASE = "fb870fd70a5d3438c20adcdb3c606c04533719a0"
+REVIEWED_IMPLEMENTATION_BASE = "3cbab8468ac8c4be8d69477588ef105a53246547"
 # Source bytes of the accepted 5A/B/C/D implementations and their direct contracts.
 # Wheel source files must match too; a declared git SHA alone is not evidence.
 BASE_SOURCE_SHA256 = {
@@ -92,6 +93,14 @@ BASE_SOURCE_SHA256 = {
     "quant_constraints.research.data.contracts.market_data": "f6792e6d64bd340a67f0f9b90c3fd392295a69d004482a4791a5e4a01f0c6b00",
     "quant_constraints.research.data.contracts.identities": "44c16b70caa76c0282a786b8b6bf19921b460ea2ed5b12bfa609a3aa6b53787a",
     "quant_constraints.research.data.contracts.corporate_actions": "9c60d4d1406fbd3a009a0e4952bfe406629c942c27f3b6bf21368dd77828b074",
+}
+# Preserve the original evidence pins verbatim. The additive tax-runtime source
+# commit is separately identified; old snapshots must not silently certify new code.
+TAX_RUNTIME_SOURCE_SHA256 = {
+    "quant_constraints.config": "85c6b0fa6712208c6e210defa5aa872a6527d9cc5a1f9645c7427895abae7e67",
+    "quant_constraints.dividend_tax": "822e144f2e35c26f57d38234d55b55f28a47307d6afac004a25dc9d047ce3991",
+    "quant_constraints.corporate_actions.events": "004ee55f73cbcc6a47fffb72cc0da501951e3b1351bb931b04b5822cbd0e6839",
+    "quant_constraints.corporate_actions.processor": "37c432a6168f8e90e2cec291354e851de10a7f082c7e1543e01c4688fba4ca16",
 }
 ROLE_DEPENDENCIES = {
     EvidenceRole.RAW: {EvidenceRole.IDENTITIES},
@@ -133,12 +142,16 @@ def _versions(snapshot: FrozenDatasetInput) -> dict:
     for name, actual in versions.items():
         if getattr(snapshot.versions, name) != actual:
             _deny("VERSION_MISMATCH", name, "versions")
-    actual_sources = {name: _source_digest(name) for name in BASE_SOURCE_SHA256}
-    if actual_sources != BASE_SOURCE_SHA256:
+    expected_sources = {**BASE_SOURCE_SHA256, **TAX_RUNTIME_SOURCE_SHA256}
+    actual_sources = {name: _source_digest(name) for name in expected_sources}
+    if actual_sources != expected_sources:
         _deny("IMPLEMENTATION_MISMATCH", "code_revision", "versions")
     return {
         "checked_versions": versions,
-        "code_revision_scope": "reviewed_5A_B_C_D_and_5E1_source_base",
+        "code_revision_scope": "reviewed_5A_B_C_D_5E1_plus_pinned_formal_tax_runtime",
+        "legacy_source_revision": LEGACY_IMPLEMENTATION_BASE,
+        "legacy_source_sha256": BASE_SOURCE_SHA256,
+        "tax_runtime_source_sha256": TAX_RUNTIME_SOURCE_SHA256,
         "reviewed_source_sha256": actual_sources,
         "orchestration_version": VERIFICATION_VERSION,
         "orchestration_source_sha256": {

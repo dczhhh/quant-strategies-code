@@ -185,3 +185,16 @@ event before changing any position, cash or pending order. It does not create a
 virtual tradable 0.375 share or invent a cash-in-lieu price. NVDA/GE official terms
 must be independently archived for real-case acceptance; the added regression
 fixtures are invented and count as zero real cases.
+
+The opt-in `config/cn_mainland_ordinary_dividend.yaml` leaves qualification null,
+uses the current review clock (not a fabricated 2021/2024 PIT clock), and stops
+without visible country, distribution and account-scenario evidence. The original
+legacy profile file and constructor defaults remain unchanged for compatibility.
+
+The synthetic verifier keeps every original 5A–5E source fingerprint unchanged
+as legacy provenance. The formal tax overlay pins four modules separately to
+source commit `3cbab8468ac8c4be8d69477588ef105a53246547` and has a distinct synthetic
+orchestration version. Old snapshots naming the legacy implementation fail with
+`VERSION_MISMATCH` rather than silently approving new runtime source. Refreshing
+synthetic input bindings is not new market evidence or historical PIT validation;
+existing private capture bytes and budget reservations do not change.

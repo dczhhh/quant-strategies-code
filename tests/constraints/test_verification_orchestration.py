@@ -37,8 +37,10 @@ from quant_constraints.research.data.pit_supply import (
 )
 from quant_constraints.research.data.provenance import ResearchMode
 from quant_constraints.research.data.verification import (
+    LEGACY_IMPLEMENTATION_BASE,
     REVIEWED_IMPLEMENTATION_BASE,
     ROLE_DEPENDENCIES,
+    TAX_RUNTIME_SOURCE_SHA256,
     verify_dataset,
 )
 from quant_constraints.research.data.verification_contracts import (
@@ -479,6 +481,35 @@ def test_every_declared_software_version_is_checked(field):
         )
     )
     rejected(report, "VERSION_MISMATCH", "versions")
+
+
+def test_tax_runtime_overlay_preserves_legacy_pins_and_rejects_old_code_identity():
+    from quant_constraints.research.data.verification import BASE_SOURCE_SHA256, _versions
+
+    req, records = fixture()
+    proof = _versions(freeze(req, records))
+    assert proof["checked_versions"]["code_revision"] == REVIEWED_IMPLEMENTATION_BASE
+    assert proof["legacy_source_revision"] == LEGACY_IMPLEMENTATION_BASE
+    assert BASE_SOURCE_SHA256["quant_constraints.corporate_actions.events"] == (
+        "ea1cdddd7e599bf8e192e741c970bd623f226817d369c1036d82d18c2cb96ae4"
+    )
+    assert proof["tax_runtime_source_sha256"] == TAX_RUNTIME_SOURCE_SHA256
+    old = freeze(req, records, pipeline=versions(code_revision=LEGACY_IMPLEMENTATION_BASE))
+    rejected(run(old), "VERSION_MISMATCH", "versions")
+
+
+@pytest.mark.parametrize("name", tuple(TAX_RUNTIME_SOURCE_SHA256))
+def test_every_pinned_tax_runtime_module_is_checked_before_domain_replay(name, monkeypatch):
+    from quant_constraints.research.data import verification
+
+    original = verification._source_digest
+    monkeypatch.setattr(
+        verification,
+        "_source_digest",
+        lambda module: "0" * 64 if module == name else original(module),
+    )
+    req, records = fixture()
+    rejected(run(freeze(req, records)), "IMPLEMENTATION_MISMATCH", "versions")
 
 
 @pytest.mark.parametrize(
