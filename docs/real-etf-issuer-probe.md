@@ -39,6 +39,16 @@ environment. The writer creates only new private Git objects. Same-runner and
 fresh-runner verification recompute the whole report from archived bytes with
 zero issuer/market requests. There is no public source-price artifact.
 
+The October 14 real acquisition retained the historical workbook and current
+ICI primary workbook with HTTP 200. The legacy 2024 URL has a reservation but
+no captured response: its outcome remains unknown. The workflow now uses
+`inspect` and `verify-inspection`, which make **zero source requests** and
+validate that unknown reservation against the original fixed plan. Missing
+captures remain explicitly absent; inspection neither fabricates HTTP status
+nor resets/retries a request. It can still archive/recompute calculations from
+the 36 completed inputs and inspect the two retained workbooks. This is an
+inspection result, not a successful acquisition of the missing 2024 document.
+
 Every public fixture is invented. This operator does not construct Engine or
 issue a real/PIT certificate, does not authenticate a personal account replay,
 and does not merge or unlock strategy PR #6. Its summary separates issuer

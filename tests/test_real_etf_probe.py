@@ -186,6 +186,41 @@ class ETFProbeTests(unittest.TestCase):
         with self.assertRaisesRegex(p.Blocked, "DOCUMENT_CREDENTIAL_PATTERN"):
             p.document_secret_free(b"0" * p.m.FILE_LIMIT + b"api_key=INVENTED", ())
 
+    def test_inspection_retains_unknown_outcome_without_fetch_reset_or_source_write(self):
+        dest = FakeGitHub(p.m.DESTINATION)
+
+        def fetch(doc):
+            if doc == p.DOCUMENTS[-1]:
+                raise OSError("INVENTED_UNKNOWN_OUTCOME")
+            return 200, fixture_xlsx()
+
+        with self.assertRaises(OSError):
+            p.capture_documents(dest, "a" * 40, fetch=fetch)
+        dest.events.clear()
+        docs = p.inspect_documents(dest)
+        self.assertEqual(sum(v["receipt"] is not None for v in docs.values()), 2)
+        unknown = docs[p.DOCUMENTS[-1]["id"]]
+        self.assertIsNone(unknown["body"])
+        self.assertEqual(unknown["unknown_reservation"]["source_commit"], "a" * 40)
+        self.assertTrue(all(method == "GET" for method, _ in dest.events))
+        self.assertEqual(p.inspect_documents(dest), docs)
+        with self.assertRaisesRegex(p.Blocked, "UNKNOWN_DOCUMENT_REQUEST_NOT_RESET"):
+            p.capture_documents(
+                dest, "b" * 40, fetch=lambda _: self.fail("repeated source request")
+            )
+
+    def test_inspection_cannot_invent_an_attempt_or_accept_an_unreviewed_reservation(self):
+        dest = FakeGitHub(p.m.DESTINATION)
+        with self.assertRaisesRegex(p.Blocked, "DOCUMENT_NOT_ATTEMPTED"):
+            p.inspect_documents(dest)
+        doc = p.DOCUMENTS[0]
+        path = p.DOCUMENT_PREFIX + doc["id"] + "/reservation.json"
+        held = json.loads(p.reservation(doc, "a" * 40))
+        held["plan_sha256"] = "0" * 64
+        p.b.create(dest, p.document_ref(doc, True), {path: p.m.canonical(held)}, p.m.BOOTSTRAP)
+        with self.assertRaisesRegex(p.Blocked, "DOCUMENT_RESERVATION_INVALID"):
+            p.inspect_documents(dest)
+
     def test_non_200_bytes_archived_without_classifier_admission(self):
         dest = FakeGitHub(p.m.DESTINATION)
         docs, _ = p.capture_documents(dest, "a" * 40, fetch=lambda _: (403, b"INVENTED_DENIED"))

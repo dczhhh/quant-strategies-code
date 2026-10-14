@@ -473,6 +473,33 @@ def capture_documents(destination, source, verify_only=False, fetch=fetch_docume
     return results, made
 
 
+def inspect_documents(destination):
+    """Read completed captures and verify unknown reservations; never send a source request."""
+    results = {}
+    for doc in DOCUMENTS:
+        if destination.ref(document_ref(doc)) is not None:
+            results[doc["id"]] = read_document(destination, doc)
+            continue
+        path = DOCUMENT_PREFIX + doc["id"] + "/reservation.json"
+        budget = document_ref(doc, True)
+        commit = destination.ref(budget)
+        need(commit is not None, "DOCUMENT_NOT_ATTEMPTED")
+        files, parent = b.read(destination, budget, {path})
+        held = b.decode(files[path])
+        need(
+            parent == m.BOOTSTRAP and files[path] == reservation(doc, held["source_commit"]),
+            "DOCUMENT_RESERVATION_INVALID",
+        )
+        results[doc["id"]] = {
+            "body": None,
+            "receipt": None,
+            "commit": None,
+            "unknown_reservation_commit": commit,
+            "unknown_reservation": held,
+        }
+    return results
+
+
 def bar_rows(item, ticker, adjusted):
     value = b.decode(item["body"])
     need(
@@ -596,6 +623,14 @@ def report(captured, documents, source):
             "archive_commit": item["commit"],
             "historical_known_at": None,
         }
+        if item["body"] is None:
+            entry.update(
+                structure="UNKNOWN_REQUEST_OUTCOME_RETAINED",
+                unknown_reservation_commit=item["unknown_reservation_commit"],
+                unknown_reservation=item["unknown_reservation"],
+            )
+            docs[doc_id] = entry
+            continue
         if item["receipt"]["http_status"] == 200 and item["body"].startswith(b"PK"):
             try:
                 entry["workbook_schema"] = schema_summary(workbook(item["body"]))
@@ -649,7 +684,7 @@ def public_summary(value):
         "vendor_requests": 0,
         "issuer_documents": {
             k: {
-                "http_status": v["receipt"]["http_status"],
+                "http_status": None if v["receipt"] is None else v["receipt"]["http_status"],
                 "structure": v["structure"],
                 "schema": v.get("workbook_schema", []),
             }
@@ -670,9 +705,12 @@ def public_summary(value):
     }
 
 
-def execute(destination, source, verify_only=False, fetch=fetch_document):
+def execute(destination, source, verify_only=False, fetch=fetch_document, *, inspect_only=False):
     destination.visibility(True)
-    documents, made = capture_documents(destination, source, verify_only, fetch)
+    if inspect_only:
+        documents, made = inspect_documents(destination), 0
+    else:
+        documents, made = capture_documents(destination, source, verify_only, fetch)
     value = report(inputs(destination), documents, source)
     summary = public_summary(value)
     path, ref = PREFIX + source + "/", "research-data/real-etf-probe-v1-" + source
@@ -707,13 +745,22 @@ def guarded():
 
 def main():
     try:
-        need(sys.argv[1:] in [["probe"], ["verify"]], "INVALID_COMMAND")
+        need(
+            sys.argv[1:] in [["probe"], ["verify"], ["inspect"], ["verify-inspection"]],
+            "INVALID_COMMAND",
+        )
         source = guarded()
-        verify = sys.argv[1] == "verify"
+        verify = sys.argv[1] in {"verify", "verify-inspection"}
+        inspect_only = sys.argv[1] in {"inspect", "verify-inspection"}
         destination = m.GitHub(
             m.DESTINATION, os.environ.get("ARCHIVE_WRITE_TOKEN", ""), writable=not verify
         )
-        print(json.dumps(execute(destination, source, verify), separators=(",", ":")))
+        print(
+            json.dumps(
+                execute(destination, source, verify, inspect_only=inspect_only),
+                separators=(",", ":"),
+            )
+        )
         return 0
     except Exception as error:
         code = str(error) if isinstance(error, Blocked) else "CHECK_FAILED"
