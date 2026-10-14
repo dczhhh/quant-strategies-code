@@ -89,6 +89,16 @@ def context(timestamp, asset, phase):
         spread=0.0001,
         volume=10000,
         liquidity_available_at=timestamp,
+        security_id=f"invented:{asset}",
+        issuer_country="US",
+        tax_source_country="US",
+        security_type="ETF" if asset in SECTORS else "CS",
+        is_depositary_receipt=False,
+        security_metadata_available_at=timestamp,
+        security_metadata_source="https://example.invalid/invented-security-facts",
+        security_metadata_sha256="a" * 64,
+        security_metadata_symbol=asset,
+        security_metadata_security_id=f"invented:{asset}",
     )
 
 

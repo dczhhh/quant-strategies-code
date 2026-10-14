@@ -103,6 +103,7 @@ def sector_rotation_engine(
         or constraints.entry_close_buffer_minutes != 0
         or constraints.max_names != 5
         or constraints.weekly_entries < 5
+        or constraints.security_entry_policy != "exclude_canada_and_adrs"
     ):
         raise ValueError("Controller does not match the rotation execution contract")
     config = config or cash_backtest_config()

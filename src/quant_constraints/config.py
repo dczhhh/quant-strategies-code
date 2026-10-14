@@ -90,6 +90,7 @@ class ConstraintConfig:
     dividend_tax_conflict_policy: Literal["record_actual", "reject"] = "record_actual"
     unknown_dividend_tax_policy: Literal["reject"] = "reject"
     capital_gains_tax_mode: Literal["none"] = "none"
+    security_entry_policy: Literal["legacy", "exclude_canada_and_adrs"] = "legacy"
 
     def __post_init__(self):
         for item in fields(self):
@@ -108,6 +109,7 @@ class ConstraintConfig:
         ):
             raise ValueError("Invalid drawdown reduction fraction")
         choices = {
+            "security_entry_policy": {"legacy", "exclude_canada_and_adrs"},
             "dividend_tax_profile": {"legacy", "cn_mainland_individual_treaty", "explicit_rules"},
             "dividend_tax_conflict_policy": {"record_actual", "reject"},
             "unknown_dividend_tax_policy": {"reject"},
