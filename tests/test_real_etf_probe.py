@@ -160,6 +160,32 @@ class ETFProbeTests(unittest.TestCase):
             p.capture_documents(dest, "b" * 40, fetch=fetch)
         self.assertEqual(len(calls), 1)
 
+    def test_document_larger_than_one_original_blob_roundtrips_without_changing_blob_limits(self):
+        content = io.BytesIO(fixture_xlsx())
+        with zipfile.ZipFile(content, "a", compression=zipfile.ZIP_STORED) as z:
+            z.writestr("padding.bin", b"0" * p.m.FILE_LIMIT)
+        large = content.getvalue()
+        self.assertGreater(len(large), p.m.FILE_LIMIT)
+        dest = FakeGitHub(p.m.DESTINATION)
+        docs, made = p.capture_documents(dest, "a" * 40, fetch=lambda _: (200, large))
+        self.assertEqual(made, 3)
+        self.assertTrue(all(v["body"] == large for v in docs.values()))
+        self.assertTrue(all(v["receipt"]["part_count"] == 2 for v in docs.values()))
+        self.assertEqual(p.m.FILE_LIMIT, 524288)
+        again, made = p.capture_documents(
+            dest, "b" * 40, verify_only=True, fetch=lambda _: self.fail("repeated download")
+        )
+        self.assertEqual(made, 0)
+        self.assertEqual(again, docs)
+
+    def test_document_credential_detection_includes_cross_chunk_boundary(self):
+        token = "INVENTED_ARCHIVE_CREDENTIAL"
+        body = b"0" * (p.m.FILE_LIMIT - 4) + token.encode() + b"0"
+        with self.assertRaisesRegex(p.Blocked, "DOCUMENT_CREDENTIAL_FOUND"):
+            p.document_secret_free(body, (token,))
+        with self.assertRaisesRegex(p.Blocked, "DOCUMENT_CREDENTIAL_PATTERN"):
+            p.document_secret_free(b"0" * p.m.FILE_LIMIT + b"api_key=INVENTED", ())
+
     def test_non_200_bytes_archived_without_classifier_admission(self):
         dest = FakeGitHub(p.m.DESTINATION)
         docs, _ = p.capture_documents(dest, "a" * 40, fetch=lambda _: (403, b"INVENTED_DENIED"))
