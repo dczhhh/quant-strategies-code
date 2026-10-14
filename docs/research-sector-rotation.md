@@ -193,8 +193,14 @@ legacy profile file and constructor defaults remain unchanged for compatibility.
 
 The synthetic verifier keeps every original 5A–5E source fingerprint unchanged
 as legacy provenance. The formal tax overlay pins four modules separately to
-source commit `3cbab8468ac8c4be8d69477588ef105a53246547` and has a distinct synthetic
+source commit `bed2c5b737bf69dc55700857234ec9ada2505c95` and has a distinct synthetic
 orchestration version. Old snapshots naming the legacy implementation fail with
 `VERSION_MISMATCH` rather than silently approving new runtime source. Refreshing
 synthetic input bindings is not new market evidence or historical PIT validation;
 existing private capture bytes and budget reservations do not change.
+
+Formal non-legacy reverse-split replay also rejects non-integral transformed
+positions, pending orders and risk-exit quantities even when the source event's
+default policy says `retain`. No virtual fraction or cash-in-lieu amount is
+inferred. Integral reverse splits retain total cost and cash. Legacy invented
+fixture behavior remains compatible and is not a real-data admission path.
