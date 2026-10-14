@@ -71,12 +71,18 @@ def sector_rotation_engine(
     controller: ConstraintController | None = None,
     corporate_action_provider: Any = None,
     fee_model: Any = None,
+    validation_mode: str = "real",
 ) -> Engine:
     """Build the existing public Engine with the opt-in rotation broker.
 
     context_provider must supply real/PIT ETF liquidity and explicit instrument
     metadata. No quotes, relative volume, total returns or dividends are invented.
     """
+    if validation_mode != "synthetic":
+        raise ValueError(
+            "UNVERIFIED: real-corporate-actions and real-tax-reconciliation acceptance incomplete; "
+            "only explicitly synthetic regression execution is currently supported"
+        )
     settings = strategy.config
     controller = controller or ConstraintController(
         settings.constraints(corporate_actions_enabled=corporate_action_provider is not None),

@@ -1,0 +1,28 @@
+# Opt-in ordinary-stock scenario; not proof of eligibility or historical PIT.
+corporate_actions_enabled: true
+execution_data_mode: raw_execution
+signal_data_mode: split_adjusted_signal
+dividend_withholding_rate: 0.0
+dividend_tax_scenario: cn_mainland_individual_ordinary_stock_scenario
+dividend_tax_profile: cn_mainland_individual_treaty
+dividend_tax_qualification: null
+unknown_dividend_tax_policy: reject
+dividend_tax_conflict_policy: record_actual
+capital_gains_tax_mode: none
+dividend_tax_rules:
+  - source_country: US
+    rate: 0.10
+    effective_from: '1987-01-01'
+    effective_to: '2027-01-01'
+    known_at: '2026-10-14T00:38:35+00:00'
+    verified_at: '2026-10-14T00:38:35+00:00'
+    source: https://www.irs.gov/pub/irs-trty/china.pdf
+    version: cn_us_ordinary_article9_review_20261014
+  - source_country: CA
+    rate: 0.15
+    effective_from: '1987-01-01'
+    effective_to: '2027-01-01'
+    known_at: '2026-10-14T00:38:35+00:00'
+    verified_at: '2026-10-14T00:38:35+00:00'
+    source: https://www.canada.ca/en/department-finance/programs/tax-policy/tax-treaties/country/china-agreement-1986.html
+    version: cn_ca_individual_ordinary_article10_review_20261014

@@ -134,8 +134,8 @@ def _preflight(source, root, settings, strategy_type) -> tuple[FrozenDatasetInpu
     if synthetic_config_sha256(settings, strategy_type) != snapshot.request.strategy_config_sha256:
         _deny("CONFIG_BINDING_MISMATCH", "strategy_config_sha256", "entry")
     request, config, constraints = snapshot.request, settings.backtest, settings.constraints
-    # No unchecked daily conversion or pretend PR #8 runtime policy injection.
-    # These reviewed sibling gates are still exercised by the pinned integration.
+    # This synthetic wiring probe retains its legacy minute-only scope. Formal
+    # tax policies are independently exercised through the public constrained broker.
     if request.frequency != "1m":
         _deny("RUNTIME_SCOPE_UNSUPPORTED", "frequency", "entry")
     if (
@@ -150,6 +150,9 @@ def _preflight(source, root, settings, strategy_type) -> tuple[FrozenDatasetInpu
         or not constraints.corporate_actions_enabled
         or constraints.execution_data_mode != "raw_execution"
         or constraints.signal_data_mode != "split_adjusted_signal"
+        or constraints.dividend_tax_profile != "legacy"
+        or constraints.dividend_tax_rules
+        or constraints.dividend_tax_qualification is not None
     ):
         _deny("RUNTIME_CONFIG_UNSUPPORTED", "config", "entry")
     records = _decode(snapshot)
