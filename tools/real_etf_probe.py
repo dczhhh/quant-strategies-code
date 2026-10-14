@@ -9,6 +9,7 @@ import re
 import runpy
 import sys
 import zipfile
+from contextlib import suppress
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal, InvalidOperation, localcontext
 from pathlib import Path
@@ -236,6 +237,20 @@ def workbook(body):
         return sheets
 
 
+def issuer_day(value):
+    need(type(value) is str, "ISSUER_DATE_INVALID")
+    try:
+        if re.fullmatch(r"[0-9]{2}/[0-9]{2}/20[0-9]{2}", value):
+            result = datetime.strptime(value, "%m/%d/%Y").date()
+        elif re.fullmatch(r"20[0-9]{2}-[0-9]{2}-[0-9]{2}", value):
+            result = date.fromisoformat(value)
+        else:
+            raise ValueError("invalid issuer date")
+    except ValueError as error:
+        raise Blocked("ISSUER_DATE_INVALID") from error
+    return result
+
+
 def schema_summary(sheets):
     """Only labels/coverage; no source amounts or paid price rows in public logs."""
     result = []
@@ -249,8 +264,8 @@ def schema_summary(sheets):
                     continue
                 if value.strip() in TICKERS:
                     coverage.add(value.strip())
-                if re.fullmatch(r"20[0-9]{2}-[0-9]{2}-[0-9]{2}", value):
-                    years.add(value[:4])
+                with suppress(Blocked):
+                    years.add(str(issuer_day(value).year))
         for row in rows[:8]:
             labels.append(
                 {
@@ -615,8 +630,119 @@ def return_probe(raw, adjusted, dividends):
         }
 
 
+HISTORY_HEADERS = {
+    "A": "FUND NAME",
+    "B": "TICKER",
+    "C": "CUSIP",
+    "D": "EX-DATE",
+    "E": "RECORD DATE",
+    "F": "PAYABLE DATE",
+    "G": "DIVIDEND ($)",
+    "H": "SHORT TERM CAPITAL GAIN ($)",
+    "I": "LONG TERM CAPITAL GAIN ($)",
+    "J": "FREQUENCY",
+}
+
+
+def history_match(sheets, ticker, dividends):
+    """Exact observed issuer schema; compare fields, not final tax classification or PIT."""
+    result = {
+        "status": "ISSUER_HISTORY_FIELDS_UNVERIFIED",
+        "reason": "HISTORY_SCHEMA_UNVERIFIED",
+        "rows": [],
+        "amount_tolerance_usd": "1E-8",
+        "historical_PIT_verified": False,
+        "ordinary_cash_admission": False,
+        "share_basis_attestation": "not independently established by a numeric match",
+    }
+    rows = sheets.get("dividend", [])
+    if not rows or rows[0] != HISTORY_HEADERS:
+        return result
+    reasons = set()
+    for event in dividends:
+        matches = []
+        for index, row in enumerate(rows[1:], start=1):
+            if row.get("B") != ticker:
+                continue
+            try:
+                if issuer_day(row.get("D")) == event["ex"]:
+                    matches.append((index, row))
+            except Blocked:
+                reasons.add("ISSUER_DATE_INVALID")
+        if len(matches) != 1:
+            reasons.add("ISSUER_EVENT_MISSING" if not matches else "ISSUER_EVENT_AMBIGUOUS")
+            continue
+        index, row = matches[0]
+        try:
+            need(
+                type(row.get("A")) is str
+                and bool(row["A"].strip())
+                and type(row.get("C")) is str
+                and re.fullmatch(r"[A-Z0-9]{9}", row["C"]) is not None,
+                "ISSUER_IDENTITY_INVALID",
+            )
+            record, pay = issuer_day(row.get("E")), issuer_day(row.get("F"))
+            amount = number(row.get("G"), positive=True)
+            gains = {}
+            for field in ("H", "I"):
+                # A blank is missing, never proof that capital-gain tax components are zero.
+                value = row.get(field)
+                gains[field] = None if value in (None, "") else str(number(value))
+            if record != event["record"] or pay != event["pay"]:
+                reasons.add("ISSUER_RECORD_PAY_CONFLICT")
+            difference = abs(amount - event["amount"])
+            if difference > Decimal(result["amount_tolerance_usd"]):
+                reasons.add("ISSUER_DIVIDEND_FIELD_OR_SHARE_BASIS_CONFLICT")
+            result["rows"].append(
+                {
+                    "parsed_row_index": index,
+                    "issuer_cells": row,
+                    "ex": event["ex"].isoformat(),
+                    "record": record.isoformat(),
+                    "pay": pay.isoformat(),
+                    "dividend_field_difference": str(difference),
+                    "observed_capital_gain_fields": gains,
+                }
+            )
+        except Blocked as error:
+            reasons.add(str(error))
+    if reasons:
+        result["reason"] = ",".join(sorted(reasons))
+    elif result["rows"] and len(result["rows"]) == len(dividends):
+        result.update(status="ISSUER_HISTORY_FIELD_MATCH", reason="DATES_AND_DIVIDEND_FIELD_MATCH")
+    return result
+
+
+def classification_gaps(documents, event_year):
+    """Current/annual source years cannot replace the missing event-year tax document."""
+    years = set()
+    for name, sheets in documents.items():
+        if name.startswith("ssga-") and "primary" in name:
+            for sheet, rows in sheets.items():
+                matched = re.fullmatch(r"(20[0-9]{2}) ICI Primary", sheet)
+                if (
+                    matched
+                    and rows
+                    and rows[0].get("A")
+                    == ("SPDR ETF " + matched[1] + " Tax Summary - Primary Layout")
+                ):
+                    years.add(int(matched[1]))
+    return {
+        "status": "ISSUER_CLASSIFICATION_MAPPING_UNVERIFIED",
+        "event_year": event_year,
+        "observed_primary_tax_years": sorted(years),
+        "event_year_document_present": event_year in years,
+        "reasons": [
+            *([] if event_year in years else ["EVENT_YEAR_PRIMARY_TAX_DOCUMENT_MISSING"]),
+            "HISTORY_NOT_FINAL_ORDINARY_CAPGAIN_ROC_SPECIAL_TAX_MAPPING",
+            "HISTORICAL_CLASSIFICATION_KNOWLEDGE_UNVERIFIED",
+        ],
+        "ordinary_cash_admission": False,
+    }
+
+
 def report(captured, documents, source):
-    docs = {}
+    docs, parsed = {}, {}
     for doc_id, item in documents.items():
         entry = {
             "receipt": item["receipt"],
@@ -633,7 +759,8 @@ def report(captured, documents, source):
             continue
         if item["receipt"]["http_status"] == 200 and item["body"].startswith(b"PK"):
             try:
-                entry["workbook_schema"] = schema_summary(workbook(item["body"]))
+                parsed[doc_id] = workbook(item["body"])
+                entry["workbook_schema"] = schema_summary(parsed[doc_id])
                 entry["structure"] = "WORKBOOK_READABLE"
             except (Blocked, ValueError, KeyError, ET.ParseError, zipfile.BadZipFile):
                 entry["structure"] = "WORKBOOK_UNVERIFIED"
@@ -647,9 +774,15 @@ def report(captured, documents, source):
             raw = bar_rows(captured[key + "-raw"], ticker, False)
             adjusted = bar_rows(captured[key + "-split-adjusted"], ticker, True)
             dividends = dividend_rows(captured[key + "-dividends"], ticker)
+            history = history_match(
+                parsed.get("ssga-historical-distributions", {}), ticker, dividends
+            )
+            gaps = classification_gaps(parsed, 2024)
             cases[ticker] = {
                 "signal": return_probe(raw, adjusted, dividends),
                 "classification": "ISSUER_CLASSIFICATION_MAPPING_UNVERIFIED",
+                "issuer_history": history,
+                "classification_gaps": gaps,
                 "unknown_distribution_cash_admission": "NOT_GRANTED",
                 "ex_record_pay": [
                     {
@@ -696,6 +829,10 @@ def public_summary(value):
                 "checkpoints": v["signal"]["checkpoints"],
                 "max_signal_oracle_error": v["signal"]["max_error"],
                 "classification": v["classification"],
+                "issuer_history": v["issuer_history"]["status"],
+                "issuer_history_reason": v["issuer_history"]["reason"],
+                "matched_issuer_rows": len(v["issuer_history"]["rows"]),
+                "classification_gaps": v["classification_gaps"],
             }
             for k, v in value["cases"].items()
         },
