@@ -437,7 +437,6 @@ def test_project_ordinary_profile_never_assumes_personal_eligibility_or_early_pi
     config = ConstraintConfig.from_yaml("config/cn_mainland_ordinary_dividend.yaml")
     assert {rule.source_country: rule.rate for rule in config.dividend_tax_rules} == {
         "US": 0.10,
-        "CA": 0.15,
     }
     assert config.dividend_tax_qualification is None
     with pytest.raises(ValueError, match="eligibility unconfirmed"):

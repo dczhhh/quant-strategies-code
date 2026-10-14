@@ -176,6 +176,18 @@ def test_unverified_real_entry_is_blocked_before_engine_or_broker_construction(m
         sector_rotation_engine(None, strategy, None, validation_mode=mode)
 
 
+def test_external_controller_cannot_disable_owner_security_exclusion():
+    strategy = SectorRotationStrategy(CausalCloseSource(source_rows()), settings())
+    controller = ConstraintController(
+        replace(strategy.config.constraints(), security_entry_policy="legacy"),
+        InMemoryEarningsProvider(),
+    )
+    with pytest.raises(ValueError, match="Controller does not match"):
+        sector_rotation_engine(
+            None, strategy, context, controller=controller, validation_mode="synthetic"
+        )
+
+
 @pytest.mark.parametrize(
     "scores",
     [

@@ -66,9 +66,10 @@ from .verification_contracts import (
 )
 from .verification_wire import RECORD_TYPES, _encode, decode_records, safe_field
 
-VERIFICATION_VERSION = "research_verification_orchestration_synthetic_v4_sourced_credit_corrections"
+VERIFICATION_VERSION = "research_verification_orchestration_synthetic_v5_security_entry_scope"
 LEGACY_IMPLEMENTATION_BASE = "fb870fd70a5d3438c20adcdb3c606c04533719a0"
-REVIEWED_IMPLEMENTATION_BASE = "9938de9c441e289b9eb5b5e5bf3814e2ff726ebb"
+TAX_RUNTIME_SOURCE_REVISION = "9938de9c441e289b9eb5b5e5bf3814e2ff726ebb"
+REVIEWED_IMPLEMENTATION_BASE = "f38b3e8b75e1e555d3d66d8dad0b609371515e22"
 # Source bytes of the accepted 5A/B/C/D implementations and their direct contracts.
 # Wheel source files must match too; a declared git SHA alone is not evidence.
 BASE_SOURCE_SHA256 = {
@@ -101,6 +102,16 @@ TAX_RUNTIME_SOURCE_SHA256 = {
     "quant_constraints.dividend_tax": "822e144f2e35c26f57d38234d55b55f28a47307d6afac004a25dc9d047ce3991",
     "quant_constraints.corporate_actions.events": "84f9a54dc6c6252bb4661d65773be03d920ce3aad1d43398a605391145c2ae42",
     "quant_constraints.corporate_actions.processor": "36cb7e98c52efb9629d98d0a73ef884a347fbbb21c22cb26dff9d3c3983d8e3e",
+}
+# Preserve the accepted tax/legacy provenance above. The owner entry policy is
+# a new source overlay, never a rewrite of old archives or PIT evidence.
+ENTRY_RUNTIME_SOURCE_SHA256 = {
+    "quant_constraints.config": "4f88c236dd6c4dc542af493a3daa24ed934e7154c44b057e1b466b093e80513c",
+    "quant_constraints.models": "9f949c47a8c93b7009c86af871dde32fe74d50b47fafede209a4de00648db068",
+    "quant_constraints.controller": "0ac31cb3109606eee280b41a2c0fa2955fd74386ff56684544bab20ae71468b9",
+    "quant_constraints.security_policy": "945e821e9cb1908648cc0b3190375b0e2dbeb3562059252d52cc567f62f50d33",
+    "ml4t.backtest.strategies.sector_rotation.config": "b21a2973b2ac71b41cc217b179c15ac9144a058ca0567d2f3162a7e729f3eda7",
+    "ml4t.backtest.strategies.sector_rotation.adapter": "86bd3c30a98a25b5b44e97d8f14e76b113ebb3fe709b8b836987c7394b41b50c",
 }
 ROLE_DEPENDENCIES = {
     EvidenceRole.RAW: {EvidenceRole.IDENTITIES},
@@ -142,16 +153,22 @@ def _versions(snapshot: FrozenDatasetInput) -> dict:
     for name, actual in versions.items():
         if getattr(snapshot.versions, name) != actual:
             _deny("VERSION_MISMATCH", name, "versions")
-    expected_sources = {**BASE_SOURCE_SHA256, **TAX_RUNTIME_SOURCE_SHA256}
+    expected_sources = {
+        **BASE_SOURCE_SHA256,
+        **TAX_RUNTIME_SOURCE_SHA256,
+        **ENTRY_RUNTIME_SOURCE_SHA256,
+    }
     actual_sources = {name: _source_digest(name) for name in expected_sources}
     if actual_sources != expected_sources:
         _deny("IMPLEMENTATION_MISMATCH", "code_revision", "versions")
     return {
         "checked_versions": versions,
-        "code_revision_scope": "reviewed_5A_B_C_D_5E1_plus_pinned_formal_tax_runtime",
+        "code_revision_scope": "reviewed_5A_B_C_D_5E1_plus_pinned_tax_and_security_entry_runtime",
         "legacy_source_revision": LEGACY_IMPLEMENTATION_BASE,
         "legacy_source_sha256": BASE_SOURCE_SHA256,
         "tax_runtime_source_sha256": TAX_RUNTIME_SOURCE_SHA256,
+        "tax_runtime_source_revision": TAX_RUNTIME_SOURCE_REVISION,
+        "entry_runtime_source_sha256": ENTRY_RUNTIME_SOURCE_SHA256,
         "reviewed_source_sha256": actual_sources,
         "orchestration_version": VERIFICATION_VERSION,
         "orchestration_source_sha256": {
