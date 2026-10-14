@@ -247,6 +247,44 @@ def test_ge_style_cash_in_lieu_rejected_without_phantom_tradable_fraction():
     assert broker.positions["A"].quantity == 83
 
 
+def test_formal_ge_default_retain_cannot_create_virtual_tradable_fraction():
+    broker, _, _, _, _ = build(action(split_ratio=0.125), settings=scenario())
+    held(broker, quantity=83, price=100)
+    tick(broker)
+    before = copy.deepcopy((broker.cash, broker.positions, broker.orders))
+    with pytest.raises(ValueError, match="UNSUPPORTED_CASH_IN_LIEU"):
+        tick(broker, at("2026-10-12"), price=800)
+    assert (broker.cash, broker.positions, broker.orders) == before
+
+
+def test_formal_reverse_split_nonintegral_pending_order_fails_before_reservation_mutation():
+    from ml4t.backtest import OrderStatus, OrderType
+
+    config = replace(scenario(), buy_time_in_force="GTD", max_defer_sessions=3)
+    broker, _, _, _, _ = build(action(split_ratio=0.125), settings=config)
+    tick(broker)
+    order = broker.submit_order("A", 20, order_type=OrderType.LIMIT, limit_price=99)
+    assert order.status is OrderStatus.PENDING
+    before = copy.deepcopy((broker.cash, broker.reserved_cash, broker.orders))
+    with pytest.raises(ValueError, match="UNSUPPORTED_CASH_IN_LIEU"):
+        tick(broker, at("2026-10-12"), price=800)
+    assert (broker.cash, broker.reserved_cash, broker.orders) == before
+
+
+def test_formal_integral_reverse_split_preserves_cost_and_cash():
+    broker, _, _, _, _ = build(action(split_ratio=0.125), settings=scenario())
+    position = held(broker, quantity=80, price=100)
+    tick(broker)
+    before = broker.cash, broker.get_account_value(), position.quantity * position.entry_price
+    tick(broker, at("2026-10-12"), price=800)
+    assert position.quantity == 10 and position.entry_price == 800
+    assert (
+        broker.cash,
+        broker.get_account_value(),
+        position.quantity * position.entry_price,
+    ) == before
+
+
 def test_tax_yaml_restores_immutable_rules_and_typed_qualification(tmp_path):
     from dataclasses import asdict
 

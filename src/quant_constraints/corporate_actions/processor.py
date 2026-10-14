@@ -251,6 +251,8 @@ class CorporateActionProcessor:
                     raise ValueError(f"Cannot reconstruct pre-event entitlement/basis: {event.key}")
                 if exposed or event.kind == "CASH_CREDIT":
                     self.validate_terms(event)
+                if event.kind == "SPLIT" and asset is not None:
+                    self.validate_fractional_reverse_split(asset, event)
                 if event.kind == "CASH_DIVIDEND" and pos is not None:
                     if (
                         broker.controller.config.dividend_tax_profile != "legacy"
@@ -361,7 +363,36 @@ class CorporateActionProcessor:
             for name, value in asdict(event).items()
         }
 
+    def validate_fractional_reverse_split(self, asset: str, event: CorporateAction) -> None:
+        """Formal replay cannot infer tradable fractions or a cash-in-lieu price."""
+        ratio = event.split_ratio
+        if (
+            ratio is None
+            or ratio >= 1
+            or self.broker.controller.config.dividend_tax_profile == "legacy"
+        ):
+            return
+        position = self.broker.positions.get(asset)
+        quantities = [position.quantity] if position is not None else []
+        for order in self.broker.orders:
+            if order.asset == asset and order.status is OrderStatus.PENDING:
+                quantities.extend(
+                    (order.quantity, abs(order.quantity) - abs(order.filled_quantity))
+                )
+        pending_exit = self.broker._risk_state.pending_exits.get(asset)
+        if pending_exit is not None:
+            quantities.append(pending_exit["quantity"])
+        if any(
+            not math.isclose(q * ratio, round(q * ratio), rel_tol=0, abs_tol=1e-12)
+            for q in quantities
+        ):
+            raise ValueError(
+                "UNSUPPORTED_CASH_IN_LIEU: authoritative fractional entitlement, rounding "
+                "and credit evidence required; formal replay cannot retain a virtual fraction"
+            )
+
     def split(self, asset: str, event: CorporateAction, observed: set[str]):
+        self.validate_fractional_reverse_split(asset, event)
         broker = self.broker
         ratio = event.split_ratio
         assert ratio is not None
