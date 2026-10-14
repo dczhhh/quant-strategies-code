@@ -51,6 +51,109 @@ def prices():
 
 
 class ETFProbeTests(unittest.TestCase):
+    def test_issuer_dates_handle_text_and_numeric_date_output_without_year_swap(self):
+        self.assertEqual(p.issuer_day("09/20/2024"), date(2024, 9, 20))
+        self.assertEqual(p.issuer_day("2024-09-20"), date(2024, 9, 20))
+        for value in ("20/09/2024", "02/30/2024", "9/20/24", {"formula": True}, None):
+            with self.subTest(value=value), self.assertRaises(p.Blocked):
+                p.issuer_day(value)
+        self.assertEqual(
+            p.schema_summary({"dividend": [{"A": "09/20/2024"}]})[0]["date_years"], ["2024"]
+        )
+
+    def test_exact_history_match_does_not_grant_tax_basis_cash_or_pit(self):
+        event = {
+            "ex": date(2024, 9, 20),
+            "record": date(2024, 9, 20),
+            "pay": date(2024, 9, 30),
+            "amount": Decimal(1),
+        }
+        row = {
+            "A": "Invented Fund",
+            "B": "SPY",
+            "C": "000000001",
+            "D": "09/20/2024",
+            "E": "09/20/2024",
+            "F": "09/30/2024",
+            "G": "1",
+            "H": "",
+            "I": "0",
+            "J": "Quarterly",
+        }
+        value = p.history_match({"dividend": [p.HISTORY_HEADERS, row]}, "SPY", [event])
+        self.assertEqual(value["status"], "ISSUER_HISTORY_FIELD_MATCH")
+        self.assertEqual(value["rows"][0]["observed_capital_gain_fields"], {"H": None, "I": "0"})
+        self.assertFalse(value["ordinary_cash_admission"])
+        self.assertFalse(value["historical_PIT_verified"])
+        self.assertIn("not independently", value["share_basis_attestation"])
+        self.assertEqual(row["H"], "")
+
+    def test_history_ambiguity_conflicts_formulas_and_canonical_header_fail_closed(self):
+        event = {
+            "ex": date(2024, 9, 20),
+            "record": date(2024, 9, 20),
+            "pay": date(2024, 9, 30),
+            "amount": Decimal(1),
+        }
+        row = {
+            "A": "Invented Fund",
+            "B": "SPY",
+            "C": "000000001",
+            "D": "09/20/2024",
+            "E": "09/20/2024",
+            "F": "09/30/2024",
+            "G": "1",
+            "H": "",
+            "I": "0",
+            "J": "Quarterly",
+        }
+        for change in (
+            {"G": "0.5"},
+            {"E": "09/23/2024"},
+            {"G": {"formula": True}},
+            {"C": "wrong"},
+            {"I": "-1"},
+        ):
+            with self.subTest(change=change):
+                value = p.history_match(
+                    {"dividend": [p.HISTORY_HEADERS, {**row, **change}]}, "SPY", [event]
+                )
+                self.assertEqual(value["status"], "ISSUER_HISTORY_FIELDS_UNVERIFIED")
+        for rows in (
+            [p.HISTORY_HEADERS, row, row],
+            [p.HISTORY_HEADERS, {**row, "B": "XLB"}],
+            [{**p.HISTORY_HEADERS, "G": "Total distribution"}, row],
+        ):
+            self.assertEqual(
+                p.history_match({"dividend": rows}, "SPY", [event])["status"],
+                "ISSUER_HISTORY_FIELDS_UNVERIFIED",
+            )
+
+    def test_tax_year_binds_primary_title_and_sheet_not_report_clock(self):
+        sheets = {
+            "2025 ICI Primary": [
+                {"A": "SPDR ETF 2025 Tax Summary - Primary Layout"},
+                {"D": "TARGET DELIVERY DATE: JANUARY 20, 2026"},
+            ]
+        }
+        value = p.classification_gaps({"ssga-ici-primary-current": sheets}, 2024)
+        self.assertEqual(value["observed_primary_tax_years"], [2025])
+        self.assertFalse(value["event_year_document_present"])
+        self.assertFalse(
+            p.classification_gaps({"ssga-ici-primary-current": sheets}, 2026)[
+                "event_year_document_present"
+            ]
+        )
+        self.assertFalse(value["ordinary_cash_admission"])
+        self.assertIn("EVENT_YEAR_PRIMARY_TAX_DOCUMENT_MISSING", value["reasons"])
+        changed = {"2024 ICI Primary": sheets["2025 ICI Primary"]}
+        self.assertEqual(
+            p.classification_gaps({"ssga-ici-primary-current": changed}, 2024)[
+                "observed_primary_tax_years"
+            ],
+            [],
+        )
+
     def test_read_only_dates_signed_values_and_formula_cache_exclusion(self):
         sheets = p.workbook(fixture_xlsx())
         self.assertEqual(sheets["Invented"][0], {"A": "SPY", "B": "2024-09-20", "C": "-2"})

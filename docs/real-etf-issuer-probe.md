@@ -49,6 +49,20 @@ nor resets/retries a request. It can still archive/recompute calculations from
 the 36 completed inputs and inspect the two retained workbooks. This is an
 inspection result, not a successful acquisition of the missing 2024 document.
 
+Actual readback identified the historical `dividend` worksheet's exact
+fund/ticker/CUSIP, ex/record/pay, dividend-dollar, short/long capital-gain and
+frequency fields. The current primary file identifies tax year **2025** in
+both its worksheet name and title. The January 2026 delivery clock is not a
+tax-year or historical availability certificate for a 2024 event.
+
+The field matcher requires that exact source header, one unique ticker/ex-date
+row, a source fund name/CUSIP, exact record/pay dates and a dividend-field
+difference no greater than `1E-8 USD`. It does not silently rescale a mismatch,
+rename a capital gain as ordinary income, or treat blank gain fields as zero.
+Source rows and differences stay private; the public summary reports counts
+and outcomes only. A field match is retrospective, not an independently
+established share-basis, ROC/special/final tax classification or cash admission.
+
 Every public fixture is invented. This operator does not construct Engine or
 issue a real/PIT certificate, does not authenticate a personal account replay,
 and does not merge or unlock strategy PR #6. Its summary separates issuer
