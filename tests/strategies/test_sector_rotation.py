@@ -148,13 +148,22 @@ def run(
             slippage_type=SlippageType.NONE,
             slippage_rate=0,
         )
-    engine = sector_rotation_engine(feed, strategy, context, config, controller=controller)
+    engine = sector_rotation_engine(
+        feed, strategy, context, config, controller=controller, validation_mode="synthetic"
+    )
     if participation is not None:
         from ml4t.backtest.execution.limits import VolumeParticipationLimit
 
         engine.broker.execution_limits = VolumeParticipationLimit(participation)
     engine.run()
     return engine, strategy
+
+
+@pytest.mark.parametrize("mode", ["real", "unverified", "", "REAL"])
+def test_unverified_real_entry_is_blocked_before_engine_or_broker_construction(mode):
+    strategy = SectorRotationStrategy(CausalCloseSource(source_rows()), settings())
+    with pytest.raises(ValueError, match="UNVERIFIED.*real-corporate-actions"):
+        sector_rotation_engine(None, strategy, None, validation_mode=mode)
 
 
 @pytest.mark.parametrize(

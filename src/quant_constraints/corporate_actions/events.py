@@ -32,9 +32,28 @@ class CorporateAction:
     dividend_basis: str = "post_split"
     terms: str = "ordinary"
     cancelled: bool = False
+    tax_source_country: str | None = None
+    tax_source: str | None = None
+    tax_source_known_at: datetime | None = None
+    distribution_type: str | None = None
+    withholding_source: str | None = None
+    withholding_known_at: datetime | None = None
+    credited_gross: float | None = None
+    credited_withheld: float | None = None
+    credited_fee: float | None = None
 
     def __post_init__(self):
         aware(self.available_at)
+        for stamp in (self.tax_source_known_at, self.withholding_known_at):
+            if stamp is not None:
+                aware(stamp)
+        if self.tax_source_country is not None and (
+            len(self.tax_source_country) != 2
+            or not self.tax_source_country.isascii()
+            or not self.tax_source_country.isupper()
+            or not self.tax_source_country.isalpha()
+        ):
+            raise ValueError("Tax source country must be a two-letter uppercase code")
         if any(
             not isinstance(x, str) or not x.strip()
             for x in (self.security_id, self.event_id, self.kind, self.source, self.currency)
@@ -48,6 +67,9 @@ class CorporateAction:
             "credited_net",
             "withholding_rate",
             "fee_per_share",
+            "credited_gross",
+            "credited_withheld",
+            "credited_fee",
         ):
             value = getattr(self, name)
             if value is not None and (
@@ -101,6 +123,15 @@ class CorporateAction:
             self.dividend_basis,
             self.terms,
             self.cancelled,
+            self.tax_source_country,
+            self.tax_source,
+            self.tax_source_known_at,
+            self.distribution_type,
+            self.withholding_source,
+            self.withholding_known_at,
+            self.credited_gross,
+            self.credited_withheld,
+            self.credited_fee,
         )
 
 

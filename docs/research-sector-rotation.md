@@ -153,3 +153,35 @@ recovery, execution windows, missing data, cap-boundary fees and integer shares.
 Research performance validation remains a separate step, with the accepted
 R1–R5 ablations, SPY benchmarks, costs, settlement exposure and chronological
 holdout. No real strategy CAGR, Sharpe or drawdown is claimed by this module.
+
+## Blocking real-data acceptance
+
+The public `sector_rotation_engine` defaults to real-data mode and currently rejects
+construction with `UNVERIFIED` before any broker, engine, order or cash mutation.
+Only explicitly labelled `validation_mode="synthetic"` regression execution is
+available. This is not an admission token for real prices, a real-data validator,
+an account statement reconciliation or a certified performance path. Direct use
+of generic `Engine` does not constitute accepted sector-rotation execution.
+
+PR #6's real-corporate-actions and real-tax-reconciliation gates remain blocked
+pending archived official event/classification evidence, independently verified
+raw/split-adjusted/total-return chains and historical PIT evidence. Actual IBKR
+gross, withheld tax, fee and net credits cannot be inferred from a payable date.
+No real broker statement has been supplied. Historical revised API responses
+cannot be relabelled historical knowledge.
+
+The formal constraint package now exposes the reviewed PR #8 versioned country
+tax rules and investor qualification. Legacy defaults remain compatible, but
+qualified profiles require visible source-country/classification evidence and
+explicit eligibility. US 10% and CA 15% are conditional ordinary-stock treaty
+scenarios, never deductions inferred from USD or a US listing. ETF distributions,
+special dividends, capital returns and unknown classification fail closed for
+these profiles. Actual sourced withholding has priority; unexplained conflicts
+can be rejected. Non-legacy credits require explicit gross/withheld/fee/net
+amounts and reconciliation, not estimated net cash.
+
+GE-style cash-in-lieu remains explicitly unsupported: the processor rejects the
+event before changing any position, cash or pending order. It does not create a
+virtual tradable 0.375 share or invent a cash-in-lieu price. NVDA/GE official terms
+must be independently archived for real-case acceptance; the added regression
+fixtures are invented and count as zero real cases.

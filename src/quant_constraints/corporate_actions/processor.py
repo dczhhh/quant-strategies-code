@@ -24,6 +24,7 @@ from ml4t.backtest.risk.position.static import StopLoss, TakeProfit, TimeExit
 from ml4t.backtest.types import OrderSide, OrderStatus
 
 from ..calendar import NY
+from ..dividend_tax import resolve_dividend_tax_rate
 from ..models import aware
 from .events import CorporateAction, CorporateActionProvider
 
@@ -250,6 +251,16 @@ class CorporateActionProcessor:
                     raise ValueError(f"Cannot reconstruct pre-event entitlement/basis: {event.key}")
                 if exposed or event.kind == "CASH_CREDIT":
                     self.validate_terms(event)
+                if event.kind == "CASH_DIVIDEND" and pos is not None:
+                    if (
+                        broker.controller.config.dividend_tax_profile != "legacy"
+                        and broker.context_provider(asof, asset, "corporate_action").instrument
+                        != "equity"
+                    ):
+                        raise ValueError(
+                            "Country ordinary-stock tax profile does not support ETF distributions"
+                        )
+                    resolve_dividend_tax_rate(broker.controller.config, event, asof)
                 events.append((effective, asset, event, False))
         rank = {"SPLIT": 0, "CASH_DIVIDEND": 1, "CASH_CREDIT": 2}
         events.sort(key=lambda item: (item[0], rank.get(item[2].kind, 3), item[2].key))
@@ -543,10 +554,12 @@ class CorporateActionProcessor:
         if quantity == 0:
             record.update(status="observed_no_entitlement")
             return
-        rate = (
-            event.withholding_rate
-            if event.withholding_rate is not None
-            else self.broker.controller.config.dividend_withholding_rate
+        rate, tax_evidence = resolve_dividend_tax_rate(
+            self.broker.controller.config,
+            event,
+            self.state["last_asof"] or event.available_at
+            if "processed_at" not in record
+            else datetime.fromisoformat(record["processed_at"]),
         )
         gross = quantity * event.dividend_per_share
         withholding, fees = gross * rate, quantity * event.fee_per_share
@@ -560,6 +573,10 @@ class CorporateActionProcessor:
             "quantity": quantity,
             "credited": False,
         }
+        if self.broker.controller.config.dividend_tax_profile != "legacy":
+            self.state["entitlements"][event.key].update(
+                withholding=withholding, fees=fees, tax_evidence=tax_evidence
+            )
         record.update(
             status="dividend_receivable",
             gross=gross,
@@ -567,6 +584,7 @@ class CorporateActionProcessor:
             fees=fees,
             income_delta=net,
             withholding_rate=rate,
+            tax_evidence=tax_evidence,
             tax_scenario=(
                 "source_account_withholding"
                 if event.withholding_rate is not None
@@ -595,6 +613,9 @@ class CorporateActionProcessor:
         if quantity <= 0:
             raise ValueError(f"No qualifying shares for dividend credit: {parent}")
         estimate = item["net"]
+        actual_tax = self.broker.controller.config.dividend_tax_profile != "legacy"
+        if actual_tax:
+            self.validate_credit_reconciliation(event, item)
         actual = estimate if event.credited_net is None else event.credited_net
         if actual > item["gross"] + 1e-8:
             raise ValueError(f"Confirmed credit exceeds eligible gross entitlement: {parent}")
@@ -602,13 +623,50 @@ class CorporateActionProcessor:
         self.broker.account._lock_notional_free_cash += actual
         self.broker.account._receivables.pop(entitlement_key(*parent))
         item["credited"] = True
+        if "tax_evidence" in item:
+            item["credited_net"] = actual
         record.update(
             status="cash_credited",
             eligible_quantity=quantity,
             cash_delta=actual,
             income_delta=actual - estimate,
             parent_event_id=event.parent_event_id,
+            tax_evidence=copy.deepcopy(item.get("tax_evidence")),
+            reconciled_net_difference=actual - estimate,
+            withholding_applied_again=False,
         )
+        if actual_tax:
+            assert event.credited_withheld is not None and event.credited_fee is not None
+            record.update(
+                confirmed_gross=event.credited_gross,
+                confirmed_withheld=event.credited_withheld,
+                confirmed_fee=event.credited_fee,
+                confirmed_net=event.credited_net,
+                withholding=event.credited_withheld - item.get("withholding", 0.0),
+                fees=event.credited_fee - item.get("fees", 0.0),
+                reconciliation_source=event.source,
+                reconciliation_available_at=event.available_at.isoformat(),
+            )
+
+    @staticmethod
+    def validate_credit_reconciliation(event: CorporateAction, item: dict) -> None:
+        """Actual account amounts are mandatory; payable dates/estimates are not credits."""
+        amounts = (
+            event.credited_gross,
+            event.credited_withheld,
+            event.credited_fee,
+            event.credited_net,
+        )
+        if any(amount is None for amount in amounts):
+            raise ValueError("UNVERIFIED: actual gross/withheld/fee/net credit evidence required")
+        gross, withheld, fee, net = amounts
+        assert gross is not None and withheld is not None and fee is not None and net is not None
+        if (
+            abs(gross - item["gross"]) > 0.01000001
+            or abs(gross - withheld - fee - net) > 0.00500001
+            or withheld + fee > gross + 1e-8
+        ):
+            raise ValueError("Actual dividend credit components do not reconcile")
 
     def evidence(self):
         records = copy.deepcopy(self.state["records"])
@@ -623,6 +681,8 @@ class CorporateActionProcessor:
             "records": records,
             "observation_revisions": copy.deepcopy(self.state.get("revisions", [])),
             "income": sum(r["income_delta"] for r in records),
+            "withholding": sum(r["withholding"] for r in records),
+            "capital_gains_tax_mode": self.broker.controller.config.capital_gains_tax_mode,
             "receivables": dict(self.broker.account._receivables),
             "outstanding": self.broker.account._receivable_value,
             "failures": copy.deepcopy(self.failures),
