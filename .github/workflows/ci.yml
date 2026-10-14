@@ -90,6 +90,8 @@ jobs:
           uv run ruff format --check tools/real_action_recovery.py
           uv run ruff check --no-fix tools/real_case_supplement.py
           uv run ruff format --check tools/real_case_supplement.py
+          uv run ruff check --no-fix tools/real_split_probe.py tests/real_split_component_cases.py
+          uv run ruff format --check tools/real_split_probe.py tests/real_split_component_cases.py
 
       - name: Validate private sample workflow expressions without executing capture
         run: |
@@ -102,7 +104,7 @@ jobs:
             '8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8' \
             "$sample_lint_dir/actionlint.tar.gz" | sha256sum --check --strict
           tar --no-same-owner -xzf "$sample_lint_dir/actionlint.tar.gz" -C "$sample_lint_dir" actionlint
-          "$sample_lint_dir/actionlint" -shellcheck='' -pyflakes='' .github/workflows/private-samples.yml .github/workflows/continuous-materials.yml .github/workflows/bounded-pull-test.yml .github/workflows/real-action-capture.yml .github/workflows/real-action-recovery.yml .github/workflows/real-case-supplement.yml
+          "$sample_lint_dir/actionlint" -shellcheck='' -pyflakes='' .github/workflows/private-samples.yml .github/workflows/continuous-materials.yml .github/workflows/bounded-pull-test.yml .github/workflows/real-action-capture.yml .github/workflows/real-action-recovery.yml .github/workflows/real-case-supplement.yml .github/workflows/real-split-probe.yml
 
       - name: Fetch immutable public upstream evidence
         run: git fetch --no-tags --depth=1 https://github.com/ml4t/backtest.git c1ee19c385db3cbad225822cf845832470694f2b
@@ -556,3 +558,24 @@ jobs:
           path: release-candidate/
           if-no-files-found: error
           retention-days: 90
+
+  pinned-split-component:
+    name: Pinned split component fixtures
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: d2115c9780e9613b84e44939e25a7e7a2fc4a8cc
+          path: runtime
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+      - name: Install pinned runtime without private credentials
+        run: uv sync --project runtime --dev --locked --python 3.12
+      - name: Type-check operator against its immutable runtime
+        run: uv run --project runtime --no-sync ty check --project runtime tools/real_split_probe.py
+      - name: Validate independent invented component expectations
+        run: runtime/.venv/bin/python -m unittest tests.test_real_split_probe tests.real_split_component_cases -v
