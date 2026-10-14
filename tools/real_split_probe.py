@@ -26,6 +26,21 @@ b, m = s.b, s.m
 NY = ZoneInfo("America/New_York")
 RUNTIME_SHA = "d2115c9780e9613b84e44939e25a7e7a2fc4a8cc"
 CAPTURE_SHA = "c383bdab9661f9ebd2f18a5bb776194d871d64b0"
+INPUT_COMMITS = {
+    "sqqq-reverse-identity-pre": "6bb9c6a038afc0d04b38751b654f32a92a86a379",
+    "sqqq-reverse-issuer-8937": "d4a416aa9b134a4fde487c8691cf3d7f20084850",
+    "sqqq-reverse-issuer-announcement": "fe8bfe4f183604f99f6ca3beb06e7eb699b95267",
+    "sqqq-reverse-raw": "64527639532b0ecd523cea30bdb194b95b3aa8a7",
+    "sqqq-reverse-split-adjusted": "b8350f8a90effe4b9999442c5c15022c36874391",
+    "sqqq-reverse-splits": "bc46b24044435bb5ea6212aabe2300c3b45a698e",
+    "wolf-reorganization-identity-post": "fe49bb42bfffbd45840cbb652c826455c7df49f9",
+    "wolf-reorganization-identity-pre": "4492087a60ee4f9af459afdeb4b0db66b463eaf9",
+    "wolf-reorganization-issuer-2026-release": "6b7b79095bb5f255b3766392b4ace84a1c8d0877",
+    "wolf-reorganization-issuer-reorganization": "db9ea3a57f30835b5240e333ef602e85fec37b97",
+    "wolf-reorganization-raw": "60aec84b8d20794187fd12c77c273aaec462a47d",
+    "wolf-reorganization-split-adjusted": "dd21010452a58c4a7f31e57e6aa5a58188eaf6a0",
+    "wolf-reorganization-splits": "287348015bc893f6526b3fd81e711a9cc423d035",
+}
 ANNOUNCEMENT_SHA256 = "63e11d1ac11ee66533c38f50ac76ac17baea56e33c0dfb0cdeb0cf481534c448"
 FORM_SHA256 = "1257b46dc21a856d1b8a53359cbd8a218ece5f6e0ac87c23c32ee79b32d806c3"
 PREFIX = "research/verification/real_split_probe_v1/"
@@ -481,7 +496,40 @@ def mechanical_probe(raw: dict, observed: datetime) -> dict:
     }
 
 
+class PinnedInputs:
+    """Read captured commit graphs, never follow a mutable input branch again."""
+
+    def __init__(self, destination):
+        self.destination, self.token = destination, destination.token
+        self.parents = {}
+
+    def ref(self, name: str):
+        for group in s.GROUPS:
+            for product in s.products(group):
+                revision = INPUT_COMMITS[product["id"]]
+                if name == s.ref(product):
+                    return revision
+                if name == s.ref(product, True):
+                    if revision not in self.parents:
+                        commit = self.destination.request("GET", "/git/commits/" + revision)
+                        need(
+                            commit is not None and len(commit["parents"]) == 1,
+                            "INPUT_PARENT_MISMATCH",
+                        )
+                        self.parents[revision] = m.sha(commit["parents"][0]["sha"])
+                    return self.parents[revision]
+        raise Blocked("UNREVIEWED_INPUT_REF")
+
+    def request(self, method: str, suffix: str, payload=None):
+        need(method == "GET" and payload is None, "INPUT_WRITE_FORBIDDEN")
+        return self.destination.request(method, suffix)
+
+    def blob(self, sha, size):
+        return self.destination.blob(sha, size)
+
+
 def inputs(destination) -> dict:
+    destination = PinnedInputs(destination)
     output = {}
     for group in s.GROUPS:
         for product in s.products(group):

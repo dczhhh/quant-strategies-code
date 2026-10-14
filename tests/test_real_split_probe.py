@@ -64,6 +64,25 @@ def split_payload(*, first_ratio=1):
 
 
 class ProbeContractTests(unittest.TestCase):
+    def test_pinned_input_view_does_not_follow_mutable_branches(self):
+        class Archive:
+            token = "INVENTED_TOKEN"
+
+            def ref(self, name):
+                raise AssertionError("Mutable ref must not be read")
+
+            def request(self, method, path):
+                return {"parents": [{"sha": "1" * 40}]}
+
+        view = p.PinnedInputs(Archive())
+        product = p.s.products("sqqq-reverse")[0]
+        self.assertEqual(view.ref(p.s.ref(product)), p.INPUT_COMMITS[product["id"]])
+        self.assertEqual(view.ref(p.s.ref(product, True)), "1" * 40)
+        with self.assertRaisesRegex(p.Blocked, "UNREVIEWED_INPUT_REF"):
+            view.ref("INVENTED_UNREVIEWED_BRANCH")
+        with self.assertRaisesRegex(p.Blocked, "INPUT_WRITE_FORBIDDEN"):
+            view.request("POST", "/git/refs", {})
+
     def test_two_independent_future_factors_use_current_anchor(self):
         raw = p.bars(payload(), False)
         factors = p.price_factors(split_payload())

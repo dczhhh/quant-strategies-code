@@ -10,6 +10,9 @@ The tested production runtime is pinned to
 does not merge the strategy branch into main. The capture source is pinned to
 `c383bdab9661f9ebd2f18a5bb776194d871d64b0`; all 13 products are read back with
 their original bytes, receipt, checks, budget parent and archive commit.
+All 13 captured commit IDs are also individually pinned. Input reads traverse
+those immutable commit graphs and their original budget parents, so later
+changes to branch pointers cannot substitute a different input.
 
 ## Independent expectations and scope
 
