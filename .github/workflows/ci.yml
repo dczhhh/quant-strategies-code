@@ -86,6 +86,8 @@ jobs:
           uv run ruff format --check tools/bounded_pull_test.py
           uv run ruff check --no-fix tools/real_action_capture.py
           uv run ruff format --check tools/real_action_capture.py
+          uv run ruff check --no-fix tools/real_action_recovery.py
+          uv run ruff format --check tools/real_action_recovery.py
 
       - name: Validate private sample workflow expressions without executing capture
         run: |
@@ -98,7 +100,7 @@ jobs:
             '8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8' \
             "$sample_lint_dir/actionlint.tar.gz" | sha256sum --check --strict
           tar --no-same-owner -xzf "$sample_lint_dir/actionlint.tar.gz" -C "$sample_lint_dir" actionlint
-          "$sample_lint_dir/actionlint" -shellcheck='' -pyflakes='' .github/workflows/private-samples.yml .github/workflows/continuous-materials.yml .github/workflows/bounded-pull-test.yml .github/workflows/real-action-capture.yml
+          "$sample_lint_dir/actionlint" -shellcheck='' -pyflakes='' .github/workflows/private-samples.yml .github/workflows/continuous-materials.yml .github/workflows/bounded-pull-test.yml .github/workflows/real-action-capture.yml .github/workflows/real-action-recovery.yml
 
       - name: Fetch immutable public upstream evidence
         run: git fetch --no-tags --depth=1 https://github.com/ml4t/backtest.git c1ee19c385db3cbad225822cf845832470694f2b
@@ -143,6 +145,8 @@ jobs:
 
       - name: Type-check the private real-action input operator
         run: uv run ty check tools/real_action_capture.py
+      - name: Check append-only recovery helper types
+        run: uv run ty check tools/real_action_recovery.py
 
       - name: Build the wheel for consumer type checking
         run: uv build --wheel
