@@ -11,6 +11,12 @@ python -I tools/ibkr_activity_audit.py /private/statement.xlsx \
   --private-report /private/new-audit.json
 ```
 
+Private report output is supported on POSIX hosts (including the existing Ubuntu runners), where it
+is created with mode `0600`. Windows does not enforce POSIX mode bits: the CLI rejects output there
+with `PRIVATE_REPORT_PERMISSION_PLATFORM_UNSUPPORTED` before reading source data or creating a file.
+Cross-platform arithmetic fixtures still run; no permission assertion is silently skipped to admit
+a Windows private export. A verified Windows ACL implementation would be needed to add that support.
+
 The report is created exclusively so an earlier report cannot be overwritten. It contains private
 account amounts, source rows and the workbook fingerprint: keep it and the original source out of
 public repositories, CI, issue comments and artifacts. Standard output contains only allowlisted

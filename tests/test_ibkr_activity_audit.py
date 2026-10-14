@@ -360,6 +360,13 @@ class ActivityAuditTests(unittest.TestCase):
             source.write_bytes(body)
             argv = ["audit", str(source), "--private-report", str(target)]
             output = io.StringIO()
+            if not a.private_report_supported():
+                with patch("sys.argv", argv), redirect_stdout(output):
+                    self.assertEqual(a.main(), 1)
+                self.assertFalse(target.exists())
+                self.assertEqual(source.read_bytes(), body)
+                self.assertIn("PRIVATE_REPORT_PERMISSION_PLATFORM_UNSUPPORTED", output.getvalue())
+                return
             with patch("sys.argv", argv), redirect_stdout(output):
                 self.assertEqual(a.main(), 0)
             original_report = target.read_bytes()
@@ -376,6 +383,20 @@ class ActivityAuditTests(unittest.TestCase):
                 self.assertEqual(a.main(), 1)
             self.assertEqual(source.read_bytes(), body)
 
+    def test_unsupported_private_permission_platform_blocks_before_source_read_or_output(self):
+        with tempfile.TemporaryDirectory() as folder:
+            source, target = Path(folder) / "missing.xlsx", Path(folder) / "new.json"
+            argv = ["audit", str(source), "--private-report", str(target)]
+            output = io.StringIO()
+            with (
+                patch("sys.argv", argv),
+                patch.object(a, "private_report_supported", return_value=False),
+                redirect_stdout(output),
+            ):
+                self.assertEqual(a.main(), 1)
+            self.assertIn("PRIVATE_REPORT_PERMISSION_PLATFORM_UNSUPPORTED", output.getvalue())
+            self.assertFalse(target.exists())
+
     def test_unexpected_exception_text_never_reaches_public_stdout(self):
         with tempfile.TemporaryDirectory() as folder:
             source = Path(folder) / "source.xlsx"
@@ -384,6 +405,7 @@ class ActivityAuditTests(unittest.TestCase):
             output = io.StringIO()
             with (
                 patch("sys.argv", argv),
+                patch.object(a, "private_report_supported", return_value=True),
                 patch.object(a, "analyze", side_effect=RuntimeError("PRIVATE_ACCOUNT_VALUE")),
                 redirect_stdout(output),
             ):

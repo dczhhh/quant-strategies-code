@@ -519,12 +519,18 @@ def public_summary(report):
     }
 
 
+def private_report_supported():
+    return os.name == "posix"
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("input", type=Path)
     parser.add_argument("--private-report", type=Path, required=True)
     args = parser.parse_args()
     try:
+        # Windows ignores POSIX mode bits. Do not write account data with an unverified ACL.
+        p.need(private_report_supported(), "PRIVATE_REPORT_PERMISSION_PLATFORM_UNSUPPORTED")
         p.need(args.input.resolve() != args.private_report.resolve(), "SOURCE_OVERWRITE_FORBIDDEN")
         p.need(args.input.stat().st_size <= p.DOC_LIMIT, "DOCUMENT_TOO_LARGE")
         report = analyze(args.input.read_bytes())
