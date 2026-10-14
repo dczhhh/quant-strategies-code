@@ -606,7 +606,10 @@ class CorporateActionProcessor:
         }
         if self.broker.controller.config.dividend_tax_profile != "legacy":
             self.state["entitlements"][event.key].update(
-                withholding=withholding, fees=fees, tax_evidence=tax_evidence
+                withholding=withholding,
+                fees=fees,
+                tax_evidence=tax_evidence,
+                event_version=event.version,
             )
         record.update(
             status="dividend_receivable",
@@ -645,14 +648,30 @@ class CorporateActionProcessor:
             raise ValueError(f"No qualifying shares for dividend credit: {parent}")
         estimate = item["net"]
         actual_tax = self.broker.controller.config.dividend_tax_profile != "legacy"
+        correction = None
         if actual_tax:
-            self.validate_credit_reconciliation(event, item)
+            observed_at = (
+                datetime.fromisoformat(record["processed_at"])
+                if "processed_at" in record
+                else event.available_at
+            )
+            correction = self.validate_credit_reconciliation(event, item, observed_at)
+        elif event.credit_correction_of_version is not None:
+            raise ValueError("Explicit credit corrections require a formal tax profile")
         actual = estimate if event.credited_net is None else event.credited_net
-        if actual > item["gross"] + 1e-8:
+        confirmed_gross = item["gross"]
+        if correction is not None:
+            assert event.credited_gross is not None
+            confirmed_gross = event.credited_gross
+        if actual > confirmed_gross + 1e-8:
             raise ValueError(f"Confirmed credit exceeds eligible gross entitlement: {parent}")
+        receivable_key = entitlement_key(*parent)
+        receivable = self.broker.account._receivables.get(receivable_key)
+        if receivable is None or not math.isclose(receivable, estimate, rel_tol=0, abs_tol=1e-8):
+            raise ValueError(f"Dividend receivable checkpoint does not reconcile: {parent}")
         self.broker.account.cash += actual
         self.broker.account._lock_notional_free_cash += actual
-        self.broker.account._receivables.pop(entitlement_key(*parent))
+        self.broker.account._receivables.pop(receivable_key)
         item["credited"] = True
         if "tax_evidence" in item:
             item["credited_net"] = actual
@@ -667,7 +686,11 @@ class CorporateActionProcessor:
             withholding_applied_again=False,
         )
         if actual_tax:
-            assert event.credited_withheld is not None and event.credited_fee is not None
+            assert (
+                event.credited_gross is not None
+                and event.credited_withheld is not None
+                and event.credited_fee is not None
+            )
             record.update(
                 confirmed_gross=event.credited_gross,
                 confirmed_withheld=event.credited_withheld,
@@ -678,9 +701,17 @@ class CorporateActionProcessor:
                 reconciliation_source=event.source,
                 reconciliation_available_at=event.available_at.isoformat(),
             )
+            if correction is not None:
+                item["credit_correction"] = copy.deepcopy(correction)
+                record.update(
+                    credit_correction=correction,
+                    reconciled_gross_difference=event.credited_gross - item["gross"],
+                )
 
     @staticmethod
-    def validate_credit_reconciliation(event: CorporateAction, item: dict) -> None:
+    def validate_credit_reconciliation(
+        event: CorporateAction, item: dict, observed_at: datetime
+    ) -> dict | None:
         """Actual account amounts are mandatory; payable dates/estimates are not credits."""
         amounts = (
             event.credited_gross,
@@ -692,12 +723,50 @@ class CorporateActionProcessor:
             raise ValueError("UNVERIFIED: actual gross/withheld/fee/net credit evidence required")
         gross, withheld, fee, net = amounts
         assert gross is not None and withheld is not None and fee is not None and net is not None
-        if (
-            abs(gross - item["gross"]) > 0.01000001
-            or abs(gross - withheld - fee - net) > 0.00500001
-            or withheld + fee > gross + 1e-8
-        ):
+        aware(observed_at)
+        if event.available_at > observed_at:
+            raise ValueError("Actual dividend credit is not visible at observation time")
+        if abs(gross - withheld - fee - net) > 0.00500001 or withheld + fee > gross + 1e-8:
             raise ValueError("Actual dividend credit components do not reconcile")
+        correction = None
+        if event.credit_correction_of_version is not None:
+            if (
+                event.credit_correction_quantity is None
+                or event.credit_correction_prior_gross is None
+                or event.credit_correction_known_at is None
+                or not event.credit_correction_source
+            ):
+                raise ValueError("Incomplete dividend credit correction evidence")
+            if (
+                item.get("event_version") != event.credit_correction_of_version
+                or "quantity" not in item
+                or not math.isclose(
+                    item["quantity"], event.credit_correction_quantity, rel_tol=0, abs_tol=1e-12
+                )
+                or not math.isclose(
+                    item["gross"],
+                    event.credit_correction_prior_gross,
+                    rel_tol=0,
+                    abs_tol=0.00500001,
+                )
+                or event.credit_correction_known_at > observed_at
+            ):
+                raise ValueError(
+                    "Credit correction does not bind the original dividend entitlement"
+                )
+            correction = {
+                "parent_event_id": event.parent_event_id,
+                "prior_version": event.credit_correction_of_version,
+                "prior_gross": item["gross"],
+                "locked_quantity": item["quantity"],
+                "source": event.credit_correction_source,
+                "known_at": event.credit_correction_known_at.isoformat(),
+                "observed_at": observed_at.isoformat(),
+                "cash_credit_available_at": event.available_at.isoformat(),
+            }
+        elif abs(gross - item["gross"]) > 0.01000001:
+            raise ValueError("Actual dividend credit components do not reconcile")
+        return correction
 
     def evidence(self):
         records = copy.deepcopy(self.state["records"])

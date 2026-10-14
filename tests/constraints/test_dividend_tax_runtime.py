@@ -190,6 +190,143 @@ def test_actual_credit_components_reconcile_estimate_without_double_tax():
     assert proof["records"][-1]["reconciled_net_difference"] == -0.5
 
 
+def correction_credit(**changes):
+    """Wholly invented account correction; never publish user statement amounts."""
+    terms = {
+        "credited_gross": 19.5,
+        "credited_withheld": 1.95,
+        "credited_fee": 0.05,
+        "credited_net": 17.5,
+        "credit_correction_of_version": 1,
+        "credit_correction_prior_gross": 20.0,
+        "credit_correction_quantity": 20.0,
+        "credit_correction_source": "invented:account-gross-correction",
+        "credit_correction_known_at": at("2026-10-13"),
+    }
+    terms.update(changes)
+    return credit(**terms)
+
+
+@pytest.mark.parametrize("gross,tax,fee,net", [(19.5, 1.95, 0.05, 17.5), (25.0, 2.5, 0.0, 22.5)])
+def test_sourced_gross_correction_reconciles_locked_entitlement_once(gross, tax, fee, net):
+    corrected = correction_credit(
+        credited_gross=gross, credited_withheld=tax, credited_fee=fee, credited_net=net
+    )
+    broker, _, _, _, _ = build(dividend(), corrected, settings=scenario())
+    held(broker)
+    tick(broker)
+    tick(broker, at("2026-10-12"), price=99)
+    equity = broker.get_account_value()
+    tick(broker, at("2026-10-13"), price=99)
+    tick(broker, at("2026-10-13"), price=99)
+    proof = broker.corporate_action_evidence()
+    assert broker.cash == 8000 + net and broker.account._receivable_value == 0
+    assert broker.get_account_value() == pytest.approx(equity + net - 18)
+    assert proof["income"] == pytest.approx(net)
+    assert proof["withholding"] == pytest.approx(tax)
+    item = broker.corporate_action_processor.state["entitlements"][("stable-A", "event")]
+    assert item["gross"] == 20 and item["net"] == 18 and item["quantity"] == 20
+    record = proof["records"][-1]
+    assert record["credit_correction"]["prior_version"] == 1
+    assert record["reconciled_gross_difference"] == gross - 20
+    assert record["withholding_applied_again"] is False
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"credit_correction_of_version": 2},
+        {"credit_correction_prior_gross": 21.0},
+        {"credit_correction_quantity": 21.0},
+    ],
+)
+def test_correction_bound_to_wrong_original_terms_fails_atomically(changes):
+    broker, _, _, _, _ = build(dividend(), correction_credit(**changes), settings=scenario())
+    held(broker)
+    tick(broker)
+    tick(broker, at("2026-10-12"), price=99)
+    before = copy.deepcopy((broker.cash, broker.account._receivables, broker.positions))
+    with pytest.raises(ValueError, match="bind the original"):
+        tick(broker, at("2026-10-13"), price=99)
+    assert (broker.cash, broker.account._receivables, broker.positions) == before
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"credit_correction_of_version": None},
+        {"credit_correction_of_version": True},
+        {"credit_correction_of_version": 0},
+        {"credit_correction_prior_gross": None},
+        {"credit_correction_quantity": None},
+        {"credit_correction_quantity": 0},
+        {"credit_correction_quantity": float("nan")},
+        {"credit_correction_source": None},
+        {"credit_correction_source": ""},
+        {"credit_correction_known_at": None},
+        {"credit_correction_known_at": at("2026-10-14")},
+        {"credited_gross": None},
+    ],
+)
+def test_incomplete_or_future_correction_evidence_is_not_an_admission_flag(changes):
+    with pytest.raises(ValueError):
+        correction_credit(**changes)
+
+
+def test_correction_components_must_still_reconcile():
+    broker, _, _, _, _ = build(
+        dividend(), correction_credit(credited_net=18.0), settings=scenario()
+    )
+    held(broker)
+    tick(broker)
+    tick(broker, at("2026-10-12"), price=99)
+    with pytest.raises(ValueError, match="components do not reconcile"):
+        tick(broker, at("2026-10-13"), price=99)
+    assert broker.cash == 8000 and broker.account._receivable_value == 18
+
+
+def test_direct_credit_rejects_future_visibility_and_missing_receivable_before_cash_mutation():
+    broker, _, _, _, _ = build(dividend(), settings=scenario())
+    held(broker)
+    tick(broker)
+    tick(broker, at("2026-10-12"), price=99)
+    processor = broker.corporate_action_processor
+    with pytest.raises(ValueError, match="not visible"):
+        processor.credit(correction_credit(), {"processed_at": at("2026-10-12").isoformat()})
+    assert broker.cash == 8000 and broker.account._receivable_value == 18
+    broker.account._receivables.clear()
+    with pytest.raises(ValueError, match="checkpoint does not reconcile"):
+        processor.credit(correction_credit(), {"processed_at": at("2026-10-13").isoformat()})
+    assert broker.cash == 8000
+
+
+def test_revised_paid_correction_rejected_without_crediting_again():
+    initial = correction_credit()
+    revised = replace(
+        initial, version=2, available_at=at("2026-10-14"), credited_net=17.6, credited_gross=19.6
+    )
+    broker, _, _, _, _ = build(dividend(), initial, revised, settings=scenario())
+    held(broker)
+    tick(broker)
+    tick(broker, at("2026-10-12"), price=99)
+    tick(broker, at("2026-10-13"), price=99)
+    with pytest.raises(ValueError, match="Applied corporate action revised"):
+        tick(broker, at("2026-10-14"), price=99)
+    assert broker.cash == 8017.5 and broker.account._receivable_value == 0
+
+
+def test_reorganization_cannot_be_replayed_as_an_ordinary_split():
+    # Source-derived event classification is exercised with invented quantity,
+    # dates and prices. This is not a WOLF price/history/account replay.
+    broker, _, _, _, _ = build(action(kind="REORGANIZATION", terms="special"))
+    held(broker, quantity=80)
+    tick(broker)
+    before = copy.deepcopy((broker.cash, broker.positions, broker.orders))
+    with pytest.raises(ValueError, match="Unsupported exposed corporate action"):
+        tick(broker, at("2026-10-12"))
+    assert (broker.cash, broker.positions, broker.orders) == before
+
+
 @pytest.mark.parametrize(
     "field", ["credited_gross", "credited_withheld", "credited_fee", "credited_net"]
 )

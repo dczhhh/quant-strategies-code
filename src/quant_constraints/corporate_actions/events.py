@@ -41,10 +41,19 @@ class CorporateAction:
     credited_gross: float | None = None
     credited_withheld: float | None = None
     credited_fee: float | None = None
+    credit_correction_of_version: int | None = None
+    credit_correction_prior_gross: float | None = None
+    credit_correction_quantity: float | None = None
+    credit_correction_source: str | None = None
+    credit_correction_known_at: datetime | None = None
 
     def __post_init__(self):
         aware(self.available_at)
-        for stamp in (self.tax_source_known_at, self.withholding_known_at):
+        for stamp in (
+            self.tax_source_known_at,
+            self.withholding_known_at,
+            self.credit_correction_known_at,
+        ):
             if stamp is not None:
                 aware(stamp)
         if self.tax_source_country is not None and (
@@ -70,6 +79,8 @@ class CorporateAction:
             "credited_gross",
             "credited_withheld",
             "credited_fee",
+            "credit_correction_prior_gross",
+            "credit_correction_quantity",
         ):
             value = getattr(self, name)
             if value is not None and (
@@ -85,6 +96,35 @@ class CorporateAction:
             raise ValueError("A dividend requires a per-share amount")
         if self.kind == "CASH_CREDIT" and not self.parent_event_id:
             raise ValueError("A credit requires its parent entitlement ID")
+        correction = (
+            self.credit_correction_of_version,
+            self.credit_correction_prior_gross,
+            self.credit_correction_quantity,
+            self.credit_correction_source,
+            self.credit_correction_known_at,
+        )
+        if any(value is not None for value in correction) and (
+            self.kind != "CASH_CREDIT"
+            or self.credit_correction_prior_gross is None
+            or self.credit_correction_quantity is None
+            or self.credit_correction_known_at is None
+            or type(self.credit_correction_of_version) is not int
+            or self.credit_correction_of_version < 1
+            or self.credit_correction_quantity <= 0
+            or not isinstance(self.credit_correction_source, str)
+            or not self.credit_correction_source.strip()
+            or self.credit_correction_known_at > self.available_at
+            or any(
+                value is None
+                for value in (
+                    self.credited_gross,
+                    self.credited_withheld,
+                    self.credited_fee,
+                    self.credited_net,
+                )
+            )
+        ):
+            raise ValueError("Credit correction requires complete, visible source and prior terms")
         if (
             self.kind == "CASH_CREDIT"
             and self.available_at.astimezone(NY).date() < self.effective_date
@@ -132,6 +172,11 @@ class CorporateAction:
             self.credited_gross,
             self.credited_withheld,
             self.credited_fee,
+            self.credit_correction_of_version,
+            self.credit_correction_prior_gross,
+            self.credit_correction_quantity,
+            self.credit_correction_source,
+            self.credit_correction_known_at,
         )
 
 
