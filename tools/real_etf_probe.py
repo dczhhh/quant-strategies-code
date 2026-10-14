@@ -240,9 +240,9 @@ def workbook(body):
 def issuer_day(value):
     need(type(value) is str, "ISSUER_DATE_INVALID")
     try:
-        if re.fullmatch(r"[0-9]{2}/[0-9]{2}/20[0-9]{2}", value):
+        if re.fullmatch(r"[0-9]{2}/[0-9]{2}/(?:19|20)[0-9]{2}", value):
             result = datetime.strptime(value, "%m/%d/%Y").date()
-        elif re.fullmatch(r"20[0-9]{2}-[0-9]{2}-[0-9]{2}", value):
+        elif re.fullmatch(r"(?:19|20)[0-9]{2}-[0-9]{2}-[0-9]{2}", value):
             result = date.fromisoformat(value)
         else:
             raise ValueError("invalid issuer date")

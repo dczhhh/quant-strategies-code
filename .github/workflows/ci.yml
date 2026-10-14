@@ -96,6 +96,10 @@ jobs:
           uv run ruff format --check tools/real_etf_probe.py tests/test_real_etf_probe.py
           uv run ty check tools/real_etf_probe.py
           uv run python -m unittest tests.test_real_etf_probe -v
+          uv run ruff check --no-fix tools/ibkr_activity_audit.py tests/test_ibkr_activity_audit.py
+          uv run ruff format --check tools/ibkr_activity_audit.py tests/test_ibkr_activity_audit.py
+          uv run ty check tools/ibkr_activity_audit.py
+          uv run python -m unittest tests.test_ibkr_activity_audit -v
 
       - name: Validate private sample workflow expressions without executing capture
         run: |

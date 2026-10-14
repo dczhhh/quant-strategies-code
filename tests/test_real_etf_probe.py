@@ -52,6 +52,8 @@ def prices():
 
 class ETFProbeTests(unittest.TestCase):
     def test_issuer_dates_handle_text_and_numeric_date_output_without_year_swap(self):
+        self.assertEqual(p.issuer_day("12/17/1999"), date(1999, 12, 17))
+        self.assertEqual(p.issuer_day("1993-03-19"), date(1993, 3, 19))
         self.assertEqual(p.issuer_day("09/20/2024"), date(2024, 9, 20))
         self.assertEqual(p.issuer_day("2024-09-20"), date(2024, 9, 20))
         for value in ("20/09/2024", "02/30/2024", "9/20/24", {"formula": True}, None):
@@ -87,6 +89,32 @@ class ETFProbeTests(unittest.TestCase):
         self.assertFalse(value["historical_PIT_verified"])
         self.assertIn("not independently", value["share_basis_attestation"])
         self.assertEqual(row["H"], "")
+
+    def test_pre_2000_history_does_not_poison_a_unique_2024_event(self):
+        event = {
+            "ex": date(2024, 9, 20),
+            "record": date(2024, 9, 20),
+            "pay": date(2024, 9, 30),
+            "amount": Decimal(1),
+        }
+        row = {
+            "A": "Invented Fund",
+            "B": "SPY",
+            "C": "000000001",
+            "D": "09/20/2024",
+            "E": "09/20/2024",
+            "F": "09/30/2024",
+            "G": "1",
+            "H": "",
+            "I": "0",
+            "J": "Quarterly",
+        }
+        historical = {**row, "D": "12/17/1999", "E": "12/17/1999", "F": "01/03/2000"}
+        value = p.history_match({"dividend": [p.HISTORY_HEADERS, historical, row]}, "SPY", [event])
+        self.assertEqual(value["status"], "ISSUER_HISTORY_FIELD_MATCH")
+        self.assertEqual(len(value["rows"]), 1)
+        self.assertEqual(value["rows"][0]["parsed_row_index"], 2)
+        self.assertFalse(value["ordinary_cash_admission"])
 
     def test_history_ambiguity_conflicts_formulas_and_canonical_header_fail_closed(self):
         event = {
