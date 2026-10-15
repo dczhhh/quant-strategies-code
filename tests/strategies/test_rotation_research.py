@@ -2,6 +2,9 @@
 
 import copy
 import json
+import os
+import subprocess
+import sys
 from dataclasses import asdict, replace
 from datetime import date, datetime, time, timedelta
 from decimal import Decimal
@@ -420,3 +423,19 @@ def test_an_empty_no_cash_replay_cannot_be_counted_as_success():
     with pytest.raises(ResearchLedgerMismatch, match="No executions"):
         engine.run()
     assert engine.research_report["status"] == "RETROSPECTIVE_NO_EXECUTIONS"
+
+
+def test_cross_month_replay_matches_in_fresh_processes_with_different_hash_seeds():
+    code = (
+        "import hashlib,json,runpy; "
+        "t=runpy.run_path('tests/strategies/test_rotation_research.py'); e=t['run'](); "
+        "print(hashlib.sha256(json.dumps({'report':e.research_report,"
+        "'trace':e.research_trace},sort_keys=True,default=str).encode()).hexdigest())"
+    )
+    proofs = [
+        subprocess.check_output(
+            [sys.executable, "-c", code], env={**os.environ, "PYTHONHASHSEED": seed}, text=True
+        ).strip()
+        for seed in ("1", "937")
+    ]
+    assert len(proofs[0]) == 64 and proofs[0] == proofs[1]

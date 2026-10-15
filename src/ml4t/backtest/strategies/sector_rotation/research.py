@@ -278,8 +278,8 @@ class RetrospectiveRotationEngine(Engine):
             ledger = verify_research_ledger(
                 self.research_inputs,
                 self.research_assumptions,
-                self.broker.fills,
-                self.broker.orders,
+                tuple(self.broker.fills),
+                tuple(self.broker.orders),
                 self.broker.fee_records,
                 self.research_trace,
             )
