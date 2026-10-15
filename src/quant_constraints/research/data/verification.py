@@ -66,10 +66,12 @@ from .verification_contracts import (
 )
 from .verification_wire import RECORD_TYPES, _encode, decode_records, safe_field
 
-VERIFICATION_VERSION = "research_verification_orchestration_synthetic_v5_security_entry_scope"
+VERIFICATION_VERSION = "research_verification_orchestration_synthetic_v6_research_isolation"
 LEGACY_IMPLEMENTATION_BASE = "fb870fd70a5d3438c20adcdb3c606c04533719a0"
 TAX_RUNTIME_SOURCE_REVISION = "9938de9c441e289b9eb5b5e5bf3814e2ff726ebb"
-REVIEWED_IMPLEMENTATION_BASE = "f38b3e8b75e1e555d3d66d8dad0b609371515e22"
+SECURITY_ENTRY_SOURCE_REVISION = "f38b3e8b75e1e555d3d66d8dad0b609371515e22"
+RESEARCH_RUNTIME_SOURCE_REVISION = "0b2b716ed44e00f8a1027b6ef2ee3ca9257e60c6"
+REVIEWED_IMPLEMENTATION_BASE = RESEARCH_RUNTIME_SOURCE_REVISION
 # Source bytes of the accepted 5A/B/C/D implementations and their direct contracts.
 # Wheel source files must match too; a declared git SHA alone is not evidence.
 BASE_SOURCE_SHA256 = {
@@ -112,6 +114,19 @@ ENTRY_RUNTIME_SOURCE_SHA256 = {
     "quant_constraints.security_policy": "945e821e9cb1908648cc0b3190375b0e2dbeb3562059252d52cc567f62f50d33",
     "ml4t.backtest.strategies.sector_rotation.config": "b21a2973b2ac71b41cc217b179c15ac9144a058ca0567d2f3162a7e729f3eda7",
     "ml4t.backtest.strategies.sector_rotation.adapter": "86bd3c30a98a25b5b44e97d8f14e76b113ebb3fe709b8b836987c7394b41b50c",
+}
+# Separate additive source overlay. The default real rejection and all older
+# evidence pins remain intact; v5 snapshots cannot silently approve this runtime.
+RESEARCH_RUNTIME_SOURCE_SHA256 = {
+    "ml4t.backtest.accounting.cash": "bfd5c0fe0d3b79ee782e2d1744fd8ac641056f3446e326a011eb36fd59ff588c",
+    "quant_constraints.adapter": "f058753278e3ac807be125da6e08b7f34e8e415b13f842510aed49320b3f3f16",
+    "quant_constraints.config": "4932b6442da22e2a2b029b280e3fd291a5328b2c2fd6b2529f323bfbd0bb61db",
+    "quant_constraints.dividend_tax": "f8cc7a1e41226ec8486a534ed26e1dd9511307eeff7a73dd638aa96665ff1171",
+    "quant_constraints.corporate_actions.processor": "12adc3d0b23060ac63ef4f12930294d7bba56946721edaf5f30abf2ab50a59d7",
+    "ml4t.backtest.strategies.sector_rotation.adapter": "0ce40f90325053003945cb438d0d1ff8e11b0f935da09ff7ee0f2c5fead84ee3",
+    "ml4t.backtest.strategies.sector_rotation.research": "1e5a571c48db7f60a7d49533d9fd48311644a28d0bdddcd2214b90b8f91942ed",
+    "ml4t.backtest.strategies.sector_rotation.research_inputs": "8a8e173f289eb32fca4010cf2516b0d7e2bf9445159b71216c49578f5557c0c3",
+    "ml4t.backtest.strategies.sector_rotation.research_ledger": "60501663ab43c562e3617d9ac2c080b93e9a14d474db94dee1c00a6801b8c308",
 }
 ROLE_DEPENDENCIES = {
     EvidenceRole.RAW: {EvidenceRole.IDENTITIES},
@@ -157,18 +172,22 @@ def _versions(snapshot: FrozenDatasetInput) -> dict:
         **BASE_SOURCE_SHA256,
         **TAX_RUNTIME_SOURCE_SHA256,
         **ENTRY_RUNTIME_SOURCE_SHA256,
+        **RESEARCH_RUNTIME_SOURCE_SHA256,
     }
     actual_sources = {name: _source_digest(name) for name in expected_sources}
     if actual_sources != expected_sources:
         _deny("IMPLEMENTATION_MISMATCH", "code_revision", "versions")
     return {
         "checked_versions": versions,
-        "code_revision_scope": "reviewed_5A_B_C_D_5E1_plus_pinned_tax_and_security_entry_runtime",
+        "code_revision_scope": "reviewed_5A_B_C_D_5E1_plus_tax_security_and_isolated_research_runtime",
         "legacy_source_revision": LEGACY_IMPLEMENTATION_BASE,
         "legacy_source_sha256": BASE_SOURCE_SHA256,
         "tax_runtime_source_sha256": TAX_RUNTIME_SOURCE_SHA256,
         "tax_runtime_source_revision": TAX_RUNTIME_SOURCE_REVISION,
         "entry_runtime_source_sha256": ENTRY_RUNTIME_SOURCE_SHA256,
+        "entry_runtime_source_revision": SECURITY_ENTRY_SOURCE_REVISION,
+        "research_runtime_source_sha256": RESEARCH_RUNTIME_SOURCE_SHA256,
+        "research_runtime_source_revision": RESEARCH_RUNTIME_SOURCE_REVISION,
         "reviewed_source_sha256": actual_sources,
         "orchestration_version": VERIFICATION_VERSION,
         "orchestration_source_sha256": {

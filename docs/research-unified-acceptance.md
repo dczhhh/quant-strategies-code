@@ -80,7 +80,14 @@ certification is BLOCKED**, with the above gaps retained. No scope exclusion,
 green CI, metadata string or unlimited API budget grants real-entry admission.
 
 Legacy 5A–5E and tax source pins stay intact. A separately pinned entry overlay
-uses source commit `f38b3e8b75e1e555d3d66d8dad0b609371515e22` with verifier v5.
-Earlier v4 snapshot identities fail closed rather than silently approving new
-source. Existing raw archives, receipts and unknown request reservations remain
-unchanged; no licensed market pull is performed by this modification.
+used source commit `f38b3e8b75e1e555d3d66d8dad0b609371515e22` with verifier v5.
+The additive research-isolation overlay uses frozen source
+`0b2b716ed44e00f8a1027b6ef2ee3ca9257e60c6` with verifier v6. The legacy,
+tax and security overlay maps remain intact. Earlier v5/v4 identities fail closed
+instead of silently approving new source. Existing raw archives, receipts and
+unknown request reservations remain unchanged. The separate
+[retrospective research entry](rotation-retrospective-research.md) can invoke the
+canonical Engine only under its explicitly modeled assumptions and independent
+ledger checks; it grants no strict real/PIT certificate and does not close the
+original account NAV discrepancy. No licensed market pull is performed by these
+code changes.

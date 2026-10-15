@@ -507,6 +507,46 @@ def test_tax_runtime_overlay_preserves_legacy_pins_and_rejects_old_code_identity
     rejected(run(old), "VERSION_MISMATCH", "versions")
 
 
+def test_research_overlay_preserves_previous_scope_pins_and_refuses_v5_snapshot():
+    from quant_constraints.research.data.verification import (
+        RESEARCH_RUNTIME_SOURCE_REVISION,
+        RESEARCH_RUNTIME_SOURCE_SHA256,
+        SECURITY_ENTRY_SOURCE_REVISION,
+        _versions,
+    )
+
+    req, records = fixture()
+    proof = _versions(freeze(req, records))
+    assert proof["research_runtime_source_revision"] == RESEARCH_RUNTIME_SOURCE_REVISION
+    assert proof["research_runtime_source_sha256"] == RESEARCH_RUNTIME_SOURCE_SHA256
+    assert proof["entry_runtime_source_revision"] == SECURITY_ENTRY_SOURCE_REVISION
+    old = freeze(req, records, pipeline=versions(code_revision=SECURITY_ENTRY_SOURCE_REVISION))
+    rejected(run(old), "VERSION_MISMATCH", "versions")
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "ml4t.backtest.accounting.cash",
+        "quant_constraints.adapter",
+        "ml4t.backtest.strategies.sector_rotation.research",
+        "ml4t.backtest.strategies.sector_rotation.research_inputs",
+        "ml4t.backtest.strategies.sector_rotation.research_ledger",
+    ],
+)
+def test_research_modules_are_bound_before_any_legacy_domain_replay(name, monkeypatch):
+    from quant_constraints.research.data import verification
+
+    original = verification._source_digest
+    monkeypatch.setattr(
+        verification,
+        "_source_digest",
+        lambda module: "0" * 64 if module == name else original(module),
+    )
+    req, records = fixture()
+    rejected(run(freeze(req, records)), "IMPLEMENTATION_MISMATCH", "versions")
+
+
 @pytest.mark.parametrize(
     "name",
     tuple(TAX_RUNTIME_SOURCE_SHA256)

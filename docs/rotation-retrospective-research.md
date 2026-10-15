@@ -57,6 +57,10 @@ monthly plan and owner security restrictions are unchanged. The dataset requires
 window minute, the first completed RTH minute and each session's closing mark; gaps are rejected.
 Volume participation is capped by the explicit scenario and checked independently.
 
+Whole-share cash reservations reject a quantity that rounds to zero before asking
+the fee model for a quote. The constrained rejection audit likewise does not price
+a nonexistent fill. Neither path posts cash, positions or fees for that rejection.
+
 Fees use the existing tiered broker model with its disclosed October 10, 2026 normal-charge snapshot
 backcast, unknown venue, zero unreported external monthly volume and no rebate. They are simulated
 costs, not claimed 2025 bills. The separate Decimal fee reference integrates monthly tier bands and
