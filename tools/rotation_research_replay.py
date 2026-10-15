@@ -165,13 +165,22 @@ def classify(ticker, event, docs):
     history = c.p.history_match(c.p.workbook(docs[c.p.DOCUMENTS[0]["id"]]["body"]), ticker, [event])
     tax = c.a.tax_fields(c.p.workbook(docs[c.p.DOCUMENTS[1]["id"]]["body"]), ticker, event, history)
     fields = {k: Decimal(v) for k, v in tax["explicit_numeric_fields"].items()}
+    allowed_flags = {"D": (None, ""), "E": (None, "", "R"), "F": (None, "", "C")}
     c.p.need(
-        all(
-            tax["source_status_flags_preserved"][k] in (None, "", "R", "C") for k in ("D", "E", "F")
-        )
-        and all(fields[k] == event["amount"] for k in ("J", "M", "N", "Q"))
-        and all(fields[k] == 0 for k in ("O", "P", "V", "Z", "AB", "AC", "AD")),
-        "ORDINARY_FUND_COMPOSITION_UNVERIFIED",
+        all(tax["source_status_flags_preserved"][k] in allowed_flags[k] for k in allowed_flags),
+        "ISSUER_REPORT_STATUS_UNSUPPORTED",
+    )
+    # Match the retained issuer protocol's existing Decimal threshold. XLSX
+    # numeric literals can differ below that threshold; never round or replace
+    # the original event amount used for the modeled cash accrual.
+    tolerance = Decimal(c.a.POLICY["issuer_amount_tolerance_usd"])
+    c.p.need(
+        all(abs(fields[k] - event["amount"]) <= tolerance for k in ("J", "M", "N", "Q")),
+        "ORDINARY_INCOME_AMOUNT_CONFLICT",
+    )
+    c.p.need(
+        all(fields[k] == 0 for k in ("O", "P", "V", "Z", "AB", "AC", "AD")),
+        "NONORDINARY_DISTRIBUTION_UNSUPPORTED",
     )
     return history["rows"][0]["issuer_cells"]["C"]
 

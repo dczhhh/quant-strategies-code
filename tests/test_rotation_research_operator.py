@@ -282,6 +282,51 @@ def test_complete_source_bundle_runs_canonical_engine_and_checks_dividend_cash(n
     assert result["summary"]["performance_admission"] is False
 
 
+def test_issuer_xlsx_decimal_precision_uses_existing_amount_tolerance(normalized_sources):
+    docs, _, _ = normalized_sources
+    name = c.p.DOCUMENTS[1]["id"]
+    rows = c.p.workbook(docs[name]["body"])["2025 ICI Primary"]
+    for row in rows[13:]:
+        row.update(dict.fromkeys(("J", "M", "N", "Q", "R", "U"), "0.9999999999999999"))
+    docs[name]["body"] = workbook("2025 ICI Primary", rows)
+    inputs, _ = u.build_inputs(lambda: None, SOURCE, docs)
+    assert all(event.cash_amount == Decimal(1) for event in inputs.distributions)
+    report = u.replay(replace(inputs, origin="invented_fixture"))
+    assert report["summary"]["status"] == "RETROSPECTIVE_ENGINE_LEDGER_PASS"
+
+
+@pytest.mark.parametrize("value", ["1.00000002", "0.99999998"])
+def test_issuer_amount_difference_above_existing_tolerance_rejects(normalized_sources, value):
+    docs, _, _ = normalized_sources
+    name = c.p.DOCUMENTS[1]["id"]
+    rows = c.p.workbook(docs[name]["body"])["2025 ICI Primary"]
+    rows[13].update(dict.fromkeys(("J", "M", "N", "Q", "R", "U"), value))
+    docs[name]["body"] = workbook("2025 ICI Primary", rows)
+    with pytest.raises(ValueError, match="TAX_COMPONENT_CONFLICT"):
+        u.build_inputs(lambda: None, SOURCE, docs)
+
+
+def test_small_nonzero_special_distribution_is_never_rounded_to_zero(normalized_sources):
+    docs, _, _ = normalized_sources
+    name = c.p.DOCUMENTS[1]["id"]
+    rows = c.p.workbook(docs[name]["body"])["2025 ICI Primary"]
+    rows[13]["V"] = "0.000000000001"
+    docs[name]["body"] = workbook("2025 ICI Primary", rows)
+    with pytest.raises(ValueError, match="NONORDINARY_DISTRIBUTION_UNSUPPORTED"):
+        u.build_inputs(lambda: None, SOURCE, docs)
+
+
+@pytest.mark.parametrize("column,value", [("D", "R"), ("E", "C"), ("F", "R"), ("F", "X")])
+def test_report_flags_must_match_their_specific_ici_columns(normalized_sources, column, value):
+    docs, _, _ = normalized_sources
+    name = c.p.DOCUMENTS[1]["id"]
+    rows = c.p.workbook(docs[name]["body"])["2025 ICI Primary"]
+    rows[13][column] = value
+    docs[name]["body"] = workbook("2025 ICI Primary", rows)
+    with pytest.raises(ValueError, match="ISSUER_REPORT_STATUS_UNSUPPORTED"):
+        u.build_inputs(lambda: None, SOURCE, docs)
+
+
 @pytest.mark.parametrize(
     "gap", ["minute", "daily", "daily-close-conflict", "special-tax", "estimated-tax"]
 )

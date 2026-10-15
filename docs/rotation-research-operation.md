@@ -74,6 +74,13 @@ exception message, local variables, source response or credentials.
 Only explicitly numeric ordinary-income compositions matching original cash are
 admitted for execution-period distributions; estimated, capital-gain, ROC and
 unknown classifications reject. Blank numeric fields are not converted to zero.
+Original cash and issuer income fields use the existing issuer protocol's
+`1E-8` Decimal matching threshold, including XLSX numeric-literal precision;
+the source event amount remains unchanged for cash accruals. Nonordinary fields
+must still be explicitly numeric and exactly zero. Status flags are validated
+by their own [ICI Primary columns](https://www.ici.org/system/files/2025-09/taxrpt25_primary.pdf):
+no indicator in D, blank/R in E and blank/C in F; E/X and misplaced codes reject.
+The status, amount-match and nonordinary-component checks report separate reasons.
 Warm-up distributions affect gross signal math only. Payment-day credits remain
 modeled, with no second withholding. The canonical Engine and independent Decimal
 ledger must agree at every input checkpoint. A fresh runner repeats the entire run
