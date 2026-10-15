@@ -23,6 +23,7 @@ from .config import SECTOR_ETFS
 from .signals import CausalCloseSource, TotalReturnClose
 
 UNIVERSE = (*SECTOR_ETFS, "SPY")
+RAW_CLOSE_TOLERANCE = Decimal("0.0002")
 
 
 def number(value) -> Decimal:
@@ -202,6 +203,21 @@ class ResearchInputs:
             required.add(session.market_close)
             if not required <= times:
                 raise ValueError("Missing execution-window minute or daily NAV close")
+        daily_closes = {(x.session, x.asset): number(x.close) for x in self.closes}
+        for bar in self.bars:
+            day = bar.end.astimezone(NY).date()
+            if (
+                bar.end == calendar.session(day).market_close
+                and abs(number(bar.close) - daily_closes[day, bar.asset]) > RAW_CLOSE_TOLERANCE
+            ):
+                raise ValueError("Raw daily/minute close mismatch; reconcile source basis")
+        # The processor keys all action kinds by security/event identity. Its
+        # modeled credit also occupies that namespace; never overwrite a split
+        # or another dividend while constructing the retrospective provider.
+        action_keys = [(x.asset, x.event_id) for x in (*self.distributions, *self.splits)]
+        action_keys.extend((x.asset, "modeled-credit:" + x.event_id) for x in self.distributions)
+        if len(set(action_keys)) != len(action_keys):
+            raise ValueError("Conflicting corporate action identity, including modeled credits")
         for group in (self.distributions, self.splits):
             if len({(x.asset, x.event_id) for x in group}) != len(group):
                 raise ValueError("Duplicate corporate action")

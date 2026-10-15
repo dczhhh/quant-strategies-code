@@ -57,6 +57,14 @@ monthly plan and owner security restrictions are unchanged. The dataset requires
 window minute, the first completed RTH minute and each session's closing mark; gaps are rejected.
 Volume participation is capped by the explicit scenario and checked independently.
 
+For each execution session the raw daily signal close and closing-minute mark must
+agree within the retained source-rounding limit of 0.0002 USD. A larger difference
+requires source reconciliation before Engine construction; the loader does not
+choose a preferred price or adjust either series. This is a restriction of this
+research path, not a claim that all vendors define daily and minute closes alike.
+Action identifiers must be unique per security across splits, distributions and
+generated modeled credits, so constructing the provider cannot overwrite an event.
+
 Whole-share cash reservations reject a quantity that rounds to zero before asking
 the fee model for a quote. The constrained rejection audit likewise does not price
 a nonexistent fill. Neither path posts cash, positions or fees for that rejection.
@@ -82,6 +90,13 @@ terms and executed fills, checks execution price and costs, and uses an independ
 settlement-date list. It does not read production cash, receivable, settlement or fee helpers to
 compute its expected state. Positions match exactly; money retains the existing 1E-8 USD tolerance.
 An empty replay, missing observations or any mismatch rejects the run. No adjustment is posted.
+
+Observation coverage must equal the complete ordered set of input bar timestamps:
+omitted, duplicate, additional and reordered checkpoints are rejected. Each fill
+must match its order's security and direction. Committed fee records must identify
+the same fill and carry the independently calculated fee; duplicate order or fee
+execution identities and out-of-order fills are rejected. The 1E-8 money threshold
+is unchanged.
 
 The supplied settlement list must span the run and extend beyond it; its provenance must be explicit.
 The 2025 Columbus Day reference case follows [NSCC notice A9637](https://www.dtcc.com/Globals/PDFs/2025/September/03/a9637):

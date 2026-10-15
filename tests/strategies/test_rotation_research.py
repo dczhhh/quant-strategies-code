@@ -152,10 +152,15 @@ def test_raw_share_returns_match_independent_hand_reinvestment_through_split_and
         for d, p in zip(selected, (100, 102, 50, 51))
         for a in sorted(UNIVERSE)
     )
+    marks = {row.session: row.close for row in closes}
     bundle = replace(
         original,
         closes=closes,
-        bars=tuple(b for b in original.bars if b.end.date() in selected),
+        bars=tuple(
+            replace(b, **dict.fromkeys(("open", "high", "low", "close"), marks[b.end.date()]))
+            for b in original.bars
+            if b.end.date() in selected
+        ),
         distributions=(
             ResearchDistribution(
                 asset,
@@ -267,6 +272,12 @@ def test_future_closes_and_actions_cannot_change_earlier_signal_values():
         closes=tuple(
             replace(c, close=c.close * 10) if c.session >= date(2025, 10, 20) else c
             for c in bundle.closes
+        ),
+        bars=tuple(
+            replace(b, **{k: getattr(b, k) * 10 for k in ("open", "high", "low", "close")})
+            if b.end.astimezone(NY).date() >= date(2025, 10, 20)
+            else b
+            for b in bundle.bars
         ),
         distributions=(
             *bundle.distributions,
@@ -439,3 +450,106 @@ def test_cross_month_replay_matches_in_fresh_processes_with_different_hash_seeds
         for seed in ("1", "937")
     ]
     assert len(proofs[0]) == 64 and proofs[0] == proofs[1]
+
+
+@pytest.mark.parametrize("gap", ["omitted", "duplicate", "extra", "reordered"])
+def test_ledger_requires_exactly_one_observation_per_input_timestamp(gap):
+    engine = run(end="2025-10-16")
+    trace = copy.deepcopy(engine.research_trace)
+    if gap == "omitted":
+        del trace[-2]
+    elif gap == "duplicate":
+        trace.insert(-1, copy.deepcopy(trace[-2]))
+    elif gap == "extra":
+        extra = copy.deepcopy(trace[0])
+        extra["timestamp"] += timedelta(minutes=1)
+        trace.insert(1, extra)
+    else:
+        trace[1], trace[2] = trace[2], trace[1]
+    with pytest.raises(ResearchLedgerMismatch, match="observation coverage"):
+        verify_research_ledger(
+            engine.research_inputs,
+            ASSUMPTIONS,
+            engine.broker.fills,
+            engine.broker.orders,
+            engine.broker.fee_records,
+            trace,
+        )
+
+
+@pytest.mark.parametrize("collision", ["split-dividend", "generated-credit"])
+def test_all_corporate_action_keys_are_unique_before_engine_construction(collision):
+    bundle = inputs()
+    event = bundle.distributions[0]
+    identifier = (
+        event.event_id if collision == "split-dividend" else "modeled-credit:" + event.event_id
+    )
+    with pytest.raises(ValueError, match="corporate action identity"):
+        replace(bundle, splits=(replace(bundle.splits[0], event_id=identifier),))
+
+
+def test_closing_minute_and_raw_daily_signal_price_must_share_the_same_basis():
+    bundle = inputs()
+    changed = replace(bundle.closes[-1], close=bundle.closes[-1].close * 2)
+    with pytest.raises(ValueError, match="daily/minute close"):
+        replace(bundle, closes=(*bundle.closes[:-1], changed))
+
+
+def test_raw_close_comparison_preserves_the_existing_source_rounding_limit():
+    bundle = inputs()
+    for delta in (Decimal("0.0002"), Decimal("-0.0002")):
+        changed = replace(bundle.closes[-1], close=bundle.closes[-1].close + delta)
+        replace(bundle, closes=(*bundle.closes[:-1], changed))
+    changed = replace(bundle.closes[-1], close=bundle.closes[-1].close + Decimal("0.00020001"))
+    with pytest.raises(ValueError, match="daily/minute close"):
+        replace(bundle, closes=(*bundle.closes[:-1], changed))
+
+
+@pytest.mark.parametrize("field", ["asset", "side"])
+def test_ledger_binds_each_fill_to_the_original_order_identity(field):
+    from ml4t.backtest.types import OrderSide
+
+    engine = run(end="2025-10-16")
+    orders = copy.deepcopy(engine.broker.orders)
+    order = next(o for o in orders if o.order_id == engine.broker.fills[0].order_id)
+    setattr(order, field, "SPY" if field == "asset" else OrderSide.SELL)
+    with pytest.raises(ResearchLedgerMismatch, match="order identity"):
+        verify_research_ledger(
+            engine.research_inputs,
+            ASSUMPTIONS,
+            engine.broker.fills,
+            orders,
+            engine.broker.fee_records,
+            engine.research_trace,
+        )
+
+
+@pytest.mark.parametrize(
+    "corruption", ["asset", "side", "amount", "execution-id", "order-id", "fill-order"]
+)
+def test_committed_fee_evidence_and_fill_sequence_are_independently_checked(corruption):
+    engine = run(end="2025-10-16")
+    records, orders, fills = (
+        list(engine.broker.fee_records),
+        list(engine.broker.orders),
+        list(engine.broker.fills),
+    )
+    if corruption in {"asset", "side"}:
+        records[0] = replace(
+            records[0],
+            context=replace(
+                records[0].context, **{corruption: "SPY" if corruption == "asset" else "SELL"}
+            ),
+        )
+    elif corruption == "amount":
+        records[0] = replace(records[0], fees=replace(records[0].fees, broker_commission=100))
+    elif corruption == "execution-id":
+        records[-1] = replace(records[-1], execution_id=records[0].execution_id)
+    elif corruption == "order-id":
+        orders.append(copy.deepcopy(orders[0]))
+    else:
+        fills.reverse()
+    with pytest.raises(ResearchLedgerMismatch):
+        verify_research_ledger(
+            engine.research_inputs, ASSUMPTIONS, fills, orders, records, engine.research_trace
+        )

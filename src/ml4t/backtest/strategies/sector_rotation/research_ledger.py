@@ -83,6 +83,11 @@ def verify_research_ledger(inputs: ResearchInputs, assumptions, fills, orders, f
     """Check every observed bar; fail before returning a successful research result."""
     if not trace:
         raise ResearchLedgerMismatch("No Engine observations to verify")
+    expected_stamps = sorted({bar.end for bar in inputs.bars})
+    if [state["timestamp"] for state in trace] != expected_stamps:
+        raise ResearchLedgerMismatch("Incomplete or unordered Engine observation coverage")
+    if [fill.timestamp for fill in fills] != sorted(fill.timestamp for fill in fills):
+        raise ResearchLedgerMismatch("Unordered executed fills")
     cash = number(assumptions.initial_cash)
     positions = defaultdict(Decimal)
     receivables = {}
@@ -99,8 +104,12 @@ def verify_research_ledger(inputs: ResearchInputs, assumptions, fills, orders, f
     events.sort(key=lambda item: (item[0], item[1], item[2].asset, item[2].event_id))
     bar_map = {(b.end, b.asset): b for b in inputs.bars}
     order_map = {o.order_id: o for o in orders}
+    if len(order_map) != len(orders):
+        raise ResearchLedgerMismatch("Duplicate order identity")
     if len(fee_records) != len(fills):
         raise ResearchLedgerMismatch("Every fill needs one committed fee record")
+    if len({r.execution_id for r in fee_records}) != len(fee_records):
+        raise ResearchLedgerMismatch("Duplicate committed fee execution identity")
     fill_index = event_index = 0
     participation = defaultdict(Decimal)
     fee_reference = _FeeReference()
@@ -135,9 +144,10 @@ def verify_research_ledger(inputs: ResearchInputs, assumptions, fills, orders, f
                 fill = fills[fill_index]
                 bar = bar_map.get((fill.timestamp, fill.asset))
                 order = order_map.get(fill.order_id)
+                if order is None or order.asset != fill.asset or order.side != fill.side:
+                    raise ResearchLedgerMismatch("Fill/order identity mismatch")
                 if (
                     bar is None
-                    or order is None
                     or order.created_at is None
                     or order.created_at >= fill.timestamp
                     or not 9 * 60 + 35
@@ -163,12 +173,15 @@ def verify_research_ledger(inputs: ResearchInputs, assumptions, fills, orders, f
                 if (
                     record.context.order_id != fill.order_id
                     or record.context.timestamp != fill.timestamp
+                    or record.context.asset != fill.asset
+                    or record.context.side != fill.side.value.upper()
                     or number(record.quantity) != quantity
                     or number(record.price) != number(fill.price)
                 ):
                     raise ResearchLedgerMismatch("Fee record/fill identity mismatch")
                 fee = fee_reference.charge(fill, record.context.generation)
                 _equal(fill.commission, fee, "snapshot_tiered_fee")
+                _equal(record.fees.total_fees, fee, "committed_fee_record")
                 amount = quantity * price
                 if buy:
                     settled = cash - sum((v for _, v in holds), Decimal(0))
@@ -214,6 +227,7 @@ def verify_research_ledger(inputs: ResearchInputs, assumptions, fills, orders, f
         "status": "RETROSPECTIVE_ENGINE_LEDGER_PASS",
         "monetary_checkpoints": checkpoints,
         "quantity_checkpoints": len(trace),
+        "observation_coverage": "exact_input_timestamps",
         "fills_checked": len(fills),
         "maximum_monetary_error": str(max_error),
         "money_tolerance": str(TOLERANCE),
