@@ -354,3 +354,23 @@ def test_missing_credential_does_not_leave_a_false_unknown_reservation():
     with pytest.raises(ValueError, match="CREDENTIAL_UNAVAILABLE"):
         c.capture(archive, "SPY", SOURCE, lambda: "")
     assert not archive.refs
+
+
+def test_content_pacing_preserves_the_original_private_writer(monkeypatch):
+    clock, sleeps, calls = [0.0], [], []
+
+    def sleep(delay):
+        sleeps.append(delay)
+        clock[0] += delay
+
+    def guarded_write(_self, suffix, payload):
+        calls.append((suffix, payload))
+        return {"sha": "a" * 40}
+
+    monkeypatch.setattr(c.monotonic_time, "monotonic", lambda: clock[0])
+    monkeypatch.setattr(c.monotonic_time, "sleep", sleep)
+    monkeypatch.setattr(c.m.GitHub, "write", guarded_write)
+    writer = c.PacedGitHub(c.m.DESTINATION, "INVENTED_KEY", writable=True)
+    for _ in range(3):
+        writer.write("/git/blobs", {"encoding": "base64", "content": "aW52ZW50ZWQ="})
+    assert sleeps == [2.0, 2.0] and len(calls) == 3

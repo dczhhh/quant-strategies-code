@@ -370,7 +370,7 @@ def main():
 
         def factory():
             return c.r.CachedArchive(
-                c.m.GitHub(
+                c.PacedGitHub(
                     c.m.DESTINATION,
                     os.environ.get("ARCHIVE_WRITE_TOKEN", ""),
                     writable=mode == "run",

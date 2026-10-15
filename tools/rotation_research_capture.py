@@ -11,6 +11,7 @@ import os
 import runpy
 import subprocess
 import sys
+import time as monotonic_time
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
@@ -37,6 +38,7 @@ POLICY = {
     "reuse_existing_2025_components": True,
     "maximum_response_bytes": m.FILE_LIMIT,
     "maximum_group_requests": GROUP_SIZE,
+    "minimum_archive_write_interval_seconds": 2,
     "single_attempt_per_reserved_group": True,
     "unknown_outcome_must_not_be_reset": True,
     "historical_PIT_verified": False,
@@ -46,6 +48,23 @@ REFERENCE_URLS = (
     "https://www.federalreserveplaza.com/-/media/FRP/pdf/2024_2028_Federal_Holidays.pdf?sc_lang=en",
 )
 REFERENCE_PDF_SHA256 = "b8b7ee22fd6f3c275c579b1052e0aa4bfac5394f4ae6c1c502067c6ad7c8284a"
+
+
+class PacedGitHub(m.GitHub):
+    """Keep the existing private-write guard and pace content creation per writer."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.last_write = None
+
+    def write(self, suffix, payload):
+        if self.last_write is not None:
+            remaining = 2 - (monotonic_time.monotonic() - self.last_write)
+            if remaining > 0:
+                monotonic_time.sleep(remaining)
+        result = super().write(suffix, payload)
+        self.last_write = monotonic_time.monotonic()
+        return result
 
 
 def sessions(first=FIRST, last=LAST):
@@ -301,7 +320,7 @@ def main():
         mode, ticker, source = sys.argv[1:]
         guarded(source)
         archive = r.CachedArchive(
-            m.GitHub(
+            PacedGitHub(
                 m.DESTINATION, os.environ.get("ARCHIVE_WRITE_TOKEN", ""), writable=mode == "capture"
             )
         )

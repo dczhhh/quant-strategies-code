@@ -44,6 +44,10 @@ input overhead; it must stay under 5,000 archive API calls and 500 content write
 These two limits follow the [official REST rate-limit documentation](https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api).
 This does not promise
 an unused real token quota or waive any private-write/readback check.
+Archive content writes also wait at least two seconds after the previous write
+in each writer. With at most two acquisition jobs this leaves room under the
+documented 80-content-writes/minute bound. The original private visibility check
+runs inside every paced write; read-only verification does not sleep or write.
 
 The operation template is [the fixed workflow](examples/rotation-research-operation.yml).
 After source checks pass, replace only its source placeholder with the immutable
