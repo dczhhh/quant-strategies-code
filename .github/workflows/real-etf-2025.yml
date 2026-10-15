@@ -1,0 +1,106 @@
+name: Reviewed same-year 2025 ETF components
+
+on:
+  workflow_dispatch:
+    inputs:
+      scope:
+        description: First validate SPY, then extend to all 12 existing ETF targets
+        type: choice
+        options: [SPY, all]
+        default: SPY
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: real-action-capture-v1
+  cancel-in-progress: false
+
+jobs:
+  plan:
+    if: >-
+      github.repository == 'dczhhh/quant-strategies-code' &&
+      github.actor == 'dczhhh' &&
+      github.event_name == 'workflow_dispatch' &&
+      github.ref == 'refs/heads/main' &&
+      vars.REAL_ETF_PROBE_ENABLED == 'true' &&
+      github.sha == vars.REAL_ETF_PROBE_REVIEWED_SHA
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      tickers: ${{ steps.scope.outputs.tickers }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ vars.REAL_ETF_PROBE_REVIEWED_SHA }}
+          persist-credentials: false
+      - id: scope
+        env:
+          CASE_SCOPE: ${{ inputs.scope }}
+        run: python3 -I tools/real_etf_2025.py matrix "$CASE_SCOPE" >> "$GITHUB_OUTPUT"
+
+  capture:
+    needs: plan
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        ticker: ${{ fromJSON(needs.plan.outputs.tickers) }}
+    environment: private-archive
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      REAL_ETF_PROBE_ENABLED: ${{ vars.REAL_ETF_PROBE_ENABLED }}
+      REAL_ETF_PROBE_REVIEWED_SHA: ${{ vars.REAL_ETF_PROBE_REVIEWED_SHA }}
+      ACTIONS_STEP_DEBUG: ${{ secrets.ACTIONS_STEP_DEBUG }}
+      ACTIONS_RUNNER_DEBUG: ${{ secrets.ACTIONS_RUNNER_DEBUG }}
+      CASE_TICKER: ${{ matrix.ticker }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ vars.REAL_ETF_PROBE_REVIEWED_SHA }}
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4
+      - name: Install locked invented-fixture dependencies before credential exposure
+        run: uv sync --dev --locked --python 3.12
+      - name: Validate invented 2025 source and archive regressions
+        run: uv run python -m unittest tests.test_real_etf_2025 -v
+      - name: Capture fixed 2025 inputs and privately retain retrospective components
+        env:
+          RUNNER_ENVIRONMENT: ${{ runner.environment }}
+          ARCHIVE_WRITE_TOKEN: ${{ secrets.ARCHIVE_WRITE_TOKEN }}
+          MASSIVE_API_KEY: ${{ secrets.MASSIVE }}
+        run: python3 -I tools/real_etf_2025.py capture "$CASE_TICKER"
+      - name: Recompute from retained bytes without further source requests
+        env:
+          RUNNER_ENVIRONMENT: ${{ runner.environment }}
+          ARCHIVE_WRITE_TOKEN: ${{ secrets.ARCHIVE_WRITE_TOKEN }}
+        run: python3 -I tools/real_etf_2025.py verify "$CASE_TICKER"
+
+  verify:
+    needs: [plan, capture]
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        ticker: ${{ fromJSON(needs.plan.outputs.tickers) }}
+    environment: private-archive
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      REAL_ETF_PROBE_ENABLED: ${{ vars.REAL_ETF_PROBE_ENABLED }}
+      REAL_ETF_PROBE_REVIEWED_SHA: ${{ vars.REAL_ETF_PROBE_REVIEWED_SHA }}
+      ACTIONS_STEP_DEBUG: ${{ secrets.ACTIONS_STEP_DEBUG }}
+      ACTIONS_RUNNER_DEBUG: ${{ secrets.ACTIONS_RUNNER_DEBUG }}
+      CASE_TICKER: ${{ matrix.ticker }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ vars.REAL_ETF_PROBE_REVIEWED_SHA }}
+          persist-credentials: false
+      - name: Fresh runner independently recomputes private bytes only
+        env:
+          RUNNER_ENVIRONMENT: ${{ runner.environment }}
+          ARCHIVE_WRITE_TOKEN: ${{ secrets.ARCHIVE_WRITE_TOKEN }}
+        run: python3 -I tools/real_etf_2025.py verify "$CASE_TICKER"
