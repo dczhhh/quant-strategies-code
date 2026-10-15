@@ -618,7 +618,7 @@ def execute(
     }
 
 
-def guarded():
+def guarded(*, code_token=""):
     source = m.sha(os.environ.get("REAL_ETF_PROBE_REVIEWED_SHA", ""))
     p.need(
         os.environ.get("GITHUB_ACTIONS") == "true"
@@ -633,7 +633,7 @@ def guarded():
         and os.environ.get("ACTIONS_RUNNER_DEBUG", "").lower() != "true",
         "EXECUTION_NOT_AUTHORIZED",
     )
-    m.GitHub(m.CODE).visibility(False)
+    m.GitHub(m.CODE, code_token).visibility(False)
     return source
 
 
