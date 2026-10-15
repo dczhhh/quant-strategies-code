@@ -62,6 +62,15 @@ guards and environment permissions are untouched. The user's already granted acq
 applies; this is not a new request for permission or a strict-real admission waiver.
 
 The replay assembles and hash-checks all retained inputs before Engine construction.
+Issuer documents retain the original `real_etf_issuer_receipt_v1` observation
+time from `fetched_at`; market and calendar captures use `response_received_at`.
+These are separate receipt protocols, and neither is replaced by replay time.
+After completed acquisition, the [retained-input continuation template](examples/rotation-research-retained-replay.yml)
+runs only preflight, replay and independent verification. It receives no provider
+secret and contains no acquisition job. Replace its source placeholder with the
+checked immutable fix and update the same main-only launcher path. Sanitized
+failures report the exception category and repository code position, never the
+exception message, local variables, source response or credentials.
 Only explicitly numeric ordinary-income compositions matching original cash are
 admitted for execution-period distributions; estimated, capital-gain, ROC and
 unknown classifications reject. Blank numeric fields are not converted to zero.

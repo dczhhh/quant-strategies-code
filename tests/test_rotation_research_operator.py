@@ -36,13 +36,48 @@ def all_documents():
         h["C"] = tax["B"] = f"{i + 1:09d}"
         history.append(h)
         primary.append(tax)
-    return {
+    result = {
         doc["id"]: item(
             doc,
             workbook("dividend" if i == 0 else "2025 ICI Primary", history if i == 0 else primary),
         )
         for i, doc in enumerate(c.p.DOCUMENTS[:2])
     }
+    for held in result.values():
+        receipt = held["receipt"]
+        receipt["schema"] = "real_etf_issuer_receipt_v1"
+        receipt["document"] = receipt.pop("product")
+        receipt["fetched_at"] = receipt.pop("response_received_at")
+    return result
+
+
+def test_issuer_observation_uses_original_document_receipt_time():
+    doc = c.p.DOCUMENTS[0]
+    receipt = {"schema": "real_etf_issuer_receipt_v1", "fetched_at": OBSERVED}
+    bound = u.source(doc["id"], b"invented document", receipt, doc["url"])
+    assert bound.observed_at == datetime.fromisoformat(OBSERVED)
+    with pytest.raises(KeyError):
+        u.source(doc["id"], b"invented document", {"schema": receipt["schema"]}, doc["url"])
+    with pytest.raises(ValueError, match="ISSUER_RECEIPT_SCHEMA_INVALID"):
+        u.source(doc["id"], b"invented document", {"response_received_at": OBSERVED}, doc["url"])
+
+
+def test_failure_location_does_not_print_exception_messages_or_source_values(monkeypatch, capsys):
+    private = "invented private response / credential value"
+
+    def failure(*_args, **_kwargs):
+        raise KeyError(private)
+
+    monkeypatch.setattr(u.sys, "argv", ["replay", "run", SOURCE])
+    monkeypatch.setattr(c, "guarded", lambda _: None)
+    monkeypatch.setattr(u, "execute", failure)
+    assert u.main() == 1
+    output = capsys.readouterr().out
+    assert private not in output
+    report = json.loads(output)
+    assert report["error_type"] == "KeyError"
+    assert report["location"]["file"] == "tests/test_rotation_research_operator.py"
+    assert report["location"]["line"] > 0
 
 
 def price(ticker, day):
@@ -347,6 +382,21 @@ def test_failure_after_engine_invocation_reports_the_actual_phase(monkeypatch, c
     monkeypatch.setattr(u, "execute", failure)
     assert u.main() == 1
     assert json.loads(capsys.readouterr().out)["engine_invoked"] is True
+
+
+def test_retained_replay_template_never_receives_a_provider_secret_or_recaptures():
+    body = Path("docs/examples/rotation-research-retained-replay.yml").read_text()
+    document = yaml.safe_load(body)
+    jobs = document["jobs"]
+    assert set(jobs) == {"preflight", "replay", "verify"}
+    assert jobs["replay"]["needs"] == "preflight"
+    assert jobs["verify"]["needs"] == "replay"
+    assert "MASSIVE" not in body
+    assert "rotation_research_capture.py capture" not in body
+    assert "rotation_research_replay.py verify" in body
+    assert document.get("on", document.get(True)) == {
+        "push": {"branches": [c.OPERATION_BRANCH], "paths": [c.OPERATION_WORKFLOW]}
+    }
 
 
 def test_missing_credential_does_not_leave_a_false_unknown_reservation():

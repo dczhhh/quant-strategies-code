@@ -49,8 +49,35 @@ def canonical(value):
 
 
 def source(identifier, body, receipt, url):
-    stamp = datetime.fromisoformat(receipt["response_received_at"])
+    # Issuer documents predate the market capture protocol and use their own
+    # receipt schema. Never substitute the current replay time for either one.
+    if identifier in {doc["id"] for doc in c.p.DOCUMENTS[:2]}:
+        c.p.need(
+            receipt.get("schema") == "real_etf_issuer_receipt_v1", "ISSUER_RECEIPT_SCHEMA_INVALID"
+        )
+        stamp = datetime.fromisoformat(receipt["fetched_at"])
+    else:
+        stamp = datetime.fromisoformat(receipt["response_received_at"])
     return ResearchSource(identifier, c.m.sha256(body), stamp, url)
+
+
+def safe_failure_location(error):
+    """Report repository code positions, never exception messages or local values."""
+    root = Path(__file__).resolve().parents[1]
+    result = {}
+    trace = error.__traceback__
+    while trace is not None:
+        path = Path(trace.tb_frame.f_code.co_filename)
+        if path.is_absolute() and path.is_relative_to(root):
+            relative = path.relative_to(root)
+            if relative.parts[0] in {"tools", "src", "tests"} and path.suffix == ".py":
+                result = {"file": relative.as_posix(), "line": trace.tb_lineno}
+        trace = trace.tb_next
+    kinds = (KeyError, TypeError, ValueError, AssertionError, IndexError, AttributeError)
+    return {
+        "error_type": next((k.__name__ for k in kinds if isinstance(error, k)), "Exception"),
+        "location": result,
+    }
 
 
 def bars(product, body):
@@ -396,6 +423,7 @@ def main():
                     "reason": reason,
                     "engine_invoked": progress["engine_invoked"],
                     "performance_admission": False,
+                    **safe_failure_location(error),
                 }
             )
         )
