@@ -13,7 +13,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  SOURCE_SHA: '9666c850b359d75ee74711f3d3d687f4c7cb87ad'
+  SOURCE_SHA: '8b142f63858404dba34b214c6dbea8ea8c673515'
   ACTIONS_STEP_DEBUG: ${{ secrets.ACTIONS_STEP_DEBUG }}
   ACTIONS_RUNNER_DEBUG: ${{ secrets.ACTIONS_RUNNER_DEBUG }}
 
