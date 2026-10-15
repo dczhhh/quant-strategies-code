@@ -18,6 +18,8 @@ from ml4t.backtest.strategies.sector_rotation.research import (
     retrospective_rotation_engine,
 )
 from ml4t.backtest.strategies.sector_rotation.research_inputs import (
+    MATCHED_CLOSES,
+    SEPARATE_CLOSES,
     UNIVERSE,
     RawClose,
     ResearchBar,
@@ -182,8 +184,10 @@ def test_raw_share_returns_match_independent_hand_reinvestment_through_split_and
     assert actual[-1][1]["SPY"] == Decimal(51) / 100
 
 
-def test_real_default_and_synthetic_modes_both_refuse_research_inputs():
-    strategy = SectorRotationStrategy(RetrospectiveCloseSource(inputs()), settings())
+@pytest.mark.parametrize("separate", [False, True])
+def test_real_default_and_synthetic_modes_both_refuse_research_inputs(separate):
+    bundle = paired_inputs() if separate else inputs()
+    strategy = SectorRotationStrategy(RetrospectiveCloseSource(bundle), settings())
     with pytest.raises(ValueError, match="UNVERIFIED"):
         sector_rotation_engine(None, strategy, None)
     with pytest.raises(ValueError, match="cannot be labelled synthetic"):
@@ -503,6 +507,90 @@ def test_raw_close_comparison_preserves_the_existing_source_rounding_limit():
     changed = replace(bundle.closes[-1], close=bundle.closes[-1].close + Decimal("0.00020001"))
     with pytest.raises(ValueError, match="daily/minute close"):
         replace(bundle, closes=(*bundle.closes[:-1], changed))
+
+
+def paired_inputs():
+    original = inputs()
+    minute = replace(
+        SOURCE,
+        identifier="minute-fixture",
+        sha256=digest(BODY + b" minute"),
+        url="https://example.invalid/invented-minute",
+    )
+    return replace(
+        original,
+        sources=(*original.sources, minute),
+        bars=tuple(replace(b, source_id=minute.identifier) for b in original.bars),
+        close_policy=SEPARATE_CLOSES,
+    )
+
+
+def test_distinct_daily_signals_and_minute_nav_keep_both_prices_and_independent_ledger():
+    original = paired_inputs()
+    baseline = retrospective_rotation_engine(original, ASSUMPTIONS, settings())
+    baseline.run()
+    asset, position = next((a, p) for a, p in baseline.broker.positions.items() if p.quantity > 0)
+    stamp = original.bars[-1].end
+    changed = replace(
+        original,
+        bars=tuple(
+            replace(
+                b, **{k: getattr(b, k) + Decimal("0.25") for k in ("open", "high", "low", "close")}
+            )
+            if b.end == stamp and b.asset == asset
+            else b
+            for b in original.bars
+        ),
+    )
+    assert changed.closes == original.closes
+    assert raw_total_returns(changed) == raw_total_returns(original)
+    assert changed.close_comparison["mismatches"] == 1
+    assert changed.close_comparison["reconciled"] is False
+    engine = retrospective_rotation_engine(changed, ASSUMPTIONS, settings())
+    engine.run()
+    assert engine.broker.fills == baseline.broker.fills
+    assert engine.research_trace[-1]["NAV"] - baseline.research_trace[-1]["NAV"] == pytest.approx(
+        position.quantity * 0.25, abs=1e-8
+    )
+    assert engine.research_report["status"] == "RETROSPECTIVE_ENGINE_LEDGER_PASS"
+    assert engine.research_report["price_conventions"] == changed.close_comparison
+    assert engine.research_report["performance_admission"] is False
+    with pytest.raises(ValueError, match="daily/minute close"):
+        replace(changed, close_policy=MATCHED_CLOSES)
+
+
+def test_separate_close_policy_requires_separate_source_records_and_explicit_v2_bundle():
+    with pytest.raises(ValueError, match="distinct retained sources"):
+        replace(inputs(), close_policy=SEPARATE_CLOSES)
+    with pytest.raises(ValueError, match="Unknown research close policy"):
+        replace(inputs(), close_policy="ignore_errors")
+    original = paired_inputs()
+    bodies = {"fixture": BODY, "minute-fixture": BODY + b" minute"}
+    document = {"schema": original.bundle_schema, **asdict(original)}
+    body = json.dumps(document, default=str).encode()
+    assert ResearchInputs.from_bundle(body, digest(body), bodies) == original
+    document["schema"] = "rotation_retrospective_inputs_v1"
+    body = json.dumps(document, default=str).encode()
+    with pytest.raises(ValueError, match="v2 bundle"):
+        ResearchInputs.from_bundle(body, digest(body), bodies)
+    document["schema"] = original.bundle_schema
+    del document["close_policy"]
+    body = json.dumps(document, default=str).encode()
+    with pytest.raises(ValueError, match="Explicit research close policy"):
+        ResearchInputs.from_bundle(body, digest(body), bodies)
+
+
+def test_old_v1_bundle_defaults_to_strict_comparison_and_new_mode_keeps_gap_rejection():
+    original = inputs()
+    document = {"schema": "rotation_retrospective_inputs_v1", **asdict(original)}
+    del document["close_policy"]
+    body = json.dumps(document, default=str).encode()
+    assert ResearchInputs.from_bundle(body, digest(body), {"fixture": BODY}) == original
+    paired = paired_inputs()
+    with pytest.raises(ValueError):
+        replace(paired, bars=paired.bars[1:])
+    with pytest.raises(ValueError):
+        replace(paired, closes=paired.closes[1:])
 
 
 @pytest.mark.parametrize("field", ["asset", "side"])

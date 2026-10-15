@@ -327,23 +327,17 @@ def test_report_flags_must_match_their_specific_ici_columns(normalized_sources, 
         u.build_inputs(lambda: None, SOURCE, docs)
 
 
-@pytest.mark.parametrize(
-    "gap", ["minute", "daily", "daily-close-conflict", "special-tax", "estimated-tax"]
-)
+@pytest.mark.parametrize("gap", ["minute", "daily", "special-tax", "estimated-tax"])
 def test_incomplete_or_conflicting_sources_reject_before_any_engine_call(
     normalized_sources, gap, monkeypatch
 ):
     docs, old, new = normalized_sources
-    if gap in {"minute", "daily", "daily-close-conflict"}:
+    if gap in {"minute", "daily"}:
         kind = "daily" if gap == "daily" else "minute"
         product = next(p for p in c.products("SPY") if p["kind"] == kind)
         value = json.loads(new["SPY"][product["id"]]["body"])
-        if gap == "daily-close-conflict":
-            row = value["results"][12]
-            row.update(dict.fromkeys(("o", "h", "l", "c"), 1))
-        else:
-            value["results"].pop(0)
-            value["resultsCount"] -= 1
+        value["results"].pop(0)
+        value["resultsCount"] -= 1
         new["SPY"][product["id"]]["body"] = c.m.canonical(value)
     else:
         name = c.p.DOCUMENTS[1]["id"]
@@ -355,6 +349,34 @@ def test_incomplete_or_conflicting_sources_reject_before_any_engine_call(
     )
     with pytest.raises(ValueError):
         u.build_inputs(lambda: None, SOURCE, docs)
+
+
+def test_operator_retains_distinct_closing_observations_and_reports_unreconciled_pairs(
+    normalized_sources,
+):
+    docs, _, new = normalized_sources
+    product = [p for p in c.products("SPY") if p["kind"] == "minute"][-1]
+    value = json.loads(new["SPY"][product["id"]]["body"])
+    row = value["results"][-1]
+    for key in ("o", "h", "l", "c"):
+        row[key] += 0.01
+    new["SPY"][product["id"]]["body"] = c.m.canonical(value)
+    inputs, body = u.build_inputs(lambda: None, SOURCE, docs)
+    assert json.loads(body)["schema"] == "rotation_retrospective_inputs_v2"
+    assert inputs.close_policy == u.SEPARATE_CLOSES
+    assert inputs.close_comparison["mismatches"] == 1
+    assert inputs.close_comparison["pairs"] == 48 * 12
+    daily = next(x.close for x in inputs.closes if x.asset == "SPY" and x.session == c.LAST)
+    minute = next(
+        x.close
+        for x in inputs.bars
+        if x.asset == "SPY" and x.end == c.CAL.session(c.LAST).market_close
+    )
+    assert minute != daily
+    report = u.replay(replace(inputs, origin="invented_fixture"))
+    assert report["summary"]["daily_minute_close_mismatches"] == 1
+    assert report["summary"]["daily_minute_close_reconciled"] is False
+    assert report["summary"]["status"] == "RETROSPECTIVE_ENGINE_LEDGER_PASS"
 
 
 def test_calendar_reference_does_not_call_the_production_settlement_function(monkeypatch):

@@ -18,8 +18,34 @@ unresolved and their derived fields are not consumed. Missing warm-up/tail daily
 bars and events plus sixteen three-session minute windows require at most 21 new
 vendor requests per ticker (252 total). Minute response bytes are retained; only
 the first completed RTH minute, the execution window and closing-minute mark enter
-the Engine. Every required observation must exist. Daily/minute close conflicts,
-missing bars, unsupported distributions or ambiguous source identities reject.
+the Engine. Every required observation must exist. Missing bars, unsupported
+distributions or ambiguous source identities reject.
+
+The initial retained-only replay reached a daily/minute close disagreement and
+stopped before Engine construction. The default `ResearchInputs` policy still
+requires matching closes within the unchanged `0.0002` USD source threshold.
+This operator explicitly selects the separate research policy
+`daily_signal_and_minute_execution_valuation`: raw daily aggregate closes drive
+signals, and actual completed RTH minute closes drive fills and portfolio NAV.
+The two prices remain separate source-bound records, with distinct source IDs
+and URLs required for every closing pair. No minute price is replaced with a
+daily close, and no missing observation is synthesized.
+
+[Massive's aggregate documentation](https://massive.com/knowledge-base/article/how-does-massive-create-aggregate-bars)
+describes separate timespan construction, trade eligibility and revisions. It
+does not prove the cause of each retained discrepancy. The report therefore
+counts matched/mismatched closing pairs and reports `reconciled=false` when any
+pair exceeds the original threshold. This is an explicit research convention,
+not a claim that the source discrepancy has been resolved. SPY's daily-aggregate
+gross reinvestment reference also has a different mark convention from strategy
+minute NAV, in addition to its different fee/tax treatment.
+
+Separate observations require the version-2 input schema and an explicit policy;
+legacy version-1 bundles retain strict matching. Mode, source records and both
+prices enter the input fingerprint. New result bundles use the private
+`research-data/rotation-2025-v2-engine-report` ref; prior version-1 refs remain
+unchanged. Both policies remain isolated historical research and cannot enter
+the strict real or synthetic factory.
 
 The separate calendar reference uses weekdays minus September 1 and October 13
 within this exact period. The actual Federal Reserve Plaza 2024–2028 holiday PDF

@@ -20,6 +20,7 @@ from ml4t.backtest.strategies.sector_rotation.research import (  # noqa: E402
     retrospective_rotation_engine,
 )
 from ml4t.backtest.strategies.sector_rotation.research_inputs import (  # noqa: E402
+    SEPARATE_CLOSES,
     RawClose,
     ResearchBar,
     ResearchDistribution,
@@ -32,8 +33,8 @@ from ml4t.backtest.strategies.sector_rotation.research_inputs import (  # noqa: 
 from quant_constraints.adapter import ConstrainedBroker  # noqa: E402
 from quant_constraints.calendar import NY  # noqa: E402
 
-REPORT_PREFIX = "research/verification/rotation_research_2025_v1/"
-REPORT_REF = "research-data/rotation-2025-v1-engine-report"
+REPORT_PREFIX = "research/verification/rotation_research_2025_v2/"
+REPORT_REF = "research-data/rotation-2025-v2-engine-report"
 ASSUMPTIONS = ResearchAssumptions(
     "owner CN-mainland 10-percent ordinary-US-fund research scenario",
     Decimal(100000),
@@ -310,8 +311,9 @@ def build_inputs(archive_factory, source_commit, docs):
         tuple(securities),
         settlement_sessions(),
         "calendar-0",
+        close_policy=SEPARATE_CLOSES,
     )
-    body = canonical({"schema": "rotation_retrospective_inputs_v1", **asdict(inputs)})
+    body = canonical({"schema": inputs.bundle_schema, **asdict(inputs)})
     return ResearchInputs.from_bundle(body, c.m.sha256(body), bodies), body
 
 
@@ -339,6 +341,11 @@ def replay(inputs, progress=None):
         "execution_end": str(c.LAST),
         "initial_model_cash_usd": str(ASSUMPTIONS.initial_cash),
         "calendar_mode": c.POLICY["calendar_mode"],
+        "close_policy": inputs.close_policy,
+        "strategy_nav_convention": "final_completed_RTH_minute_close",
+        "daily_minute_close_pairs": inputs.close_comparison["pairs"],
+        "daily_minute_close_mismatches": inputs.close_comparison["mismatches"],
+        "daily_minute_close_reconciled": inputs.close_comparison["reconciled"],
         "return_pct": (daily[-1]["NAV"] / float(ASSUMPTIONS.initial_cash) - 1) * 100,
         "spy_gross_total_return_pct": float(
             (reference[c.LAST]["SPY"] / reference[c.FIRST]["SPY"] - 1) * 100
@@ -355,7 +362,7 @@ def replay(inputs, progress=None):
         "full_real_scenarios_accepted": 0,
     }
     return {
-        "schema": "rotation_research_result_v1",
+        "schema": "rotation_research_result_v2",
         "summary": summary,
         "engine": engine.research_report,
         "trace": engine.research_trace,
@@ -378,8 +385,10 @@ def execute(
     }
     payload[REPORT_PREFIX + "manifest.json"] = canonical(
         {
-            "schema": "rotation_research_report_manifest_v1",
+            "schema": "rotation_research_report_manifest_v2",
             "source_commit": source_commit,
+            "input_schema": inputs.bundle_schema,
+            "close_policy": inputs.close_policy,
             "plan_sha256": c.PLAN_HASH,
             "files": {name: c.m.sha256(body) for name, body in payload.items()},
         }

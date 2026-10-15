@@ -1,6 +1,7 @@
 """Explicit real-data historical simulation, never a strict real/PIT entry.
 
-All prices are completed-minute closes. Spread, slippage, taxes, payment-day
+Execution and NAV prices are completed-minute closes; daily aggregates drive
+signals under the explicit input close policy. Spread, slippage, taxes, payment-day
 credits and the dated fee snapshot are disclosed modeling assumptions. The
 canonical constrained broker continues to own all economic state.
 """
@@ -363,7 +364,9 @@ def retrospective_rotation_engine(
     engine.research_inputs, engine.research_assumptions = inputs, assumptions
     engine.research_trace = []
     engine.research_report = {
-        "schema": "rotation_retrospective_engine_v1",
+        "schema": "rotation_retrospective_engine_v2"
+        if inputs.bundle_schema.endswith("v2")
+        else "rotation_retrospective_engine_v1",
         "status": "NOT_RUN",
         "evidence_mode": "retrospective_research",
         "data_origin": inputs.origin,
@@ -380,6 +383,7 @@ def retrospective_rotation_engine(
         ],
         "assumptions": {k: str(v) for k, v in asdict(assumptions).items()},
         "execution": "next_completed_minute_close_plus_scenario_slippage",
+        "price_conventions": inputs.close_comparison,
         "fee_mode": "2026-10-10_normal_charge_snapshot_backcast_unknown_venue",
         "identity_mode": "fixed_domestic_SPDR_retrospective_metadata_not_PIT_attestation",
         "credit_mode": "modeled_pay_date_not_actual_broker_confirmation",

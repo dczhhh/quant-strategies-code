@@ -57,11 +57,21 @@ monthly plan and owner security restrictions are unchanged. The dataset requires
 window minute, the first completed RTH minute and each session's closing mark; gaps are rejected.
 Volume participation is capped by the explicit scenario and checked independently.
 
-For each execution session the raw daily signal close and closing-minute mark must
+By default, for each execution session the raw daily signal close and closing-minute mark must
 agree within the retained source-rounding limit of 0.0002 USD. A larger difference
 requires source reconciliation before Engine construction; the loader does not
-choose a preferred price or adjust either series. This is a restriction of this
-research path, not a claim that all vendors define daily and minute closes alike.
+choose a preferred price or adjust either series. This does not claim all vendors
+define daily and minute closes alike.
+
+An explicit `daily_signal_and_minute_execution_valuation` policy separately uses
+daily aggregates for signals and genuine completed-minute bars for executions
+and NAV. It requires distinct source records and URLs for each closing pair,
+keeps the same completeness gates, and requires an explicit version-2 bundle.
+The input fingerprint and report bind the policy and original prices. Its report
+counts disagreements at the unchanged threshold and marks them unreconciled;
+it does not certify the cause of the differences. Legacy version-1 inputs stay
+strict. Both policies remain excluded from the strict real/synthetic entry.
+
 Action identifiers must be unique per security across splits, distributions and
 generated modeled credits, so constructing the provider cannot overwrite an event.
 

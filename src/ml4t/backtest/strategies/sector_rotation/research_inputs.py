@@ -24,6 +24,8 @@ from .signals import CausalCloseSource, TotalReturnClose
 
 UNIVERSE = (*SECTOR_ETFS, "SPY")
 RAW_CLOSE_TOLERANCE = Decimal("0.0002")
+MATCHED_CLOSES = "require_matching_daily_minute_closes"
+SEPARATE_CLOSES = "daily_signal_and_minute_execution_valuation"
 
 
 def number(value) -> Decimal:
@@ -128,6 +130,7 @@ class ResearchInputs:
     settlement_sessions: tuple[date, ...]
     settlement_source_id: str
     origin: str = "retained_market_data"
+    close_policy: str = MATCHED_CLOSES
 
     def __post_init__(self):
         for name in (
@@ -142,6 +145,8 @@ class ResearchInputs:
             object.__setattr__(self, name, tuple(getattr(self, name)))
         if self.origin not in {"retained_market_data", "invented_fixture"}:
             raise ValueError("Unknown research origin")
+        if self.close_policy not in {MATCHED_CLOSES, SEPARATE_CLOSES}:
+            raise ValueError("Unknown research close policy")
         sources = {s.identifier: s for s in self.sources}
         if not sources or len(sources) != len(self.sources):
             raise ValueError("Unique retained sources required")
@@ -203,12 +208,19 @@ class ResearchInputs:
             required.add(session.market_close)
             if not required <= times:
                 raise ValueError("Missing execution-window minute or daily NAV close")
-        daily_closes = {(x.session, x.asset): number(x.close) for x in self.closes}
+        daily_closes = {(x.session, x.asset): x for x in self.closes}
         for bar in self.bars:
             day = bar.end.astimezone(NY).date()
-            if (
-                bar.end == calendar.session(day).market_close
-                and abs(number(bar.close) - daily_closes[day, bar.asset]) > RAW_CLOSE_TOLERANCE
+            if bar.end != calendar.session(day).market_close:
+                continue
+            daily = daily_closes[day, bar.asset]
+            if self.close_policy == SEPARATE_CLOSES and (
+                daily.source_id == bar.source_id
+                or sources[daily.source_id].url == sources[bar.source_id].url
+            ):
+                raise ValueError("Separate close definitions require distinct retained sources")
+            if self.close_policy == MATCHED_CLOSES and (
+                abs(number(bar.close) - number(daily.close)) > RAW_CLOSE_TOLERANCE
             ):
                 raise ValueError("Raw daily/minute close mismatch; reconcile source basis")
         # The processor keys all action kinds by security/event identity. Its
@@ -283,6 +295,37 @@ class ResearchInputs:
         return MappingProxyType({s.identifier: s for s in self.sources})
 
     @property
+    def bundle_schema(self) -> str:
+        return (
+            "rotation_retrospective_inputs_v2"
+            if self.close_policy == SEPARATE_CLOSES
+            else "rotation_retrospective_inputs_v1"
+        )
+
+    @property
+    def close_comparison(self) -> dict:
+        calendar = SessionCalendar()
+        daily = {(x.session, x.asset): number(x.close) for x in self.closes}
+        closing = [
+            b
+            for b in self.bars
+            if b.end == calendar.session(b.end.astimezone(NY).date()).market_close
+        ]
+        mismatches = sum(
+            abs(number(b.close) - daily[b.end.astimezone(NY).date(), b.asset]) > RAW_CLOSE_TOLERANCE
+            for b in closing
+        )
+        return {
+            "policy": self.close_policy,
+            "comparison_tolerance_usd": str(RAW_CLOSE_TOLERANCE),
+            "pairs": len(closing),
+            "mismatches": mismatches,
+            "reconciled": mismatches == 0,
+            "signal_prices": "raw_daily_aggregate_close",
+            "execution_and_nav_prices": "completed_RTH_minute_close",
+        }
+
+    @property
     def fingerprint(self) -> str:
         return digest(
             json.dumps(asdict(self), sort_keys=True, separators=(",", ":"), default=str).encode()
@@ -294,8 +337,16 @@ class ResearchInputs:
         if digest(body) != expected_sha256:
             raise ValueError("Normalized research bundle hash mismatch")
         document = json.loads(body, parse_float=Decimal)
-        if document.get("schema") != "rotation_retrospective_inputs_v1":
+        schema = document.get("schema")
+        if schema not in {"rotation_retrospective_inputs_v1", "rotation_retrospective_inputs_v2"}:
             raise ValueError("Unsupported research schema")
+        if (
+            schema == "rotation_retrospective_inputs_v1"
+            and document.get("close_policy", MATCHED_CLOSES) != MATCHED_CLOSES
+        ):
+            raise ValueError("Separate close definitions require a v2 bundle")
+        if schema == "rotation_retrospective_inputs_v2" and "close_policy" not in document:
+            raise ValueError("Explicit research close policy required")
         sources = tuple(
             ResearchSource(
                 s["identifier"], s["sha256"], datetime.fromisoformat(s["observed_at"]), s["url"]
@@ -355,6 +406,7 @@ class ResearchInputs:
             tuple(date.fromisoformat(d) for d in document["settlement_sessions"]),
             document["settlement_source_id"],
             document["origin"],
+            document.get("close_policy", MATCHED_CLOSES),
         )
 
 
