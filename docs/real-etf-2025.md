@@ -112,3 +112,48 @@ After the tool-only fix is tested and merged, update the existing reviewed-SHA v
 new exact main commit and dispatch this same workflow with `scope=all`. This reuses the 42 retained
 products, attempts only the six missing products, and obtains separate fresh-runner verification.
 It does not rerun the previous workflow revision or require another API-use approval.
+
+## Retained-input raw-share audit after recovery
+
+Run `38699804457` on `ec54ee2dbeb3e492170ddd33843c378ef6a1b2f4` retained all six recovery
+inputs (XLE four requests, XLP two, all other targets zero). All 12 capture reports and their
+same-runner replays matched. Seven strict components passed; XLB/XLE/XLK/XLU/XLY retained the
+strict dividend-basis rejection. Their original `cash_amount` and event-year issuer tax fields
+match, and their price split basis passes. Their vendor-derived adjusted dividend field is still
+unverified. This is evidence for checking the raw-share path separately, not permission to repair
+the derived field, infer a rounding rule or claim all strict components passed.
+
+Eleven fresh verifiers succeeded. XLF first stopped with GitHub HTTP 403 in the context guard;
+its read-only retry stopped with GitHub HTTP 403 during retained-input reads. Neither error proves
+a rate-limit cause or a market-data error; the old logs have no rate-limit response headers.
+The shared client now identifies a primary limit only when HTTP 403/429 explicitly contains
+`X-RateLimit-Remaining: 0`, preserving a numeric reset clock when valid. There is no automatic retry.
+
+`tools/real_etf_2025_audit.py` and **Reviewed retained 2025 ETF raw-basis audit** perform exactly two
+all-target batches: one private report writer and one independent read-only recomputation. No step
+receives a market API key. Missing inputs stop; the audit never invokes the recovery network path.
+The code-repository visibility GET uses the workflow's built-in read token, separately from the
+existing private archive credential. Owner, exact-main, dispatch, private destination and no-debug
+checks remain mandatory. Within each runner only immutable Git commits/trees/blobs are cached;
+reference and repository visibility checks remain fresh. Each target's private source bindings,
+strict result and independent raw-share result are retained in a new report bundle and manifest.
+
+The raw-share component requires the same source structure, full raw/adjusted price timeline,
+pay boundary, no within-window split, captured split/price consistency, original cash-to-issuer
+match and event-year tax-field arithmetic. It pairs original cash only with original-share raw
+prices and runs the previously reviewed independent holding-unit/gross-index comparison. It never
+uses `split_adjusted_cash_amount` or substitutes it into an event. Tests reject wrong original cash,
+wrong price normalization and missing boundaries even when a derived field is quarantined.
+The strict combined comparison is still run and its failures are shown alongside the raw result.
+
+`RAW_BASIS_RETROSPECTIVE_SIGNAL_COMPONENT_PASS` certifies only that narrow retrospective component.
+It is not `SAME_YEAR_RETROSPECTIVE_COMPONENTS_PASS`, a vendor-view match, actual cash, issuer finality,
+historical PIT, Engine/settlement or strategy performance admission. All real admission flags and
+`full_real_scenarios_accepted=0` stay unchanged. Old capture/recovery plans, reservations and report
+bytes are untouched. The real all-target raw audit has not been run yet.
+
+After this tool-only change is tested and merged, update the existing reviewed SHA and manually
+dispatch **Reviewed retained 2025 ETF raw-basis audit** on main. It has no scope input and audits
+all 12 targets using retained bytes with zero new issuer or market requests. Do not repeat the
+capture workflow to obtain this new report. Check each raw and strict status and the bundle digest
+across the two independent runners before updating acceptance.

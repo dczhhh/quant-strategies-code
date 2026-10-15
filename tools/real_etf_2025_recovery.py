@@ -60,7 +60,7 @@ def code(error):
         return str(error)
     candidate = getattr(error, "code", None)
     if type(candidate) is str and re.fullmatch(
-        r"GITHUB_HTTP_(?:401|403|404|429|FAILED)|CHECK_FAILED", candidate
+        r"GITHUB_HTTP_(?:401|403|404|429|FAILED)|GITHUB_PRIMARY_RATE_LIMIT|CHECK_FAILED", candidate
     ):
         return candidate
     if isinstance(error, TimeoutError):
