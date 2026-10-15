@@ -82,8 +82,11 @@ green CI, metadata string or unlimited API budget grants real-entry admission.
 Legacy 5A–5E and tax source pins stay intact. A separately pinned entry overlay
 used source commit `f38b3e8b75e1e555d3d66d8dad0b609371515e22` with verifier v5.
 The additive research-isolation overlay uses frozen source
-`0b2b716ed44e00f8a1027b6ef2ee3ca9257e60c6` with verifier v6. The legacy,
-tax and security overlay maps remain intact. Earlier v5/v4 identities fail closed
+`0b2b716ed44e00f8a1027b6ef2ee3ca9257e60c6` with verifier v6. The additive
+replay-integrity overlay uses source `4ccf9456d5d91efe1ff3fd718c7a06d18e6fdc1d`
+with verifier v7, binding complete checkpoint coverage, order/fee identities,
+cross-kind action uniqueness and raw daily/minute close consistency. The legacy,
+tax, security and v6 overlay maps remain intact. Earlier v6/v5/v4 identities fail closed
 instead of silently approving new source. Existing raw archives, receipts and
 unknown request reservations remain unchanged. The separate
 [retrospective research entry](rotation-retrospective-research.md) can invoke the

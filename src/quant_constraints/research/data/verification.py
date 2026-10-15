@@ -66,12 +66,13 @@ from .verification_contracts import (
 )
 from .verification_wire import RECORD_TYPES, _encode, decode_records, safe_field
 
-VERIFICATION_VERSION = "research_verification_orchestration_synthetic_v6_research_isolation"
+VERIFICATION_VERSION = "research_verification_orchestration_synthetic_v7_research_integrity"
 LEGACY_IMPLEMENTATION_BASE = "fb870fd70a5d3438c20adcdb3c606c04533719a0"
 TAX_RUNTIME_SOURCE_REVISION = "9938de9c441e289b9eb5b5e5bf3814e2ff726ebb"
 SECURITY_ENTRY_SOURCE_REVISION = "f38b3e8b75e1e555d3d66d8dad0b609371515e22"
 RESEARCH_RUNTIME_SOURCE_REVISION = "0b2b716ed44e00f8a1027b6ef2ee3ca9257e60c6"
-REVIEWED_IMPLEMENTATION_BASE = RESEARCH_RUNTIME_SOURCE_REVISION
+RESEARCH_INTEGRITY_SOURCE_REVISION = "4ccf9456d5d91efe1ff3fd718c7a06d18e6fdc1d"
+REVIEWED_IMPLEMENTATION_BASE = RESEARCH_INTEGRITY_SOURCE_REVISION
 # Source bytes of the accepted 5A/B/C/D implementations and their direct contracts.
 # Wheel source files must match too; a declared git SHA alone is not evidence.
 BASE_SOURCE_SHA256 = {
@@ -128,6 +129,12 @@ RESEARCH_RUNTIME_SOURCE_SHA256 = {
     "ml4t.backtest.strategies.sector_rotation.research_inputs": "8a8e173f289eb32fca4010cf2516b0d7e2bf9445159b71216c49578f5557c0c3",
     "ml4t.backtest.strategies.sector_rotation.research_ledger": "60501663ab43c562e3617d9ac2c080b93e9a14d474db94dee1c00a6801b8c308",
 }
+# Retain v6 source identities above. New replay-integrity checks need their own
+# source binding, so an older snapshot cannot attest this stricter implementation.
+RESEARCH_INTEGRITY_SOURCE_SHA256 = {
+    "ml4t.backtest.strategies.sector_rotation.research_inputs": "2a243bb06e993a6811f6131f21a0115b37977a9bb8c32eb7cc963713f980da77",
+    "ml4t.backtest.strategies.sector_rotation.research_ledger": "2825831ca15f670a1e1cec6d185b72d728336bddc2ab8a17a1e082ebb1f98c67",
+}
 ROLE_DEPENDENCIES = {
     EvidenceRole.RAW: {EvidenceRole.IDENTITIES},
     EvidenceRole.COMPARISON: {
@@ -173,6 +180,7 @@ def _versions(snapshot: FrozenDatasetInput) -> dict:
         **TAX_RUNTIME_SOURCE_SHA256,
         **ENTRY_RUNTIME_SOURCE_SHA256,
         **RESEARCH_RUNTIME_SOURCE_SHA256,
+        **RESEARCH_INTEGRITY_SOURCE_SHA256,
     }
     actual_sources = {name: _source_digest(name) for name in expected_sources}
     if actual_sources != expected_sources:
@@ -188,6 +196,8 @@ def _versions(snapshot: FrozenDatasetInput) -> dict:
         "entry_runtime_source_revision": SECURITY_ENTRY_SOURCE_REVISION,
         "research_runtime_source_sha256": RESEARCH_RUNTIME_SOURCE_SHA256,
         "research_runtime_source_revision": RESEARCH_RUNTIME_SOURCE_REVISION,
+        "research_integrity_source_sha256": RESEARCH_INTEGRITY_SOURCE_SHA256,
+        "research_integrity_source_revision": RESEARCH_INTEGRITY_SOURCE_REVISION,
         "reviewed_source_sha256": actual_sources,
         "orchestration_version": VERIFICATION_VERSION,
         "orchestration_source_sha256": {
