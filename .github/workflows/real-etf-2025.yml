@@ -65,21 +65,22 @@ jobs:
       - name: Install locked invented-fixture dependencies before credential exposure
         run: uv sync --dev --locked --python 3.12
       - name: Validate invented 2025 source and archive regressions
-        run: uv run python -m unittest tests.test_real_etf_2025 -v
+        run: uv run python -m unittest tests.test_real_etf_2025 tests.test_real_etf_2025_recovery -v
       - name: Capture fixed 2025 inputs and privately retain retrospective components
         env:
           RUNNER_ENVIRONMENT: ${{ runner.environment }}
           ARCHIVE_WRITE_TOKEN: ${{ secrets.ARCHIVE_WRITE_TOKEN }}
           MASSIVE_API_KEY: ${{ secrets.MASSIVE }}
-        run: python3 -I tools/real_etf_2025.py capture "$CASE_TICKER"
+        run: python3 -I tools/real_etf_2025_recovery.py capture "$CASE_TICKER"
       - name: Recompute from retained bytes without further source requests
         env:
           RUNNER_ENVIRONMENT: ${{ runner.environment }}
           ARCHIVE_WRITE_TOKEN: ${{ secrets.ARCHIVE_WRITE_TOKEN }}
-        run: python3 -I tools/real_etf_2025.py verify "$CASE_TICKER"
+        run: python3 -I tools/real_etf_2025_recovery.py verify "$CASE_TICKER"
 
   verify:
     needs: [plan, capture]
+    if: ${{ always() && !cancelled() && needs.plan.result == 'success' }}
     strategy:
       fail-fast: false
       max-parallel: 2
@@ -103,4 +104,4 @@ jobs:
         env:
           RUNNER_ENVIRONMENT: ${{ runner.environment }}
           ARCHIVE_WRITE_TOKEN: ${{ secrets.ARCHIVE_WRITE_TOKEN }}
-        run: python3 -I tools/real_etf_2025.py verify "$CASE_TICKER"
+        run: python3 -I tools/real_etf_2025_recovery.py verify "$CASE_TICKER"
