@@ -86,7 +86,12 @@ The additive research-isolation overlay uses frozen source
 replay-integrity overlay uses source `4ccf9456d5d91efe1ff3fd718c7a06d18e6fdc1d`
 with verifier v7, binding complete checkpoint coverage, order/fee identities,
 cross-kind action uniqueness and raw daily/minute close consistency. The legacy,
-tax, security and v6 overlay maps remain intact. Earlier v6/v5/v4 identities fail closed
+tax, security and v6/v7 overlay maps remain intact. The v8 close-policy overlay
+binds source `e11883fca0a70f2b10bb9b547c8589e6efd27682`: strict default matching
+is preserved, while an explicit v2 research bundle may retain separate daily
+signal and completed-minute execution/NAV prices with unreconciled-pair counts.
+No price is substituted and neither monetary nor strict source tolerance changes.
+Earlier v7/v6/v5/v4 identities fail closed
 instead of silently approving new source. Existing raw archives, receipts and
 unknown request reservations remain unchanged. The separate
 [retrospective research entry](rotation-retrospective-research.md) can invoke the

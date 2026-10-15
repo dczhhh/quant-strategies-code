@@ -526,6 +526,7 @@ def test_research_overlay_preserves_previous_scope_pins_and_refuses_v5_snapshot(
 
 def test_replay_integrity_overlay_preserves_v6_pins_and_rejects_its_old_snapshot():
     from quant_constraints.research.data.verification import (
+        RESEARCH_CLOSE_POLICY_SOURCE_SHA256,
         RESEARCH_INTEGRITY_SOURCE_REVISION,
         RESEARCH_INTEGRITY_SOURCE_SHA256,
         RESEARCH_RUNTIME_SOURCE_REVISION,
@@ -539,10 +540,34 @@ def test_replay_integrity_overlay_preserves_v6_pins_and_rejects_its_old_snapshot
     assert proof["research_integrity_source_sha256"] == RESEARCH_INTEGRITY_SOURCE_SHA256
     assert proof["research_runtime_source_sha256"] == RESEARCH_RUNTIME_SOURCE_SHA256
     assert (
-        proof["reviewed_source_sha256"] | RESEARCH_INTEGRITY_SOURCE_SHA256
+        proof["reviewed_source_sha256"]
+        | RESEARCH_INTEGRITY_SOURCE_SHA256
+        | RESEARCH_CLOSE_POLICY_SOURCE_SHA256
         == proof["reviewed_source_sha256"]
     )
     old = freeze(req, records, pipeline=versions(code_revision=RESEARCH_RUNTIME_SOURCE_REVISION))
+    rejected(run(old), "VERSION_MISMATCH", "versions")
+
+
+def test_close_policy_overlay_preserves_v7_evidence_and_refuses_its_old_snapshot():
+    from quant_constraints.research.data.verification import (
+        RESEARCH_CLOSE_POLICY_SOURCE_REVISION,
+        RESEARCH_CLOSE_POLICY_SOURCE_SHA256,
+        RESEARCH_INTEGRITY_SOURCE_REVISION,
+        RESEARCH_INTEGRITY_SOURCE_SHA256,
+        _versions,
+    )
+
+    req, records = fixture()
+    proof = _versions(freeze(req, records))
+    assert proof["research_close_policy_source_revision"] == RESEARCH_CLOSE_POLICY_SOURCE_REVISION
+    assert proof["research_close_policy_source_sha256"] == RESEARCH_CLOSE_POLICY_SOURCE_SHA256
+    assert proof["research_integrity_source_sha256"] == RESEARCH_INTEGRITY_SOURCE_SHA256
+    assert (
+        proof["reviewed_source_sha256"] | RESEARCH_CLOSE_POLICY_SOURCE_SHA256
+        == proof["reviewed_source_sha256"]
+    )
+    old = freeze(req, records, pipeline=versions(code_revision=RESEARCH_INTEGRITY_SOURCE_REVISION))
     rejected(run(old), "VERSION_MISMATCH", "versions")
 
 

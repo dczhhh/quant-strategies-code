@@ -66,13 +66,14 @@ from .verification_contracts import (
 )
 from .verification_wire import RECORD_TYPES, _encode, decode_records, safe_field
 
-VERIFICATION_VERSION = "research_verification_orchestration_synthetic_v7_research_integrity"
+VERIFICATION_VERSION = "research_verification_orchestration_synthetic_v8_close_policy"
 LEGACY_IMPLEMENTATION_BASE = "fb870fd70a5d3438c20adcdb3c606c04533719a0"
 TAX_RUNTIME_SOURCE_REVISION = "9938de9c441e289b9eb5b5e5bf3814e2ff726ebb"
 SECURITY_ENTRY_SOURCE_REVISION = "f38b3e8b75e1e555d3d66d8dad0b609371515e22"
 RESEARCH_RUNTIME_SOURCE_REVISION = "0b2b716ed44e00f8a1027b6ef2ee3ca9257e60c6"
 RESEARCH_INTEGRITY_SOURCE_REVISION = "4ccf9456d5d91efe1ff3fd718c7a06d18e6fdc1d"
-REVIEWED_IMPLEMENTATION_BASE = RESEARCH_INTEGRITY_SOURCE_REVISION
+RESEARCH_CLOSE_POLICY_SOURCE_REVISION = "e11883fca0a70f2b10bb9b547c8589e6efd27682"
+REVIEWED_IMPLEMENTATION_BASE = RESEARCH_CLOSE_POLICY_SOURCE_REVISION
 # Source bytes of the accepted 5A/B/C/D implementations and their direct contracts.
 # Wheel source files must match too; a declared git SHA alone is not evidence.
 BASE_SOURCE_SHA256 = {
@@ -135,6 +136,12 @@ RESEARCH_INTEGRITY_SOURCE_SHA256 = {
     "ml4t.backtest.strategies.sector_rotation.research_inputs": "2a243bb06e993a6811f6131f21a0115b37977a9bb8c32eb7cc963713f980da77",
     "ml4t.backtest.strategies.sector_rotation.research_ledger": "2825831ca15f670a1e1cec6d185b72d728336bddc2ab8a17a1e082ebb1f98c67",
 }
+# Preserve all preceding overlays. Explicit price conventions and their reports
+# require a new source identity; v7 cannot attest the new research input schema.
+RESEARCH_CLOSE_POLICY_SOURCE_SHA256 = {
+    "ml4t.backtest.strategies.sector_rotation.research": "a1d2a9278f2f36c5d84f2df85f83e1c8a9c6e7f78c612267940465e2ddd89f42",
+    "ml4t.backtest.strategies.sector_rotation.research_inputs": "5564ea837fe3798a1fa89e525892e49f71663ab10519340836dc7d5d0cad3bd7",
+}
 ROLE_DEPENDENCIES = {
     EvidenceRole.RAW: {EvidenceRole.IDENTITIES},
     EvidenceRole.COMPARISON: {
@@ -181,6 +188,7 @@ def _versions(snapshot: FrozenDatasetInput) -> dict:
         **ENTRY_RUNTIME_SOURCE_SHA256,
         **RESEARCH_RUNTIME_SOURCE_SHA256,
         **RESEARCH_INTEGRITY_SOURCE_SHA256,
+        **RESEARCH_CLOSE_POLICY_SOURCE_SHA256,
     }
     actual_sources = {name: _source_digest(name) for name in expected_sources}
     if actual_sources != expected_sources:
@@ -198,6 +206,8 @@ def _versions(snapshot: FrozenDatasetInput) -> dict:
         "research_runtime_source_revision": RESEARCH_RUNTIME_SOURCE_REVISION,
         "research_integrity_source_sha256": RESEARCH_INTEGRITY_SOURCE_SHA256,
         "research_integrity_source_revision": RESEARCH_INTEGRITY_SOURCE_REVISION,
+        "research_close_policy_source_sha256": RESEARCH_CLOSE_POLICY_SOURCE_SHA256,
+        "research_close_policy_source_revision": RESEARCH_CLOSE_POLICY_SOURCE_REVISION,
         "reviewed_source_sha256": actual_sources,
         "orchestration_version": VERIFICATION_VERSION,
         "orchestration_source_sha256": {
