@@ -165,6 +165,31 @@ def test_capture_is_append_only_and_verify_never_asks_for_market_credentials():
     assert made == 0 and archive.refs == saved
 
 
+def test_full_pool_capture_and_two_independent_replays_fit_archive_call_budget():
+    archive = FakeGitHub(c.m.DESTINATION)
+    c.capture(
+        c.r.CachedArchive(archive),
+        "SPY",
+        SOURCE,
+        lambda: "KEY",
+        fetch=lambda product, _: (200, c.m.canonical(market(product))),
+    )
+    capture_calls = len(archive.events)
+    capture_writes = sum(method == "POST" for method, _ in archive.events)
+    archive.events.clear()
+    c.capture(
+        c.r.CachedArchive(archive), "SPY", SOURCE, lambda: pytest.fail("No key"), verify_only=True
+    )
+    verify_calls = len(archive.events)
+    # Four retained legacy products cost at most 48 reads per target; the two
+    # interrupted legacy targets add 32. Allow 150 calls for issuer/calendar/
+    # result metadata and all remaining one-off private writes and readbacks.
+    total = 12 * (capture_calls + 2 * verify_calls) + 2 * (12 * 48 + 32) + 150
+    assert total < 5000, (capture_calls, verify_calls, total)
+    assert 12 * capture_writes + 60 < 500
+    assert len(c.groups("SPY")) == 1
+
+
 def test_an_unknown_group_outcome_is_not_retried():
     archive = FakeGitHub(c.m.DESTINATION)
     archive.refs[c.group_ref("SPY", 0, True)] = "e" * 40

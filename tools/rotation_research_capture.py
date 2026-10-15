@@ -26,6 +26,7 @@ START, FIRST, LAST = date(2024, 8, 26), date(2025, 8, 29), date(2025, 11, 5)
 OPERATION_BRANCH = "main"
 OPERATION_WORKFLOW = ".github/workflows/rotation-research-operation.yml"
 PREFIX = "research/data/rotation_research_2025_v1/"
+GROUP_SIZE = 21
 POLICY = {
     "schema": "rotation_research_capture_v1",
     "universe": list(p.TICKERS),
@@ -35,6 +36,7 @@ POLICY = {
     "raw_original_share_basis": True,
     "reuse_existing_2025_components": True,
     "maximum_response_bytes": m.FILE_LIMIT,
+    "maximum_group_requests": GROUP_SIZE,
     "single_attempt_per_reserved_group": True,
     "unknown_outcome_must_not_be_reset": True,
     "historical_PIT_verified": False,
@@ -110,7 +112,8 @@ PLAN_HASH = m.sha256(
 
 def groups(ticker):
     rows = products(ticker)
-    return tuple(rows[i : i + 5] for i in range(0, len(rows), 5))
+    size = GROUP_SIZE
+    return tuple(rows[i : i + size] for i in range(0, len(rows), size))
 
 
 def group_ref(ticker, index, budget=False):
@@ -222,7 +225,7 @@ def read_group(destination, ticker, index):
 
 
 def capture(destination, ticker, source, key_factory, *, verify_only=False, fetch=get):
-    """Reserve at most five requests atomically, archive once, and read back exact bytes."""
+    """Reserve one finite ticker batch, archive once, and read back exact bytes."""
     destination.visibility(True)
     captured, made = {}, 0
     for index, plan in enumerate(groups(ticker)):

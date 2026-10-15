@@ -30,12 +30,20 @@ bank-holiday reference, not an authenticated historical NSCC calendar. The DTCC
 a9637 notice was located through official search, but direct PDF URLs returned
 404 during preparation; no raw DTCC PDF archive or hash is claimed.
 
-Every group reserves at most five requests before any request. Completed groups
+Each ticker reserves its finite group of at most 21 requests before any request. Completed groups
 are reused without credentials or source requests. A reservation with no capture
 retains unknown outcome and cannot be retried automatically. Each Git write still
 checks private repository visibility, and captures, source receipts, normalized
 inputs and results are retained only in `quant-strategies-data`. No raw bytes or
 prices are printed or uploaded as public Actions artifacts.
+
+Ticker-sized groups reduce private GitHub REST overhead while keeping the same
+252 market requests and per-response bound. An invented exact-protocol budget
+regression covers capture plus two fresh source verifications and the legacy
+input overhead; it must stay under 5,000 archive API calls and 500 content writes.
+These two limits follow the [official REST rate-limit documentation](https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api).
+This does not promise
+an unused real token quota or waive any private-write/readback check.
 
 The operation template is [the fixed workflow](examples/rotation-research-operation.yml).
 After source checks pass, replace only its source placeholder with the immutable
