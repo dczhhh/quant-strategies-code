@@ -66,3 +66,49 @@ Inspect the component result as well as job success; denied or incomplete inputs
 successfully while the component status is still unverified. After the SPY source path passes,
 choose `all`; its completed SPY inputs are reused with zero additional SPY provider requests.
 The capture job recomputes its private report, followed by an independent fresh-runner verifier.
+
+## Interrupted all-target run and bounded recovery
+
+Run `38695965896` on `0ceaa1764c86286032b3af03f5c6a8a31b73b28d` retained 42 of 48
+market products. XLE raw and XLP dividends have reservations without retained outcomes; their
+original HTTP status and failure cause are unknown. Do not reset their references or retry the
+old operator. XLE's other three products and XLP splits had not been attempted. Ten targets
+retained reports: six passed the component checks and XLB/XLK/XLU/XLY explicitly rejected the
+dividend share-basis comparison despite green archive jobs. The old independent verify matrix
+was skipped because the capture matrix contained failed jobs.
+
+`tools/real_etf_2025_recovery.py` introduces a separate plan for exactly those six missing products,
+with at most one new attempt per new reservation. It pins and validates the original interrupted
+XLE/XLP state and the original reservation bytes before requests. Both old unknown outcomes remain
+unknown; old files, references, plan hash and reports are unchanged. XLP's two completed price
+products and all four products for each of the other ten targets are read only. A new timeout
+remains a new unknown outcome and cannot be retried by this operator. A verifier cannot fetch,
+access a provider key or create a missing report/input. No new issuer request is made.
+
+The existing dispatch-only workflow now invokes this recovery/diagnostic operator. It still
+requires the owner, reviewed exact main SHA, GitHub-hosted runner, private destination and disabled
+debug output. The new independent verify matrix runs after the capture matrix finishes even if
+another ticker fails; each verifier must find and reproduce its own retained report. This does
+not turn a missing or rejected report into a pass.
+
+New reports live under `real_etf_2025_recovery_v1`, independently of the original reports. They
+retain the strict combined component result, plus separate source structure, price share basis,
+dividend share basis, issuer history and same-year tax-field diagnostics. Comparing the other
+vendor dividend field to issuer history is explicitly diagnostic: it never replaces the original
+cash field or repairs an event. Decimal amounts, exact residuals, source cells and receipts remain
+private. Public output includes only aggregate statuses, a field-equality boolean, request counts
+and the report digest. Failure output identifies an allowlisted phase, fixed product identifier
+and safe error category, never arbitrary exception text, URLs, credentials or response bodies.
+
+There is no verified explanation for the four strict dividend-basis rejections yet. In particular,
+do not assume rounding, change the `1E-8` amount tolerance or divide either vendor field a second
+time to force a match. The documented fields describe original cash per share and a current-share
+derived view; [the vendor's explanation](https://massive.com/knowledge-base/article/does-massive-adjust-historic-dividends-for-splits)
+does not establish the precision or correctness of these retained responses. Recovery diagnostics
+must be checked on the private runner before claiming a cause or closing this issue. Finality,
+historical PIT, actual broker cash, Engine, settlement and performance admission remain false.
+
+After the tool-only fix is tested and merged, update the existing reviewed-SHA variable to the
+new exact main commit and dispatch this same workflow with `scope=all`. This reuses the 42 retained
+products, attempts only the six missing products, and obtains separate fresh-runner verification.
+It does not rerun the previous workflow revision or require another API-use approval.

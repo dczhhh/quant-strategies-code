@@ -100,6 +100,10 @@ jobs:
           uv run ruff format --check tools/real_etf_2025.py tests/test_real_etf_2025.py
           uv run ty check tools/real_etf_2025.py
           uv run python -m unittest tests.test_real_etf_2025 -v
+          uv run ruff check --no-fix tools/real_etf_2025_recovery.py tests/test_real_etf_2025_recovery.py
+          uv run ruff format --check tools/real_etf_2025_recovery.py tests/test_real_etf_2025_recovery.py
+          uv run ty check tools/real_etf_2025_recovery.py
+          uv run python -m unittest tests.test_real_etf_2025_recovery -v
           uv run ruff check --no-fix tools/ibkr_activity_audit.py tests/test_ibkr_activity_audit.py
           uv run ruff format --check tools/ibkr_activity_audit.py tests/test_ibkr_activity_audit.py
           uv run ty check tools/ibkr_activity_audit.py
