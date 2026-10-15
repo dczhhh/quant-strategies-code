@@ -83,6 +83,25 @@ def sector_rotation_engine(
             "UNVERIFIED: real-corporate-actions and real-tax-reconciliation acceptance incomplete; "
             "only explicitly synthetic regression execution is currently supported"
         )
+    if getattr(strategy.source, "evidence_mode", None) == "retrospective_research":
+        raise ValueError("Retrospective inputs cannot be labelled synthetic")
+    return _build_rotation_engine(
+        feed, strategy, context_provider, config, controller, corporate_action_provider, fee_model
+    )
+
+
+def _build_rotation_engine(
+    feed: Any,
+    strategy: SectorRotationStrategy,
+    context_provider: Any,
+    config: BacktestConfig | None,
+    controller: ConstraintController | None,
+    corporate_action_provider: Any,
+    fee_model: Any,
+    broker_type: type[SectorRotationBroker] = SectorRotationBroker,
+    engine_type: type[Engine] = Engine,
+) -> Engine:
+    """Share execution checks; callers own their distinct evidence admission."""
     settings = strategy.config
     controller = controller or ConstraintController(
         settings.constraints(corporate_actions_enabled=corporate_action_provider is not None),
@@ -111,7 +130,7 @@ def sector_rotation_engine(
         raise ValueError("Rotation requires NEXT_BAR causal execution")
 
     def factory(backtest_config: BacktestConfig, **kwargs: Any) -> SectorRotationBroker:
-        broker = SectorRotationBroker.from_config(backtest_config, **kwargs)
+        broker = broker_type.from_config(backtest_config, **kwargs)
         assert isinstance(broker, SectorRotationBroker)
         broker.configure_constraints(
             controller, context_provider, backtest_config, fee_model, corporate_action_provider
@@ -119,4 +138,4 @@ def sector_rotation_engine(
         broker.bind_rotation(strategy)
         return broker
 
-    return Engine(feed, strategy, config, broker_factory=factory)
+    return engine_type(feed, strategy, config, broker_factory=factory)

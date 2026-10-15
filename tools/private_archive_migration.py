@@ -29,9 +29,10 @@ CALL_LIMIT = 800
 class Stopped(Exception):
     """No provider body, credential, URL or private error text in the public log."""
 
-    def __init__(self, code: str = "CHECK_FAILED"):
+    def __init__(self, code: str = "CHECK_FAILED", retry_at: int | None = None):
         super().__init__()
         self.code = code
+        self.retry_at = retry_at
 
 
 def require(condition: bool) -> None:
@@ -111,12 +112,27 @@ class GitHub:
             with error:
                 if method == "GET" and error.code == 404 and suffix.startswith("/git/ref/heads/"):
                     return None
-                code = (
-                    f"GITHUB_HTTP_{error.code}"
-                    if error.code in {401, 403, 404, 429}
-                    else "GITHUB_HTTP_FAILED"
+                primary_limited = (
+                    error.code in {403, 429}
+                    and error.headers is not None
+                    and error.headers.get("X-RateLimit-Remaining") == "0"
                 )
-            raise Stopped(code) from None
+                reset = None if error.headers is None else error.headers.get("X-RateLimit-Reset")
+                retry_at = (
+                    int(reset)
+                    if primary_limited and reset and re.fullmatch(r"[0-9]{10}", reset)
+                    else None
+                )
+                code = (
+                    "GITHUB_PRIMARY_RATE_LIMIT"
+                    if primary_limited
+                    else (
+                        f"GITHUB_HTTP_{error.code}"
+                        if error.code in {401, 403, 404, 429}
+                        else "GITHUB_HTTP_FAILED"
+                    )
+                )
+            raise Stopped(code, retry_at) from None
         require(len(content) <= RESPONSE_LIMIT)
         result = json.loads(content)
         require(type(result) is dict)

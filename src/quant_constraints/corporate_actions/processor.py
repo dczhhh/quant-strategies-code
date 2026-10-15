@@ -171,16 +171,7 @@ class CorporateActionProcessor:
         for sid in sorted(securities):
             coverage, supplied = self.provider.snapshot(sid, asof)
             start = last.astimezone(NY).date() if last is not None else day
-            if (
-                coverage is None
-                or coverage.security_id != sid
-                or coverage.available_at > asof
-                or coverage.missing
-                or not coverage.point_in_time
-                or coverage.covered_from > start
-                or coverage.covered_until < day
-            ):
-                raise ValueError(f"Missing point-in-time corporate action coverage: {sid}")
+            self._validate_coverage(coverage, sid, asof, start, day)
             latest: dict[str, CorporateAction] = {}
             for event in sorted(supplied, key=lambda e: (e.available_at, e.version)):
                 if event.security_id == sid and event.available_at <= asof:
@@ -254,19 +245,39 @@ class CorporateActionProcessor:
                 if event.kind == "SPLIT" and asset is not None:
                     self.validate_fractional_reverse_split(asset, event)
                 if event.kind == "CASH_DIVIDEND" and pos is not None:
-                    if (
-                        broker.controller.config.dividend_tax_profile != "legacy"
-                        and broker.context_provider(asof, asset, "corporate_action").instrument
-                        != "equity"
-                    ):
-                        raise ValueError(
-                            "Country ordinary-stock tax profile does not support ETF distributions"
-                        )
-                    resolve_dividend_tax_rate(broker.controller.config, event, asof)
+                    self._validate_dividend_tax(event, asset, asof)
                 events.append((effective, asset, event, False))
         rank = {"SPLIT": 0, "CASH_DIVIDEND": 1, "CASH_CREDIT": 2}
         events.sort(key=lambda item: (item[0], rank.get(item[2].kind, 3), item[2].key))
         return identities, events, quantities, empty
+
+    def _validate_coverage(self, coverage, sid, asof, start, day):
+        if (
+            coverage is None
+            or coverage.security_id != sid
+            or coverage.available_at > asof
+            or coverage.missing
+            or not coverage.point_in_time
+            or coverage.covered_from > start
+            or coverage.covered_until < day
+        ):
+            raise ValueError(f"Missing point-in-time corporate action coverage: {sid}")
+
+    def _validate_dividend_tax(self, event, asset, asof):
+        if (
+            self.broker.controller.config.dividend_tax_profile != "legacy"
+            and self.broker.context_provider(asof, asset, "corporate_action").instrument != "equity"
+        ):
+            raise ValueError(
+                "Country ordinary-stock tax profile does not support ETF distributions"
+            )
+        self._tax_rate(event, asof)
+
+    def _tax_rate(self, event, asof):
+        return resolve_dividend_tax_rate(self.broker.controller.config, event, asof)
+
+    def _credit_requires_confirmation(self):
+        return self.broker.controller.config.dividend_tax_profile != "legacy"
 
     @staticmethod
     def validate_terms(event: CorporateAction):
@@ -585,8 +596,7 @@ class CorporateActionProcessor:
         if quantity == 0:
             record.update(status="observed_no_entitlement")
             return
-        rate, tax_evidence = resolve_dividend_tax_rate(
-            self.broker.controller.config,
+        rate, tax_evidence = self._tax_rate(
             event,
             self.state["last_asof"] or event.available_at
             if "processed_at" not in record
@@ -647,7 +657,7 @@ class CorporateActionProcessor:
         if quantity <= 0:
             raise ValueError(f"No qualifying shares for dividend credit: {parent}")
         estimate = item["net"]
-        actual_tax = self.broker.controller.config.dividend_tax_profile != "legacy"
+        actual_tax = self._credit_requires_confirmation()
         correction = None
         if actual_tax:
             observed_at = (

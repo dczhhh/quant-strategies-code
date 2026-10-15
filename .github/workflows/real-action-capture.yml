@@ -1,0 +1,54 @@
+name: Reviewed real corporate-action input capture
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: real-action-capture-v1
+  cancel-in-progress: false
+
+jobs:
+  capture:
+    if: >-
+      github.repository == 'dczhhh/quant-strategies-code' &&
+      github.actor == 'dczhhh' &&
+      github.event_name == 'workflow_dispatch' &&
+      github.ref == 'refs/heads/main' &&
+      vars.REAL_ACTION_ENABLED == 'true' &&
+      github.sha == vars.REAL_ACTION_REVIEWED_SHA
+    environment: private-archive
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        group: [nvda-2024, ge-2021, td-source, etf-1, etf-2, etf-3, etf-4]
+    env:
+      REAL_ACTION_ENABLED: ${{ vars.REAL_ACTION_ENABLED }}
+      REAL_ACTION_REVIEWED_SHA: ${{ vars.REAL_ACTION_REVIEWED_SHA }}
+      ACTIONS_STEP_DEBUG: ${{ secrets.ACTIONS_STEP_DEBUG }}
+      ACTIONS_RUNNER_DEBUG: ${{ secrets.ACTIONS_RUNNER_DEBUG }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ vars.REAL_ACTION_REVIEWED_SHA }}
+          persist-credentials: false
+      - name: Validate invented transport fixtures without credentials
+        run: python3 -m unittest tests.test_real_action_capture -v
+      - name: Capture real input bytes only in immutable private Git objects
+        env:
+          RUNNER_ENVIRONMENT: ${{ runner.environment }}
+          ARCHIVE_WRITE_TOKEN: ${{ secrets.ARCHIVE_WRITE_TOKEN }}
+          MASSIVE_API_KEY: ${{ secrets.MASSIVE }}
+          CAPTURE_GROUP: ${{ matrix.group }}
+        run: python3 -I tools/real_action_capture.py capture "$CAPTURE_GROUP"
+      - name: Independently read back without provider credential
+        env:
+          RUNNER_ENVIRONMENT: ${{ runner.environment }}
+          ARCHIVE_WRITE_TOKEN: ${{ secrets.ARCHIVE_WRITE_TOKEN }}
+          CAPTURE_GROUP: ${{ matrix.group }}
+        run: python3 -I tools/real_action_capture.py verify "$CAPTURE_GROUP"

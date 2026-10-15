@@ -87,6 +87,8 @@ def resolve_dividend_tax_rate(
 ) -> tuple[float, dict]:
     """Read-only selection before economic mutation. Intervals are [from, to)."""
     aware(asof)
+    if config.dividend_tax_profile == "retrospective_scenario":
+        raise ValueError("Retrospective tax assumptions require the isolated research processor")
     if config.dividend_tax_profile == "legacy":
         return (
             event.withholding_rate

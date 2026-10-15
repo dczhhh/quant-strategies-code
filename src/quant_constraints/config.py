@@ -82,9 +82,9 @@ class ConstraintConfig:
     )
     dividend_withholding_rate: float = 0.0
     dividend_tax_scenario: str = "gross_no_withholding"
-    dividend_tax_profile: Literal["legacy", "cn_mainland_individual_treaty", "explicit_rules"] = (
-        "legacy"
-    )
+    dividend_tax_profile: Literal[
+        "legacy", "cn_mainland_individual_treaty", "explicit_rules", "retrospective_scenario"
+    ] = "legacy"
     dividend_tax_rules: tuple[DividendTaxRule, ...] = ()
     dividend_tax_qualification: DividendTaxQualification | None = None
     dividend_tax_conflict_policy: Literal["record_actual", "reject"] = "record_actual"
@@ -110,7 +110,12 @@ class ConstraintConfig:
             raise ValueError("Invalid drawdown reduction fraction")
         choices = {
             "security_entry_policy": {"legacy", "exclude_canada_and_adrs"},
-            "dividend_tax_profile": {"legacy", "cn_mainland_individual_treaty", "explicit_rules"},
+            "dividend_tax_profile": {
+                "legacy",
+                "cn_mainland_individual_treaty",
+                "explicit_rules",
+                "retrospective_scenario",
+            },
             "dividend_tax_conflict_policy": {"record_actual", "reject"},
             "unknown_dividend_tax_policy": {"reject"},
             "capital_gains_tax_mode": {"none"},
@@ -250,7 +255,7 @@ class ConstraintConfig:
             self.dividend_tax_qualification, DividendTaxQualification
         ):
             raise ValueError("Invalid dividend tax qualification")
-        if self.dividend_tax_profile != "legacy" and (
+        if self.dividend_tax_profile not in {"legacy", "retrospective_scenario"} and (
             not self.dividend_tax_rules
             or self.dividend_withholding_rate
             or self.dividend_tax_scenario == "gross_no_withholding"
