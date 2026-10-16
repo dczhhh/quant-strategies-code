@@ -155,6 +155,9 @@ class _ResearchProvider:
             volume=float(bar.volume),
             liquidity_available_at=stamp,
             security_id=security.security_id,
+            research_share_step=(
+                0.1 if self.assumptions.share_step == Decimal("0.1") else None
+            ),
             execution_data_mode="raw_execution",
             risk_data_mode="raw_execution",
             signal_data_mode="total_return_signal",
