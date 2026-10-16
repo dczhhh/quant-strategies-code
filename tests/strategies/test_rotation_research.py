@@ -853,9 +853,7 @@ def test_one_decimal_spy_benchmark_uses_same_cash_and_fee_oracle():
     engine.run()
     assert engine.research_report["status"] == "RETROSPECTIVE_ENGINE_LEDGER_PASS"
     assert engine.research_report["assumptions"]["share_step"] == "0.1"
-    assert any(
-        Decimal(str(fill.quantity)) % Decimal("1") != 0 for fill in engine.broker.fills
-    )
+    assert any(Decimal(str(fill.quantity)) % Decimal("1") != 0 for fill in engine.broker.fills)
     assert all(
         abs(
             Decimal(str(fill.quantity)) * 10
