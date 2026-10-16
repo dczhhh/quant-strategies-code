@@ -39,8 +39,8 @@ entry and trusted dataset issuance remain blocked before Engine construction.
 | GE 2021 | `OUT_OF_WINDOW` / backlog | Outside current five-year provider bars coverage; no new fetch or waived fractional-cash evidence |
 | WOLF | `UNSUPPORTED_REORGANIZATION_UNVERIFIED` | Cancellation/replacement/contingent distribution is not an ordinary split; retained vendor structural rejection and SEC 403 |
 | Ordinary US dividend | Credit components pass; full lifecycle `UNVERIFIED` | Statement evidence supports private component reconciliation; independent ex/record/pay, pre-ex holdings/cash and complete trading/cash/NAV history are not all bound |
-| ETF classification and total return | `UNVERIFIED` | Existing 11 sector ETFs + SPY raw/split-only/distribution captures are retained; official ordinary/capital-gain/ROC/special mapping and independent dividend-inclusive chain remain unverified |
-| Historical PIT and intraday execution | `UNVERIFIED` | Present-day archived revision/capture time is not a historical knowledge clock; daily bars cannot establish intraday next-bar fills, costs or liquidity |
+| ETF classification and total return | Retrospective 2025 components pass; strict/PIT `UNVERIFIED` | Same-year retained issuer composition supports the ordinary-only research scenario and original-share total-return signals. Final 2024 classification and historical known-at are not established; five vendor-derived dividend-basis conflicts remain |
+| Historical PIT and intraday execution | Conditional minute replay passes; historical PIT `UNVERIFIED` | The 2025 minute research Engine and independent cash/fee/settlement/NAV ledger passed. Present-day captured revisions and modeled liquidity/tax/credits do not establish historical knowledge or actual broker execution |
 | US tax qualification | `UNVERIFIED` where personal eligibility is required | `qualification=null` continues rejecting estimated treaty benefits; actual sourced credit amounts do not infer eligibility |
 | Canadian tax and associated FX workstream | `EXCLUDED_BY_OWNER_SCOPE` | Removed plan item 4; Canadian securities excluded from owner entry profiles, not marked tax-accepted |
 | ADR entry/tax workstream | `EXCLUDED_BY_OWNER_SCOPE` | All ADR new buys excluded; existing ADR credits remain private historical component evidence, not eligible strategy purchases |
@@ -69,6 +69,17 @@ and [ICI primary tax summary](https://www.ssga.com/library-content/products/fund
 Document location is not a content-hash-bound archive, a historical version or
 classification acceptance. A primary year-end summary cannot be backdated to
 the ex-date of an earlier distribution.
+
+The later same-year 2025 research operation
+[38829104695](https://github.com/dczhhh/quant-strategies-code/actions/runs/38829104695)
+did bind retained issuer rows, ordinary-only numeric compositions and their real
+capture clocks. Replay and independent fresh verification passed the canonical
+minute Engine and 1E-8 ledger checks; report-bundle SHA256 is
+`5a063d472a41addd8be92529544444dc9a8930730e0153168312777f3099d043`.
+This supersedes the earlier absence of retrospective 2025 execution evidence,
+while leaving 2024 final classification, actual broker confirmation and historical
+PIT unresolved. The funded SPY comparator uses the same conditional ledger and
+does not grant an additional full-real certificate.
 
 ## Decision
 

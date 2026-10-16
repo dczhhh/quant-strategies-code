@@ -293,6 +293,16 @@ def test_complete_source_bundle_runs_canonical_engine_and_checks_dividend_cash(n
     assert result["summary"]["modeled_credits"] == result["summary"]["dividend_accruals"]
     assert result["engine"]["warmup_sessions"] == 253
     assert result["summary"]["performance_admission"] is False
+    funded = result["funded_spy"]
+    assert funded["summary"]["status"] == "RETROSPECTIVE_ENGINE_LEDGER_PASS"
+    assert funded["summary"]["fills"] > 0
+    assert funded["summary"]["dividend_accruals"] == funded["summary"]["modeled_credits"] == 1
+    assert funded["engine"]["input_fingerprint"] == result["engine"]["input_fingerprint"]
+    assert funded["engine"]["assumptions"] == result["engine"]["assumptions"]
+    assert result["summary"]["strategy_minus_funded_spy_percentage_points"] == (
+        result["summary"]["return_pct"] - funded["summary"]["return_pct"]
+    )
+    assert result["summary"]["benchmark_exposure_matched"] is False
 
 
 def test_issuer_xlsx_decimal_precision_uses_existing_amount_tolerance(normalized_sources):
@@ -409,6 +419,22 @@ def test_private_report_readback_and_independent_fresh_engine_run_match(normaliz
     second = u.execute(lambda: archive, SOURCE, verify_only=True, load_documents=lambda _: docs)
     assert first == second and archive.refs == before
     assert all(len(body) <= c.m.FILE_LIMIT for body in archive.blobs.values())
+
+
+def test_failed_funded_reference_prevents_a_successful_combined_archive(
+    normalized_sources, monkeypatch
+):
+    docs, _, _ = normalized_sources
+    archive = FakeGitHub(c.m.DESTINATION)
+
+    class FailedReference:
+        def run(self):
+            raise ValueError("invented benchmark ledger failure")
+
+    monkeypatch.setattr(u, "retrospective_spy_benchmark", lambda *_: FailedReference())
+    with pytest.raises(ValueError, match="invented benchmark ledger failure"):
+        u.execute(lambda: archive, SOURCE, load_documents=lambda _: docs)
+    assert archive.ref(u.REPORT_REF) is None
 
 
 @pytest.mark.parametrize(

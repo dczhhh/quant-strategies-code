@@ -17,6 +17,10 @@ from ml4t.backtest.strategies.sector_rotation.research import (
     ResearchAssumptions,
     retrospective_rotation_engine,
 )
+from ml4t.backtest.strategies.sector_rotation.research_benchmark import (
+    BENCHMARK_POLICY,
+    retrospective_spy_benchmark,
+)
 from ml4t.backtest.strategies.sector_rotation.research_inputs import (
     MATCHED_CLOSES,
     SEPARATE_CLOSES,
@@ -143,6 +147,136 @@ def run(**changes):
     engine = retrospective_rotation_engine(bundle, ASSUMPTIONS, settings())
     engine.run()
     return engine
+
+
+def test_funded_spy_is_causal_and_uses_completed_closes_with_the_same_ledger():
+    original = inputs()
+    bundle = replace(
+        original,
+        bars=tuple(
+            replace(b, open=b.close - 1, low=b.close - 2, high=b.close + 2) for b in original.bars
+        ),
+    )
+    engine = retrospective_spy_benchmark(bundle, ASSUMPTIONS)
+    engine.run()
+    assert engine.research_report["status"] == "RETROSPECTIVE_ENGINE_LEDGER_PASS"
+    assert engine.research_report["benchmark_policy"] == BENCHMARK_POLICY
+    assert engine.research_report["input_fingerprint"] == bundle.fingerprint
+    assert engine.research_report["performance_admission"] is False
+    assert len(engine.broker.orders) == len(engine.broker.fills) == 1
+    order, fill = engine.broker.orders[0], engine.broker.fills[0]
+    assert order.asset == fill.asset == "SPY"
+    assert order.created_at == datetime(2025, 9, 30, 9, 35, tzinfo=NY)
+    assert fill.timestamp == datetime(2025, 9, 30, 9, 36, tzinfo=NY)
+    bar = next(b for b in bundle.bars if (b.end, b.asset) == (fill.timestamp, "SPY"))
+    assert fill.price == pytest.approx(float(bar.close * Decimal("1.0002")))
+    assert fill.commission > 0
+    assert engine.research_trace[-1]["positions"] == {"SPY": fill.quantity}
+
+
+@pytest.mark.parametrize("paid", [True, False])
+def test_funded_spy_net_dividend_cash_and_receivable_match_hand_portfolio(paid):
+    original = inputs()
+    event = ResearchDistribution(
+        "SPY",
+        "spy-cash",
+        date(2025, 10, 7),
+        date(2025, 10, 7),
+        date(2025, 10, 9) if paid else date(2025, 11, 20),
+        Decimal("0.75"),
+        "ordinary_fund",
+        "fixture",
+        "fixture",
+    )
+    bundle = replace(original, distributions=(event,), splits=())
+    engine = retrospective_spy_benchmark(bundle, ASSUMPTIONS)
+    engine.run()
+    fill = engine.broker.fills[0]
+    quantity = Decimal(str(fill.quantity))
+    assert quantity == 94
+    # Independent one-order, below-first-tier fee calculation for this invented input.
+    fees = max(Decimal("0.35"), quantity * Decimal("0.0035")) * Decimal("1.000735")
+    fees += quantity * (Decimal("0.0035") + Decimal("0.0002") + Decimal("0.000003"))
+    net = quantity * Decimal("0.75") * Decimal("0.90")
+    initial_close = next(
+        b.close for b in bundle.bars if b.asset == "SPY" and b.end == fill.timestamp
+    )
+    expected_cash = ASSUMPTIONS.initial_cash - quantity * initial_close * Decimal("1.0002") - fees
+    expected_cash += net if paid else 0
+    final = engine.research_trace[-1]
+    last_close = next(
+        b.close for b in bundle.bars if b.asset == "SPY" and b.end == final["timestamp"]
+    )
+    assert abs(Decimal(str(final["cash"])) - expected_cash) <= Decimal("1E-8")
+    assert abs(Decimal(str(final["receivables"])) - (0 if paid else net)) <= Decimal("1E-8")
+    expected_nav = expected_cash + quantity * last_close + (0 if paid else net)
+    assert abs(Decimal(str(final["NAV"])) - expected_nav) <= Decimal("1E-8")
+    assert len(engine.broker.fills) == 1  # No ex-date or credit-date reinvestment.
+
+
+def test_funded_spy_partial_entry_expires_after_three_sessions_without_resubmission():
+    original = inputs()
+    bundle = replace(original, bars=tuple(replace(b, volume=Decimal(100)) for b in original.bars))
+    engine = retrospective_spy_benchmark(bundle, ASSUMPTIONS)
+    engine.run()
+    assert len(engine.broker.orders) == 1
+    assert len(engine.broker.fills) > 1
+    assert all(f.quantity == 1 and f.asset == "SPY" for f in engine.broker.fills)
+    assert {f.timestamp.astimezone(NY).date() for f in engine.broker.fills} == {
+        date(2025, 9, 30),
+        date(2025, 10, 1),
+        date(2025, 10, 2),
+    }
+    assert engine.broker.orders[0].filled_quantity < engine.broker.orders[0].quantity
+    assert engine.research_report["status"] == "RETROSPECTIVE_ENGINE_LEDGER_PASS"
+
+
+def test_funded_spy_retains_drift_without_sector_cap_sales_and_future_prices_cannot_size_entry():
+    original = inputs()
+    future = date(2025, 10, 20)
+    changed = replace(
+        original,
+        closes=tuple(
+            replace(c, close=c.close * 2) if c.asset == "SPY" and c.session >= future else c
+            for c in original.closes
+        ),
+        bars=tuple(
+            replace(b, **{k: getattr(b, k) * 2 for k in ("open", "high", "low", "close")})
+            if b.asset == "SPY" and b.end.date() >= future
+            else b
+            for b in original.bars
+        ),
+    )
+    engines = [retrospective_spy_benchmark(b, ASSUMPTIONS) for b in (original, changed)]
+    for engine in engines:
+        engine.run()
+    first, second = (e.broker.fills for e in engines)
+    assert len(first) == len(second) == 1
+    assert asdict(first[0]) == asdict(second[0])
+    state = engines[1].research_trace[-1]
+    assert (state["NAV"] - state["cash"]) / state["NAV"] > 0.95
+    assert engines[1].broker.controller.config.drift_reduction == "disabled"
+
+
+def test_funded_spy_insufficient_cash_and_unfilled_entry_cannot_pass():
+    original = inputs()
+    engine = retrospective_spy_benchmark(original, replace(ASSUMPTIONS, initial_cash=Decimal(50)))
+    with pytest.raises(ValueError, match="cannot fund one whole SPY share"):
+        engine.run()
+    assert not engine.broker.fills
+    engine = retrospective_spy_benchmark(
+        replace(original, bars=tuple(replace(b, volume=Decimal(0)) for b in original.bars)),
+        ASSUMPTIONS,
+    )
+    with pytest.raises(ResearchLedgerMismatch, match="No executions"):
+        engine.run()
+
+
+def test_funded_spy_cannot_open_the_normal_real_or_synthetic_entry():
+    engine = retrospective_spy_benchmark(inputs(), ASSUMPTIONS)
+    for mode, message in (("real", "UNVERIFIED"), ("synthetic", "cannot be labelled synthetic")):
+        with pytest.raises(ValueError, match=message):
+            sector_rotation_engine(None, engine.strategy, None, validation_mode=mode)
 
 
 def test_raw_share_returns_match_independent_hand_reinvestment_through_split_and_dividend():

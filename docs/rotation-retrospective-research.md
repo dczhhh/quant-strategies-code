@@ -126,3 +126,38 @@ vendor-derived dividend conflicts are untouched. Strategy PR #6 remains unmerged
 
 The original account workbook NAV bridge stays a separate source-consistency result. A passing
 scenario ledger does not explain its residual or certify the original report as reconciled.
+
+## Funded SPY comparator
+
+`retrospective_spy_benchmark(inputs, assumptions)` in `research_benchmark.py` uses
+the same original input fingerprint, canonical Engine, completed-minute research
+broker, next-minute slippage, participation cap, tiered fee snapshot, tax scenario,
+payment-day cash modeling and independent Decimal ledger as the rotation run.
+Both start with the same cash and no positions, and finish at the same minute NAV
+mark without a terminal liquidation. Cash earns zero interest in both models.
+
+The reference submits one whole-share SPY entry at 09:35 in the first execution
+session, targeting 95% less the existing 5bp cushion, estimated slippage and fees.
+It uses only the completed observation visible at submission. Actual filled
+investment depends on integer shares, subsequent prices and available volume;
+95% is not a promise of an exact filled weight. The entry may fill only in the
+same 09:35–09:45 window for three trading sessions, then expires without retry.
+No new orders reinvest distributions or restore the original weight.
+
+A passive single diversified fund permits one position up to 100% and disables
+sector-cap drift sales. Those benchmark-only portfolio settings do not change
+rotation's 15–25% sector caps, monthly allocation or SPY defense. The reference
+is therefore **not exposure matched** to the tactical rotation portfolio.
+The return difference is an arithmetic percentage-point comparison, not an
+estimate of risk-adjusted alpha. Net receivables remain in NAV even if their
+modeled payment falls after the end of the run; withholding is applied once.
+
+The earlier gross SPY daily ex-close reinvestment series remains a separately
+labeled diagnostic. The funded reference uses minute marks, actual modeled
+whole-share fills, net distributions left as cash and trading costs. Neither
+series replaces or reconciles the retained daily/minute close differences.
+Private result schema v3 adds the complete funded-SPY trace, fills, actions and
+independent ledger report. It preserves the existing rotation fields and uses
+`research-data/rotation-2025-v3-engine-report`, leaving v1/v2 results unchanged.
+Both successful economic replays are required before the operator can return
+success or write the report. Strict real/PIT admission remains blocked.

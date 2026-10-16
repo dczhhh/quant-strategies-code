@@ -19,6 +19,9 @@ from ml4t.backtest.strategies.sector_rotation.research import (  # noqa: E402
     ResearchAssumptions,
     retrospective_rotation_engine,
 )
+from ml4t.backtest.strategies.sector_rotation.research_benchmark import (  # noqa: E402
+    retrospective_spy_benchmark,
+)
 from ml4t.backtest.strategies.sector_rotation.research_inputs import (  # noqa: E402
     SEPARATE_CLOSES,
     RawClose,
@@ -33,8 +36,8 @@ from ml4t.backtest.strategies.sector_rotation.research_inputs import (  # noqa: 
 from quant_constraints.adapter import ConstrainedBroker  # noqa: E402
 from quant_constraints.calendar import NY  # noqa: E402
 
-REPORT_PREFIX = "research/verification/rotation_research_2025_v2/"
-REPORT_REF = "research-data/rotation-2025-v2-engine-report"
+REPORT_PREFIX = "research/verification/rotation_research_2025_v3/"
+REPORT_REF = "research-data/rotation-2025-v3-engine-report"
 ASSUMPTIONS = ResearchAssumptions(
     "owner CN-mainland 10-percent ordinary-US-fund research scenario",
     Decimal(100000),
@@ -317,10 +320,8 @@ def build_inputs(archive_factory, source_commit, docs):
     return ResearchInputs.from_bundle(body, c.m.sha256(body), bodies), body
 
 
-def replay(inputs, progress=None):
-    engine = retrospective_rotation_engine(inputs, ASSUMPTIONS)
-    if progress is not None:
-        progress["engine_invoked"] = True
+def engine_result(engine):
+    """Keep complete prices/holdings private; return only modeled aggregates publicly."""
     engine.run()
     assert isinstance(engine.broker, ConstrainedBroker)
     daily = [
@@ -329,13 +330,38 @@ def replay(inputs, progress=None):
         if state["timestamp"]
         == c.CAL.session(state["timestamp"].astimezone(NY).date()).market_close
     ]
-    peak, drawdown = float(ASSUMPTIONS.initial_cash), 0.0
+    initial_cash = float(engine.research_assumptions.initial_cash)
+    peak, drawdown = initial_cash, 0.0
     for state in daily:
         peak = max(peak, state["NAV"])
         drawdown = min(drawdown, state["NAV"] / peak - 1)
     records = engine.broker.corporate_action_evidence()["records"]
-    reference = dict(raw_total_returns(inputs))
     summary = {
+        "status": engine.research_report["status"],
+        "return_pct": (daily[-1]["NAV"] / initial_cash - 1) * 100,
+        "maximum_daily_drawdown_pct": drawdown * 100,
+        "fills": len(engine.broker.fills),
+        "commission_usd": sum(f.commission for f in engine.broker.fills),
+        "dividend_accruals": sum(r["status"] == "dividend_receivable" for r in records),
+        "modeled_credits": sum(r["status"] == "cash_credited" for r in records),
+    }
+    return {
+        "summary": summary,
+        "engine": engine.research_report,
+        "trace": engine.research_trace,
+        "fills": [asdict(f) for f in engine.broker.fills],
+        "corporate_actions": records,
+    }
+
+
+def replay(inputs, progress=None):
+    engine = retrospective_rotation_engine(inputs, ASSUMPTIONS)
+    if progress is not None:
+        progress["engine_invoked"] = True
+    rotation = engine_result(engine)
+    benchmark = engine_result(retrospective_spy_benchmark(inputs, ASSUMPTIONS))
+    reference = dict(raw_total_returns(inputs))
+    summary = rotation["summary"] | {
         "status": engine.research_report["status"],
         "execution_start": str(c.FIRST),
         "execution_end": str(c.LAST),
@@ -346,28 +372,24 @@ def replay(inputs, progress=None):
         "daily_minute_close_pairs": inputs.close_comparison["pairs"],
         "daily_minute_close_mismatches": inputs.close_comparison["mismatches"],
         "daily_minute_close_reconciled": inputs.close_comparison["reconciled"],
-        "return_pct": (daily[-1]["NAV"] / float(ASSUMPTIONS.initial_cash) - 1) * 100,
         "spy_gross_total_return_pct": float(
             (reference[c.LAST]["SPY"] / reference[c.FIRST]["SPY"] - 1) * 100
         ),
         "benchmark_convention": "SPY_gross_ex_close_reinvestment_no_cost_no_tax",
-        "maximum_daily_drawdown_pct": drawdown * 100,
-        "fills": len(engine.broker.fills),
-        "commission_usd": sum(f.commission for f in engine.broker.fills),
-        "dividend_accruals": sum(r["status"] == "dividend_receivable" for r in records),
-        "modeled_credits": sum(r["status"] == "cash_credited" for r in records),
+        "spy_funded_benchmark": benchmark["summary"],
+        "funded_benchmark_convention": benchmark["engine"]["benchmark_policy"]["name"],
+        "strategy_minus_funded_spy_percentage_points": rotation["summary"]["return_pct"]
+        - benchmark["summary"]["return_pct"],
+        "benchmark_exposure_matched": False,
         "PIT_verified": False,
         "actual_broker_execution_verified": False,
         "performance_admission": False,
         "full_real_scenarios_accepted": 0,
     }
-    return {
-        "schema": "rotation_research_result_v2",
+    return rotation | {
+        "schema": "rotation_research_result_v3",
         "summary": summary,
-        "engine": engine.research_report,
-        "trace": engine.research_trace,
-        "fills": [asdict(f) for f in engine.broker.fills],
-        "corporate_actions": records,
+        "funded_spy": benchmark,
     }
 
 
@@ -385,7 +407,7 @@ def execute(
     }
     payload[REPORT_PREFIX + "manifest.json"] = canonical(
         {
-            "schema": "rotation_research_report_manifest_v2",
+            "schema": "rotation_research_report_manifest_v3",
             "source_commit": source_commit,
             "input_schema": inputs.bundle_schema,
             "close_policy": inputs.close_policy,
