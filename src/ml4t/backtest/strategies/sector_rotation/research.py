@@ -6,6 +6,7 @@ credits and the dated fee snapshot are disclosed modeling assumptions. The
 canonical constrained broker continues to own all economic state.
 """
 
+import math
 from dataclasses import asdict, dataclass, replace
 from datetime import datetime, time
 from decimal import Decimal
@@ -38,6 +39,7 @@ class ResearchAssumptions:
     slippage_bps: Decimal
     maximum_participation: Decimal = Decimal("0.01")
     assumed_ordinary_years: tuple[int, ...] = ()
+    share_step: Decimal = Decimal("1")  # optional 0.1-share scenario
 
     def __post_init__(self):
         if not self.name.strip():
@@ -54,6 +56,7 @@ class ResearchAssumptions:
             "modeled_spread",
             "slippage_bps",
             "maximum_participation",
+            "share_step",
         ):
             object.__setattr__(self, field, number(getattr(self, field)))
         if (
@@ -62,6 +65,7 @@ class ResearchAssumptions:
             or not 0 <= self.modeled_spread <= Decimal("0.0015")
             or not 0 <= self.slippage_bps < 100
             or not 0 < self.maximum_participation <= 1
+            or self.share_step not in {Decimal("1"), Decimal("0.1")}
         ):
             raise ValueError("Invalid research assumptions")
 
@@ -169,6 +173,7 @@ class _ResearchProvider:
             volume=float(bar.volume),
             liquidity_available_at=stamp,
             security_id=security.security_id,
+            research_share_step=(0.1 if self.assumptions.share_step == Decimal("0.1") else None),
             execution_data_mode="raw_execution",
             risk_data_mode="raw_execution",
             signal_data_mode="total_return_signal",
@@ -254,8 +259,48 @@ class _ResearchActions(CorporateActionProcessor):
             )
 
 
+def _share_step_floor(quantity: float, step: Decimal) -> float:
+    """Round absolute order/fill sizes DOWN to a supported research share increment."""
+    if not math.isfinite(quantity):
+        raise ValueError("Non-finite research share quantity")
+    unit = float(step)
+    units = math.floor(abs(quantity) / unit + 1e-8)
+    # Decimal conversion prevents 0.1 binary drift from reaching the order journal.
+    return float(Decimal(units) * step)
+
+
+class _ResearchParticipationLimit(VolumeParticipationLimit):
+    """Apply the same step to partial fills; never round a volume cap upward."""
+
+    def __init__(self, max_participation: float, share_step: Decimal):
+        super().__init__(max_participation)
+        self.share_step = share_step
+
+    def calculate(self, order_quantity, bar_volume, price):
+        if bar_volume is None:
+            raise ValueError("Retrospective fractional fill needs observed volume")
+        result = super().calculate(order_quantity, bar_volume, price)
+        executable = _share_step_floor(result.fillable_quantity, self.share_step)
+        return replace(
+            result,
+            fillable_quantity=executable,
+            remaining_quantity=max(0.0, order_quantity - executable),
+            participation_rate=executable / bar_volume if bar_volume > 0 else 0.0,
+        )
+
+
 class _ResearchBroker(SectorRotationBroker):
     research_provider: _ResearchProvider
+    research_quantity_step: Decimal = Decimal("1")
+
+    def submit_order(self, asset, quantity, *args, **kwargs):
+        # Constrain ALL research entries/rebalances/risk exits, not just target sizing.
+        if self.research_quantity_step != 1:
+            size = _share_step_floor(quantity, self.research_quantity_step)
+            if not size:
+                return None
+            quantity = math.copysign(size, quantity)
+        return super().submit_order(asset, quantity, *args, **kwargs)
 
     def _process_orders(self, *args, **kwargs):
         # The canonical NEXT_BAR lifecycle supplies use_open=True. Here each
@@ -276,6 +321,7 @@ class _ResearchBroker(SectorRotationBroker):
         if not isinstance(corporate_action_provider, _ResearchProvider):
             raise ValueError("Research broker requires its bound input provider")
         self.research_provider = corporate_action_provider
+        self.research_quantity_step = corporate_action_provider.assumptions.share_step
         super().configure_constraints(
             controller, context_provider, config, fee_model, corporate_action_provider
         )
@@ -335,7 +381,7 @@ def retrospective_rotation_engine(
 ) -> RetrospectiveRotationEngine:
     """Build a separately labeled historical simulation with no strict admission.
 
-    Integer shares, unknown-venue 2026 fee snapshot backcast, next completed-minute
+    Configurable one-share or 0.1-share steps, 2026 fee snapshot backcast, next completed-minute
     close plus explicit slippage, and modeled payment-day credit are fixed here.
     """
     if not isinstance(inputs, ResearchInputs) or not isinstance(assumptions, ResearchAssumptions):
@@ -375,7 +421,7 @@ def retrospective_rotation_engine(
     )
     config = cash_backtest_config(
         initial_cash=float(assumptions.initial_cash),
-        share_type=ShareType.INTEGER,
+        share_type=ShareType.INTEGER if assumptions.share_step == 1 else ShareType.FRACTIONAL,
         execution_price=ExecutionPrice.CLOSE,
         slippage_type=SlippageType.PERCENTAGE,
         slippage_rate=float(assumptions.slippage_bps / 10000),
@@ -392,8 +438,12 @@ def retrospective_rotation_engine(
         engine_type=RetrospectiveRotationEngine,
     )
     assert isinstance(engine, RetrospectiveRotationEngine)
-    engine.broker.execution_limits = VolumeParticipationLimit(
-        float(assumptions.maximum_participation)
+    engine.broker.execution_limits = (
+        VolumeParticipationLimit(float(assumptions.maximum_participation))
+        if assumptions.share_step == 1
+        else _ResearchParticipationLimit(
+            float(assumptions.maximum_participation), assumptions.share_step
+        )
     )
     engine.research_inputs, engine.research_assumptions = inputs, assumptions
     engine.research_trace = []
