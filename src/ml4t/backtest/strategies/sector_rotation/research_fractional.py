@@ -19,6 +19,7 @@ from quant_constraints.adapter import cash_backtest_config
 from quant_constraints.calendar import NY
 from quant_constraints.corporate_actions import CorporateAction, CorporateActionCoverage
 from quant_constraints.corporate_actions.processor import CorporateActionProcessor
+from quant_constraints.fees.ibkr_fractional_order import IBKRParentOrderFractionalResearch
 from quant_constraints.gates import PortfolioGate
 
 from ... import DataFeed, Engine
@@ -41,10 +42,16 @@ class ResearchAssumptions:
     maximum_participation: Decimal = Decimal("0.01")
     assumed_ordinary_years: tuple[int, ...] = ()
     share_step: Decimal = Decimal("1")  # optional 0.1-share scenario
+    fractional_fee_policy: str = "parent_order_tiered"
 
     def __post_init__(self):
         if not self.name.strip():
             raise ValueError("A named research scenario is required")
+        if not isinstance(self.fractional_fee_policy, str) or self.fractional_fee_policy not in {
+            "parent_order_tiered",
+            "published_per_execution",
+        }:
+            raise ValueError("Unsupported fractional fee research policy")
         years = tuple(self.assumed_ordinary_years)
         if years not in ((), (2024,)) or any(type(year) is not int for year in years):
             raise ValueError(
@@ -362,6 +369,21 @@ class _ResearchBroker(SectorRotationBroker):
             raise ValueError("Research broker requires its bound input provider")
         self.research_provider = corporate_action_provider
         self.research_quantity_step = corporate_action_provider.assumptions.share_step
+        if (
+            self.research_quantity_step == Decimal("0.1")
+            and corporate_action_provider.assumptions.fractional_fee_policy == "parent_order_tiered"
+        ):
+            if fee_model is not None:
+                raise ValueError("Fractional research scenario owns its parent-order fee profile")
+            settings = controller.config
+            fee_model = IBKRParentOrderFractionalResearch(
+                initial_monthly_volume=settings.fee_initial_monthly_volume,
+                initial_month=settings.fee_initial_month,
+                unknown_venue_per_share=settings.fee_unknown_venue_per_share,
+                unknown_venue_rate=settings.fee_unknown_venue_rate,
+                history_mode=settings.fee_history_mode,
+                snapshot_date=settings.fee_snapshot_date,
+            )
         super().configure_constraints(
             controller, context_provider, config, fee_model, corporate_action_provider
         )
@@ -512,7 +534,10 @@ def retrospective_rotation_engine(
         "assumptions": {k: str(v) for k, v in asdict(assumptions).items()},
         "execution": "next_completed_minute_close_plus_scenario_slippage",
         "price_conventions": inputs.close_comparison,
-        "fee_mode": "2026-10-10_normal_charge_snapshot_backcast_unknown_venue",
+        "fee_mode": "account_observed_parent_order_tiered_fractional_snapshot_backcast"
+        if assumptions.share_step == Decimal("0.1")
+        and assumptions.fractional_fee_policy == "parent_order_tiered"
+        else "2026-10-10_normal_charge_snapshot_backcast_unknown_venue",
         "identity_mode": "fixed_domestic_SPDR_retrospective_metadata_not_PIT_attestation",
         "credit_mode": "modeled_pay_date_not_actual_broker_confirmation",
         "warmup_sessions": len(prehistory),

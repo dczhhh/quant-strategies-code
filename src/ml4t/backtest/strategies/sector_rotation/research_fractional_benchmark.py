@@ -184,7 +184,10 @@ def retrospective_spy_benchmark(
         "benchmark_policy": dict(BENCHMARK_POLICY),
         "assumptions": {k: str(v) for k, v in asdict(assumptions).items()},
         "execution": "next_completed_minute_close_plus_scenario_slippage",
-        "fee_mode": "2026-10-10_normal_charge_snapshot_backcast_unknown_venue",
+        "fee_mode": "account_observed_parent_order_tiered_fractional_snapshot_backcast"
+        if assumptions.share_step == Decimal("0.1")
+        and assumptions.fractional_fee_policy == "parent_order_tiered"
+        else "2026-10-10_normal_charge_snapshot_backcast_unknown_venue",
         "credit_mode": "modeled_pay_date_not_actual_broker_confirmation",
         "price_conventions": inputs.close_comparison,
         "source_observed_at": inputs.observed_at.isoformat(),
