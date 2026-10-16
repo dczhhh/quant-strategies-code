@@ -15,4 +15,27 @@ jobs:
       - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4
       - name: Show public-source formatting differences only
         run: |
-          uvx ruff==0.14.10 format --diff src/ml4t/backtest/strategies/sector_rotation/research.py src/ml4t/backtest/strategies/sector_rotation/research_ledger.py tests/strategies/test_rotation_research.py
+          uvx ruff==0.14.10 format --diff src/ml4t/backtest/strategies/sector_rotation/research.py src/ml4t/backtest/strategies/sector_rotation/research_ledger.py tests/strategies/test_rotation_research.py || true
+      - name: Inspect invented-only fractional scenario acceptance
+        run: |
+          uv sync --dev --locked --python 3.12
+          uv run python - <<'PY'
+          import runpy
+          from dataclasses import replace
+          from decimal import Decimal
+          t = runpy.run_path('tests/strategies/test_rotation_research.py')
+          a = replace(t['ASSUMPTIONS'], share_step=Decimal('0.1'))
+          inp = t['inputs'](end='2025-10-03')
+          e = t['retrospective_rotation_engine'](inp,a,t['settings']())
+          try: e.run()
+          except Exception as exc: print('research failure:',type(exc).__name__,str(exc))
+          print('research order count:',len(e.broker.orders),'fills:',len(e.broker.fills))
+          for o in e.broker.orders[:14]:
+            print('invented order:',o.asset,o.quantity,str(o.status),str(getattr(o,'rejection_reason',''))[:80],str(getattr(o,'rejection_code',''))[:80])
+          print('research plan audit tail:',str(e.broker.controller.audit[-8:])[:3000])
+          b = t['retrospective_spy_benchmark'](inp,a)
+          try: b.run()
+          except Exception as exc: print('SPY failure:',type(exc).__name__,str(exc))
+          print('SPY order qty:',[(o.asset,o.quantity,str(o.status)) for o in b.broker.orders])
+          print('SPY fills:',[(x.quantity,x.commission) for x in b.broker.fills])
+          PY
