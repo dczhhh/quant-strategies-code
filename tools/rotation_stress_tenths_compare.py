@@ -66,13 +66,11 @@ def summarize(inputs, assumptions, result):
         "maximum_daily_close_drawdown_pct": a.drawdown(
             [point["NAV"] for point in port["daily"]], float(assumptions.initial_cash)
         ),
-        "average_exposure_pct": 100 * sum(
-            point["exposure"] for point in port["daily"]
-        ) / len(port["daily"]),
+        "average_exposure_pct": 100
+        * sum(point["exposure"] for point in port["daily"])
+        / len(port["daily"]),
         "fills": len(fills),
-        "fractional_fills": sum(
-            Decimal(str(fill["quantity"])) % 1 != 0 for fill in fills
-        ),
+        "fractional_fills": sum(Decimal(str(fill["quantity"])) % 1 != 0 for fill in fills),
         "fees_usd": sum(float(fill["commission"]) for fill in fills),
         "months": [
             {
@@ -93,9 +91,7 @@ def summarize(inputs, assumptions, result):
 def build(archive_factory, source):
     require(source and len(source) == 40, "SOURCE_SHA_INVALID")
     audit = u.pa.ClosePriceAudit()
-    inputs, normalized, provenance = x.build_inputs(
-        archive_factory, d.BASELINE_SOURCE, audit
-    )
+    inputs, normalized, provenance = x.build_inputs(archive_factory, d.BASELINE_SOURCE, audit)
     require(
         inputs.bundle_schema == "rotation_retrospective_inputs_v3_assumed_distribution",
         "INPUT_SCHEMA_CHANGED",
@@ -111,17 +107,13 @@ def build(archive_factory, source):
             "engine": {"rotation": rotation, "funded_SPY": funded},
         }
     require(
-        abs(
-            Decimal(str(cases["whole"]["rotation"]["end_NAV_usd"]))
-            - BASELINE_ROTATION_NAV
-        ) <= Decimal("1E-8"),
+        abs(Decimal(str(cases["whole"]["rotation"]["end_NAV_usd"])) - BASELINE_ROTATION_NAV)
+        <= Decimal("1E-8"),
         "PINNED_V2_ROTATION_CHANGED",
     )
     require(
-        abs(
-            Decimal(str(cases["whole"]["funded_SPY"]["end_NAV_usd"]))
-            - BASELINE_FUNDED_SPY_NAV
-        ) <= Decimal("1E-8"),
+        abs(Decimal(str(cases["whole"]["funded_SPY"]["end_NAV_usd"])) - BASELINE_FUNDED_SPY_NAV)
+        <= Decimal("1E-8"),
         "PINNED_V2_BENCHMARK_CHANGED",
     )
     whole, tenths = cases["whole"], cases["tenths"]
@@ -153,8 +145,7 @@ def build(archive_factory, source):
             "rotation_end_NAV_usd": test["end_NAV_usd"] - base["end_NAV_usd"],
             "rotation_end_cash_usd": test["end_cash_usd"] - base["end_cash_usd"],
             "rotation_max_drawdown_percentage_points": (
-                test["maximum_daily_close_drawdown_pct"]
-                - base["maximum_daily_close_drawdown_pct"]
+                test["maximum_daily_close_drawdown_pct"] - base["maximum_daily_close_drawdown_pct"]
             ),
             "rotation_fees_usd": test["fees_usd"] - base["fees_usd"],
             "funded_SPY_return_percentage_points": (
@@ -234,9 +225,7 @@ def main():
             parent == c.m.BOOTSTRAP and saved == payload,
             "PRIVATE_REPORT_BYTE_MISMATCH",
         )
-        digest = c.m.sha256(
-            u.canonical({k: c.m.sha256(v) for k, v in sorted(payload.items())})
-        )
+        digest = c.m.sha256(u.canonical({k: c.m.sha256(v) for k, v in sorted(payload.items())}))
         print(
             json.dumps(
                 {
