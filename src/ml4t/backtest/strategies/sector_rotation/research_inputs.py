@@ -26,6 +26,7 @@ UNIVERSE = (*SECTOR_ETFS, "SPY")
 RAW_CLOSE_TOLERANCE = Decimal("0.0002")
 MATCHED_CLOSES = "require_matching_daily_minute_closes"
 SEPARATE_CLOSES = "daily_signal_and_minute_execution_valuation"
+ASSUMED_DISTRIBUTION_SCHEMA = "rotation_retrospective_inputs_v3_assumed_distribution"
 
 
 def number(value) -> Decimal:
@@ -143,8 +144,17 @@ class ResearchInputs:
             "settlement_sessions",
         ):
             object.__setattr__(self, name, tuple(getattr(self, name)))
-        if self.origin not in {"retained_market_data", "invented_fixture"}:
+        if self.origin not in {
+            "retained_market_data",
+            "invented_fixture",
+            "retained_prices_with_assumed_distribution",
+        }:
             raise ValueError("Unknown research origin")
+        if (
+            any(e.classification == "assumed_ordinary_fund" for e in self.distributions)
+            and self.origin == "retained_market_data"
+        ):
+            raise ValueError("Assumed classification requires an explicit research origin")
         if self.close_policy not in {MATCHED_CLOSES, SEPARATE_CLOSES}:
             raise ValueError("Unknown research close policy")
         sources = {s.identifier: s for s in self.sources}
@@ -245,7 +255,7 @@ class ResearchInputs:
                 not in (
                     {"ordinary_fund", "unclassified_signal_only"}
                     if signal_only
-                    else {"ordinary_fund"}
+                    else {"ordinary_fund", "assumed_ordinary_fund"}
                 )
                 or number(event.cash_amount) <= 0
                 or event.ex_date > event.record_date
@@ -296,6 +306,8 @@ class ResearchInputs:
 
     @property
     def bundle_schema(self) -> str:
+        if any(event.classification == "assumed_ordinary_fund" for event in self.distributions):
+            return ASSUMED_DISTRIBUTION_SCHEMA
         return (
             "rotation_retrospective_inputs_v2"
             if self.close_policy == SEPARATE_CLOSES
@@ -338,15 +350,25 @@ class ResearchInputs:
             raise ValueError("Normalized research bundle hash mismatch")
         document = json.loads(body, parse_float=Decimal)
         schema = document.get("schema")
-        if schema not in {"rotation_retrospective_inputs_v1", "rotation_retrospective_inputs_v2"}:
+        if schema not in {
+            "rotation_retrospective_inputs_v1",
+            "rotation_retrospective_inputs_v2",
+            ASSUMED_DISTRIBUTION_SCHEMA,
+        }:
             raise ValueError("Unsupported research schema")
         if (
             schema == "rotation_retrospective_inputs_v1"
             and document.get("close_policy", MATCHED_CLOSES) != MATCHED_CLOSES
         ):
             raise ValueError("Separate close definitions require a v2 bundle")
-        if schema == "rotation_retrospective_inputs_v2" and "close_policy" not in document:
+        if schema != "rotation_retrospective_inputs_v1" and "close_policy" not in document:
             raise ValueError("Explicit research close policy required")
+        assumed = any(
+            row.get("classification") == "assumed_ordinary_fund"
+            for row in document["distributions"]
+        )
+        if assumed != (schema == ASSUMED_DISTRIBUTION_SCHEMA):
+            raise ValueError("Assumed classification requires its explicit v3 bundle schema")
         sources = tuple(
             ResearchSource(
                 s["identifier"], s["sha256"], datetime.fromisoformat(s["observed_at"]), s["url"]

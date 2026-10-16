@@ -30,7 +30,17 @@ CONTRACT = {
     "execution_end": str(LAST),
     "universe": list(c.p.TICKERS),
     "strategy": asdict(SectorRotationConfig()),
-    "assumptions": asdict(u.ASSUMPTIONS),
+    "assumptions": {
+        name: getattr(u.ASSUMPTIONS, name)
+        for name in (
+            "name",
+            "initial_cash",
+            "dividend_tax_rate",
+            "modeled_spread",
+            "slippage_bps",
+            "maximum_participation",
+        )
+    },
     "share_quantum": "1",
     "minimum_presample_close_points": 253,
     "minute_policy": "same_13_completed_minutes_per_session_as_frozen_v4",

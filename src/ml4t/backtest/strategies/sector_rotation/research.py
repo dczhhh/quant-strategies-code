@@ -37,10 +37,17 @@ class ResearchAssumptions:
     modeled_spread: Decimal
     slippage_bps: Decimal
     maximum_participation: Decimal = Decimal("0.01")
+    assumed_ordinary_years: tuple[int, ...] = ()
 
     def __post_init__(self):
         if not self.name.strip():
             raise ValueError("A named research scenario is required")
+        years = tuple(self.assumed_ordinary_years)
+        if years not in ((), (2024,)) or any(type(year) is not int for year in years):
+            raise ValueError(
+                "Only the separately disclosed 2024 ordinary-fund assumption is supported"
+            )
+        object.__setattr__(self, "assumed_ordinary_years", years)
         for field in (
             "initial_cash",
             "dividend_tax_rate",
@@ -66,6 +73,19 @@ class _ResearchProvider:
         self.securities = {s.asset: s for s in inputs.securities}
         self.start = inputs.bars[0].end.astimezone(NY).date()
         self.end = inputs.bars[-1].end.astimezone(NY).date()
+        if any(
+            event.classification == "assumed_ordinary_fund"
+            and self.start <= event.ex_date <= self.end
+            and (
+                event.ex_date.year not in assumptions.assumed_ordinary_years
+                or not event.classification_source_id
+                or not event.classification_source_id.startswith("assumption:")
+            )
+            for event in inputs.distributions
+        ):
+            raise ValueError(
+                "Assumed distribution requires an explicit year-bound research scenario"
+            )
         self.events = []
         for split in inputs.splits:
             if self.start <= split.session <= self.end:
@@ -96,7 +116,7 @@ class _ResearchProvider:
                     dividend_per_share=float(event.cash_amount),
                     record_date=event.record_date,
                     payable_date=event.pay_date,
-                    distribution_type="ordinary_fund",
+                    distribution_type=event.classification,
                     tax_source_country="US",
                     tax_source=event.classification_source_id,
                     tax_source_known_at=inputs.source_map[
@@ -187,7 +207,7 @@ class _ResearchActions(CorporateActionProcessor):
     def _tax_rate(self, event, asof):
         provider = self.provider
         if not isinstance(provider, _ResearchProvider) or (
-            event.distribution_type != "ordinary_fund"
+            event.distribution_type not in {"ordinary_fund", "assumed_ordinary_fund"}
             or event.currency != "USD"
             or event.tax_source_country != "US"
             or event.terms != "ordinary"
@@ -197,6 +217,7 @@ class _ResearchActions(CorporateActionProcessor):
             "basis": "explicit_research_tax_scenario",
             "name": provider.assumptions.name,
             "investor_eligibility_verified": False,
+            "classification_assumed": event.distribution_type == "assumed_ordinary_fund",
             "historical_PIT_verified": False,
             "classification_observed_at": event.tax_source_known_at.isoformat()
             if event.tax_source_known_at
@@ -377,7 +398,9 @@ def retrospective_rotation_engine(
     engine.research_inputs, engine.research_assumptions = inputs, assumptions
     engine.research_trace = []
     engine.research_report = {
-        "schema": "rotation_retrospective_engine_v2"
+        "schema": "rotation_retrospective_engine_v3_assumed_distribution"
+        if assumptions.assumed_ordinary_years
+        else "rotation_retrospective_engine_v2"
         if inputs.bundle_schema.endswith("v2")
         else "rotation_retrospective_engine_v1",
         "status": "NOT_RUN",
