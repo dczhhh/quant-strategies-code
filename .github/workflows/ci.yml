@@ -120,6 +120,10 @@ jobs:
           uv run ruff format --check tools/rotation_stress_inventory.py tests/test_rotation_stress_inventory.py
           uv run ty check tools/rotation_stress_inventory.py
           uv run pytest tests/test_rotation_stress_inventory.py -q --no-cov
+          uv run ruff check --no-fix tools/rotation_stress_capture.py tests/test_rotation_stress_capture.py
+          uv run ruff format --check tools/rotation_stress_capture.py tests/test_rotation_stress_capture.py
+          uv run ty check tools/rotation_stress_capture.py
+          uv run pytest tests/test_rotation_stress_capture.py -q --no-cov
 
       - name: Validate private sample workflow expressions without executing capture
         run: |

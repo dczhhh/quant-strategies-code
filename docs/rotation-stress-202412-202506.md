@@ -63,6 +63,27 @@ inventory with gaps does not make G1 input readiness complete.
 
 ## Remaining issue gates
 
+The follow-on [fixed gap-capture launcher](examples/rotation-stress-capture.yml)
+uses `tools/rotation_stress_capture.py`. It requires the exact successful G1
+bundle hash `025d907bc026fd5c5e3b96271a4161a396bc649a0c6d2e97f14a10eef69e5ad2`
+and compares its complete request proposal before reading a provider credential.
+Only its 612 requests may run: 51 per asset, three reserved groups of 17. Raw
+responses are losslessly gzip/base64 packed into at most four bounded parts per
+group. The worst-case content-write budget is 432, including reservations,
+manifests, Git trees/commits/refs; each writer retains the existing two-second
+pacing and private-visibility check, with at most two capture jobs. Individual
+responses retain their own original clocks, status, URL and SHA256. Packing never
+changes a price or adjustment basis.
+
+A first non-200 response stops further requests immediately and is retained before
+rejection. A timeout retains earlier completed responses and marks the uncertain
+request explicitly. Incomplete/unknown groups cannot be reset or retried. A fresh
+read-only matrix has no provider credential; neither capture nor source verification
+invokes an Engine or attests input completeness. Existing inputs, unknown markers
+and prior research reports remain untouched. This follow-on operator executes the
+owner-authorized finite proposal; the earlier inventory itself remains read-only
+with respect to acquisition.
+
 G2 still needs complete inputs, a separately implemented signal/rank/target/order
 oracle and frozen Engine/ledger checks. G3 needs an actual Engine replay and fresh
 reconstruction; funded SPY and explicitly ex-post exposure-matched attribution;
