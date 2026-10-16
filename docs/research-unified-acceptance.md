@@ -106,7 +106,11 @@ The v9 execution overlay binds source `a8942d9621badaf8ee949655b0a135cc98e0fb1f`
 explicitly disabling NEXT_BAR's open-price override only in the isolated completed-
 minute research broker. Unequal opens/closes, partial fills and risk reductions
 must match the independent ledger at the unchanged 1E-8 threshold. All v8 and
-older source maps remain intact. Earlier v8/v7/v6/v5/v4 identities fail closed
+older source maps remain intact. The additive v10 funded-benchmark overlay binds
+`research_benchmark.py` at source `61540910b9dc8349562d3ae7b845762f28397d61`;
+the rotation module and its v9 source map are unchanged. The passive reference
+uses the same Engine, research broker and independent ledger and explicitly
+reports that it is not exposure matched. Earlier v9/v8/v7/v6/v5/v4 identities fail closed
 instead of silently approving new source. Existing raw archives, receipts and
 unknown request reservations remain unchanged. The separate
 [retrospective research entry](rotation-retrospective-research.md) can invoke the
