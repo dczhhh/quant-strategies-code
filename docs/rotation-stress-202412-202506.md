@@ -93,6 +93,48 @@ This is source-retention evidence, not a backtest result.
 
 ## G2/G3: conditional replay, not strict-real admission
 
+### Retained v1 failure and reproducibility correction
+
+Source `962bd550e970f404b8eed7d24846a438bfd74b2e` passed public CI (30 jobs)
+and ecosystem qualification (12 applicable jobs). Actual operation
+[38881861622](https://github.com/dczhhh/quant-strategies-code/actions/runs/38881861622)
+passed preflight and the first six-case replay, but its independent verifier failed
+`INDEPENDENT_STRESS_REPORT_CONFLICT`. The v1 report bundle
+`efa36368b5119d4962870885d270dd371a68a14b727b66d6122725b3266514e1`
+is preserved and **not signed off as reproducible**.
+
+A fully invented crash/recovery fixture reproduced a cross-process difference
+under `PYTHONHASHSEED=1` versus `33`: equal numeric maxima were serialized as
+`0.00` versus `0E-28` at the first monthly close-sensitivity observation and both
+tax-variant observations. An unordered asset set determined which equal Decimal
+zero retained its representation. Sorting that iteration fixes the representation;
+it does not round prices, change a value, adjust a monetary tolerance or tune
+strategy parameters. Normal/bear/replacement fresh-process regressions and a full
+invented six-case crash/recovery byte comparison cover this defect.
+
+The v2 operator keeps the original input-assumption publication revision at
+`962bd550e970f404b8eed7d24846a438bfd74b2e`; a code-only revision does not retag the
+assumption document's original observation clock or input fingerprint. Before any
+v2 report write, `rotation_stress_report_diagnostic.py` authenticates the complete
+pinned v1 bundle, requires **identical normalized input bytes**, and compares all
+six logical documents. Only the two declared report schema/operator metadata
+fields and exact zero-text spellings at the reproduced computed-sensitivity paths
+may differ. Even a USD1E-12 change in cash is rejected; numeric source spelling,
+nonzero diagnostic spelling, unknown fields and other computed values are not
+waived. No source/financial number is normalized to force a match.
+
+Diagnostics expose file hashes, bounded redacted field paths and difference kinds,
+never leaf values, source prices or credentials. A zero-text witness reports only
+research dates and zero spellings. A compatible v1 comparison is not acceptance
+of its failed fresh run. A separate immutable v2 ref and manifest must still pass
+new-runner **every-byte** verification. Replay and verifier deliberately use
+different hash seeds (1 and 33); fixing both to one seed would conceal the defect.
+No v1 report or unknown reservation is overwritten.
+
+The optional `diagnose` mode is read-only, never creates a report and always labels
+its output `NOT_ACCEPTED`; real replay blocks on any undeclared baseline change.
+Actual v2 success is pending execution, not asserted by this source change.
+
 The [conditional replay launcher](examples/rotation-stress-replay.yml) checks the
 immutable source's CI and ecosystem qualification before private archive access.
 It has no vendor credential. `rotation_stress_inputs.py` requires all 415 raw
@@ -148,6 +190,8 @@ are losslessly retained only in the private data repository. Bounded gzip parts
 and a manifest bind every byte, source commit, module hashes, G1 hash and capture
 plan. A fresh runner reconstructs all cases and compares every report byte; it
 cannot create a missing report. Public output contains safe aggregates only.
+The new ref is `research-data/rotation-stress-202412-202506-v2-engine-report`;
+the failed v1 remains independently available for audit.
 
 Unified acceptance must distinguish retained-source pass, conditional ledger /
 decision / statistical research evidence, and formal blockers. Final 2024

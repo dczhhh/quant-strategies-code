@@ -273,7 +273,7 @@ def conditional_close_sensitivity(inputs, oracle):
         difference = max(
             (
                 abs(weights.get(a, 0) - original["targets"].get(a, 0))
-                for a in set(weights) | original["targets"].keys()
+                for a in sorted(set(weights) | original["targets"].keys())
             ),
             default=Decimal(0),
         )

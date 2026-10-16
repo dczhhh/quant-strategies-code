@@ -3,6 +3,9 @@
 import copy
 import gzip
 import json
+import os
+import subprocess
+import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -17,9 +20,14 @@ SOURCE = "b" * 40
 
 
 @pytest.fixture
-def replay(request):
+def replay(request, monkeypatch):
     docs, _, _, _ = request.getfixturevalue("stress_sources")
     archive = FakeGitHub(r.c.m.DESTINATION)
+    monkeypatch.setattr(
+        r.d,
+        "compare_to_baseline",
+        lambda *_: {"status": "INVENTED_BASELINE_ONLY", "semantics_match": True},
+    )
 
     def inputs(factory, source, audit):
         return r.x.build_inputs(
@@ -114,3 +122,39 @@ def test_launcher_has_no_vendor_secret_and_pins_reviewed_source():
     assert config["concurrency"]["cancel-in-progress"] is False
     assert "verify_only" not in content
     assert 'rotation_stress_replay.py verify "$SOURCE_SHA"' in content
+
+
+@pytest.mark.parametrize("mode", ("normal", "bear", "replacement"))
+def test_independent_processes_and_hash_seeds_reproduce_all_invented_report_values(mode):
+    values = [
+        json.loads(
+            subprocess.check_output(
+                [sys.executable, "-m", "tests.rotation_process_probe", mode],
+                env=os.environ | {"PYTHONHASHSEED": seed},
+                text=True,
+            )
+        )
+        for seed in ("1", "33")
+    ]
+    differences = []
+
+    def compare(left, right, path=()):
+        if type(left) is not type(right):
+            differences.append((path, "type"))
+        elif isinstance(left, dict):
+            if left.keys() != right.keys():
+                differences.append((path, "keys"))
+            else:
+                for key in sorted(left):
+                    compare(left[key], right[key], (*path, key))
+        elif isinstance(left, list):
+            if len(left) != len(right):
+                differences.append((path, "length"))
+            else:
+                for index, (first, second) in enumerate(zip(left, right, strict=True)):
+                    compare(first, second, (*path, index))
+        elif left != right:
+            differences.append((path, left, right))
+
+    compare(*values)
+    assert not differences, differences[:30]

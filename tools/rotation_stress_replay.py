@@ -14,10 +14,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import rotation_decision_oracle as o  # noqa: E402
 import rotation_stress_analytics as a  # noqa: E402
 import rotation_stress_inputs as x  # noqa: E402
+import rotation_stress_report_diagnostic as d  # noqa: E402
 
 g, s, c, u = x.g, x.s, x.c, x.u
-PREFIX = "research/verification/rotation_stress_202412_202506_v1/"
-REPORT_REF = "research-data/rotation-stress-202412-202506-v1-engine-report"
+PREFIX = "research/verification/rotation_stress_202412_202506_v2/"
+REPORT_REF = "research-data/rotation-stress-202412-202506-v2-engine-report"
 ASSUMPTIONS = replace(
     u.ASSUMPTIONS,
     name="owner 10-percent ordinary-US-fund scenario plus EXPLICITLY ASSUMED 2024 ordinary classification",
@@ -57,7 +58,7 @@ def compressed_payload(logical):
 
 def module_hashes():
     result = {}
-    for module in (o, a, x, sys.modules[__name__]):
+    for module in (o, a, x, d, sys.modules[__name__]):
         path = module.__file__
         c.p.need(path is not None, "STRESS_REPORT_MODULE_SOURCE_MISSING")
         assert path is not None
@@ -66,13 +67,22 @@ def module_hashes():
 
 
 def execute(
-    archive_factory, source, *, verify_only=False, progress=None, input_builder=x.build_inputs
+    archive_factory,
+    source,
+    *,
+    verify_only=False,
+    progress=None,
+    input_builder=x.build_inputs,
+    diagnostic=False,
+    baseline_checker=None,
 ):
     progress = progress if progress is not None else {"engine_invoked": False}
     archive = archive_factory()
     archive.visibility(True)
     audit = u.pa.ClosePriceAudit()
-    inputs, normalized, provenance = input_builder(archive_factory, source, audit)
+    # Retain the original assumption document's actual publication identity;
+    # a formatter-only code revision must not retag the frozen input fingerprint.
+    inputs, normalized, provenance = input_builder(archive_factory, d.BASELINE_SOURCE, audit)
     rotation, funded, decisions = run_pair(inputs, ASSUMPTIONS, progress)
     analytics = a.describe(inputs, ASSUMPTIONS, rotation, funded, decisions)
     diagnostics = audit.finish(
@@ -161,7 +171,7 @@ def execute(
         "full_real_scenarios_accepted": 0,
     }
     result = {
-        "schema": "rotation_stress_result_v1",
+        "schema": "rotation_stress_result_v2",
         "source_commit": source,
         "summary": summary,
         "assumptions": asdict(ASSUMPTIONS),
@@ -177,13 +187,35 @@ def execute(
         "price-audit.json": u.canonical(diagnostics),
         "provenance.json": u.canonical(provenance),
     }
+    comparison = (baseline_checker or d.compare_to_baseline)(archive, logical, source)
+    comparison["rebuilt_modules_sha256"] = module_hashes()
+    if diagnostic:
+        c.p.need(verify_only, "DIAGNOSTIC_MUST_BE_READ_ONLY")
+        return comparison
+    if not comparison["semantics_match"]:
+        raise d.ReportDivergence(comparison)
+    summary["prior_v1_exact_input_and_economic_values_match"] = True
+    summary["prior_v1_reproducibility_diagnostic"] = {
+        "baseline_bundle_sha256": comparison.get("baseline_bundle_sha256"),
+        "zero_text_ambiguity_witness": comparison.get("zero_text_ambiguity_witness"),
+        "declared_change_counts_by_file": {
+            name: record["declared_change_counts"]
+            for name, record in comparison.get("logical_files", {}).items()
+            if record["declared_change_counts"]
+        },
+    }
+    provenance["prior_v1_comparison"] = comparison
+    logical["provenance.json"] = u.canonical(provenance)
+    logical["result.json"] = u.canonical(result)
     payload, index = compressed_payload(logical)
     payload[PREFIX + "manifest.json"] = u.canonical(
         {
-            "schema": "rotation_stress_report_manifest_v1",
+            "schema": "rotation_stress_report_manifest_v2",
             "source_commit": source,
             "input_fingerprint": inputs.fingerprint,
             "input_schema": inputs.bundle_schema,
+            "input_assumption_source_revision": d.BASELINE_SOURCE,
+            "prior_v1_bundle_sha256": d.BASELINE_BUNDLE,
             "capture_plan_sha256": g.PLAN_HASH,
             "inventory_bundle_sha256": g.INVENTORY_HASH,
             "modules_sha256": module_hashes(),
@@ -206,7 +238,9 @@ def execute(
 def main():
     progress = {"engine_invoked": False}
     try:
-        c.p.need(len(sys.argv) == 3 and sys.argv[1] in {"run", "verify"}, "ARGUMENTS_INVALID")
+        c.p.need(
+            len(sys.argv) == 3 and sys.argv[1] in {"run", "verify", "diagnose"}, "ARGUMENTS_INVALID"
+        )
         mode, source = sys.argv[1:]
         c.guarded(source)
 
@@ -219,12 +253,23 @@ def main():
                 )
             )
 
-        print(json.dumps(execute(factory, source, verify_only=mode == "verify", progress=progress)))
-        return 0
+        report = execute(
+            factory,
+            source,
+            verify_only=mode != "run",
+            progress=progress,
+            diagnostic=mode == "diagnose",
+        )
+        if mode == "diagnose":
+            report["diagnostic_operator_source_commit"] = source
+        print(json.dumps(report))
+        return int(mode == "diagnose" and not report["semantics_match"])
     except Exception as error:
         reason = (
             "DECISION_ORACLE_MISMATCH"
             if isinstance(error, o.DecisionOracleMismatch)
+            else "BASELINE_STRESS_SEMANTICS_CHANGED"
+            if isinstance(error, d.ReportDivergence)
             else c.r.r.code(error)
         )
         print(
@@ -235,6 +280,11 @@ def main():
                     "engine_invoked": progress["engine_invoked"],
                     "performance_admission": False,
                     **u.safe_failure_location(error),
+                    **(
+                        {"diagnostic": error.diagnostic}
+                        if isinstance(error, d.ReportDivergence)
+                        else {}
+                    ),
                 }
             )
         )

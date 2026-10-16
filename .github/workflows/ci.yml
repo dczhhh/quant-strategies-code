@@ -128,6 +128,11 @@ jobs:
           uv run ruff format --check tools/rotation_decision_oracle.py tools/rotation_stress_inputs.py tools/rotation_stress_analytics.py tools/rotation_stress_replay.py tests/test_rotation_decision_oracle.py tests/test_rotation_stress_inputs.py tests/test_rotation_stress_analytics.py tests/test_rotation_stress_replay.py
           uv run ty check tools/rotation_decision_oracle.py tools/rotation_stress_inputs.py tools/rotation_stress_analytics.py tools/rotation_stress_replay.py
           uv run pytest tests/test_rotation_decision_oracle.py tests/test_rotation_stress_inputs.py tests/test_rotation_stress_analytics.py tests/test_rotation_stress_replay.py -q --no-cov
+          uv run ruff check --no-fix tools/rotation_stress_report_diagnostic.py tests/test_rotation_stress_report_diagnostic.py tests/rotation_process_probe.py
+          uv run ruff format --check tools/rotation_stress_report_diagnostic.py tests/test_rotation_stress_report_diagnostic.py tests/rotation_process_probe.py
+          uv run ty check tools/rotation_stress_report_diagnostic.py
+          uv run pytest tests/test_rotation_stress_report_diagnostic.py -q --no-cov
+          uv run python -m tests.rotation_process_probe stress_crash_compare
 
       - name: Validate private sample workflow expressions without executing capture
         run: |
