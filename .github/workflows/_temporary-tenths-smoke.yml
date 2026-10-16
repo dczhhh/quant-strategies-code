@@ -1,4 +1,4 @@
-name: Temporary tenth-share synthetic-only probe
+name: Temporary tenth-share synthetic-only probe v3
 
 on:
   push:
