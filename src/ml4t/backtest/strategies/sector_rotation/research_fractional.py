@@ -26,8 +26,8 @@ from ...config import ExecutionPrice, ShareType, SlippageType
 from ...execution.limits import VolumeParticipationLimit
 from .adapter import SectorRotationBroker, _build_rotation_engine
 from .config import SECTORS, SectorRotationConfig
-from .research_inputs import ResearchInputs, RetrospectiveCloseSource, number
 from .research_fractional_ledger import ResearchLedgerMismatch, verify_research_ledger
+from .research_inputs import ResearchInputs, RetrospectiveCloseSource, number
 from .strategy import SectorRotationStrategy
 
 
