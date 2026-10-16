@@ -112,6 +112,10 @@ jobs:
           uv run ruff format --check tools/ibkr_activity_audit.py tests/test_ibkr_activity_audit.py
           uv run ty check tools/ibkr_activity_audit.py
           uv run python -m unittest tests.test_ibkr_activity_audit -v
+          uv run ruff check --no-fix tools/rotation_research_runner.py tests/test_rotation_research_runner.py tests/test_rotation_research_pipeline.py
+          uv run ruff format --check tools/rotation_research_runner.py tests/test_rotation_research_runner.py tests/test_rotation_research_pipeline.py
+          uv run ty check tools/rotation_research_runner.py
+          uv run python -m unittest tests.test_rotation_research_runner tests.test_rotation_research_pipeline -v
 
       - name: Validate private sample workflow expressions without executing capture
         run: |
@@ -124,7 +128,7 @@ jobs:
             '8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8' \
             "$sample_lint_dir/actionlint.tar.gz" | sha256sum --check --strict
           tar --no-same-owner -xzf "$sample_lint_dir/actionlint.tar.gz" -C "$sample_lint_dir" actionlint
-          "$sample_lint_dir/actionlint" -shellcheck='' -pyflakes='' .github/workflows/private-samples.yml .github/workflows/continuous-materials.yml .github/workflows/bounded-pull-test.yml .github/workflows/real-action-capture.yml .github/workflows/real-action-recovery.yml .github/workflows/real-case-supplement.yml .github/workflows/real-split-probe.yml .github/workflows/real-etf-probe.yml .github/workflows/real-etf-2025.yml .github/workflows/real-etf-2025-audit.yml
+          "$sample_lint_dir/actionlint" -shellcheck='' -pyflakes='' .github/workflows/private-samples.yml .github/workflows/continuous-materials.yml .github/workflows/bounded-pull-test.yml .github/workflows/real-action-capture.yml .github/workflows/real-action-recovery.yml .github/workflows/real-case-supplement.yml .github/workflows/real-split-probe.yml .github/workflows/real-etf-probe.yml .github/workflows/real-etf-2025.yml .github/workflows/real-etf-2025-audit.yml .github/workflows/rotation-research-2025.yml
 
       - name: Fetch immutable public upstream evidence
         run: git fetch --no-tags --depth=1 https://github.com/ml4t/backtest.git c1ee19c385db3cbad225822cf845832470694f2b
@@ -474,11 +478,33 @@ jobs:
           PIT_PR8_SOURCE: ${{ github.workspace }}/reviewed_sources/pit-pr8
         run: uv run pytest validation/test_pit_pr8_integration.py -q --no-cov
 
+  rotation-research-integration:
+    name: Retrospective operator invented Engine integration
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      ROTATION_RESEARCH_INTEGRATION_REQUIRED: 'true'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: dczhhh/quant-strategies-code
+          ref: eb70296eef3c79ed9bc259703504ed568e13b3ae
+          path: research-source
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4
+      - name: Install pinned retrospective runtime without market credentials
+        run: uv sync --project research-source --dev --locked --python 3.12
+      - name: Require complete invented transport and fresh canonical Engine replay
+        run: uv run --project research-source --no-sync python -m unittest tests.test_rotation_research_pipeline -v
+
   build:
     name: Build Package
     runs-on: ubuntu-latest
     needs:
-      [lint, typecheck, archived-evidence, compatibility, security, coverage, runtime, public-parity, documentation, pit-pr8-integration]
+      [lint, typecheck, archived-evidence, compatibility, security, coverage, runtime, public-parity, documentation, pit-pr8-integration, rotation-research-integration]
     env:
       RELEASE_VERSION: ${{ inputs.release-version }}
     steps:

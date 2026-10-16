@@ -1,0 +1,28 @@
+{
+  "schema": "rotation_research_scenario_2025_v1",
+  "scenario_name": "CN-resident 10-percent ordinary-US-fund withholding hypothesis",
+  "initial_cash": "100000",
+  "dividend_tax_rate": "0.10",
+  "modeled_spread": "0.0001",
+  "slippage_bps": "2",
+  "maximum_participation": "0.01",
+  "identity_basis": "fixed domestic SPDR ETF research assumption; issuer CUSIPs checked separately; not a PIT attestation",
+  "issuer_country_assumption": "US",
+  "tax_source_country_assumption": "US",
+  "security_type_assumption": "ETF",
+  "depositary_receipt_assumption": false,
+  "settlement_definition": {
+    "from": "2025-09-02",
+    "through": "2025-11-07",
+    "business_weekdays": [0, 1, 2, 3, 4],
+    "excluded_dates": ["2025-10-13"],
+    "source": "https://www.dtcc.com/Globals/PDFs/2025/September/03/a9637",
+    "interpretation": "No settlement October 13; October 10 and October 13 regular-way T+1 trades settle October 14. The supplied finite date list is independent of the production calendar helper.",
+    "original_notice_pdf_bytes_retained": false
+  },
+  "actual_investor_qualification_verified": false,
+  "actual_broker_credit_verified": false,
+  "PIT_verified": false,
+  "performance_admission": false,
+  "full_real_scenarios_accepted": 0
+}
