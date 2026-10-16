@@ -2,12 +2,22 @@
 
 from copy import deepcopy
 from dataclasses import replace
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 import pytest
-from test_ibkr_tiered import context, filled
 
-from quant_constraints import IBKRProTieredUSStock
+from quant_constraints import FeeExecutionContext, IBKRProTieredUSStock
 from quant_constraints.fees.ibkr_fractional_order import IBKRParentOrderFractionalResearch
+
+
+def context(order="one", day="2026-10-09", side="BUY", **kwargs):
+    stamp = datetime.fromisoformat(day + "T10:00:00").replace(tzinfo=ZoneInfo("America/New_York"))
+    return FeeExecutionContext(order, stamp, side, **kwargs)
+
+
+def filled(model, identity, quantity, price=100, ctx=None):
+    return model.commit(identity, model.quote(ctx or context(identity), quantity, price))
 
 
 def model(**kwargs):
