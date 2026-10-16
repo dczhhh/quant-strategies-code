@@ -1,6 +1,7 @@
 """Independent invented NAV/asset bridges and explicitly inconclusive CAPM summaries."""
 
 import copy
+import importlib.util
 
 import numpy as np
 import pytest
@@ -77,23 +78,41 @@ def test_constant_market_or_short_samples_do_not_produce_nan_claims():
     assert a.regression([0.01] * 5, [0.02] * 5)["status"] == "INCONCLUSIVE"
 
 
-def test_decimal_HAC5_matches_an_independent_statsmodels_reference():
-    import statsmodels.api as sm
-
+@pytest.mark.parametrize("optional_statsmodels", (False, True))
+def test_decimal_HAC5_matches_independent_matrix_sandwich_and_optional_statsmodels(
+    optional_statsmodels,
+):
     rng = np.random.default_rng(32768)
     market = rng.normal(0, 0.01, 142)
     noise = rng.normal(0, 0.002, 142)
     noise[1:] += 0.4 * noise[:-1]
     returns = 0.0003 + 0.7 * market + noise
-    expected = sm.OLS(returns, sm.add_constant(market)).fit(
-        cov_type="HAC", cov_kwds={"maxlags": 5, "use_correction": False}
-    )
+    # Mandatory independent vector/matrix OLS and HAC on every supported Python.
+    # statsmodels has no build in the Python 3.15 prerelease environment; it is
+    # an additional cross-check where installed, not a runtime dependency.
+    design = np.column_stack((np.ones(len(market)), market))
+    coefficients = np.linalg.lstsq(design, returns, rcond=None)[0]
+    residual = returns - design @ coefficients
+    scores = design * residual[:, None]
+    meat = scores.T @ scores
+    for lag in range(1, 6):
+        cross = scores[lag:].T @ scores[:-lag]
+        meat += (1 - lag / 6) * (cross + cross.T)
+    inverse = np.linalg.inv(design.T @ design)
+    errors = np.sqrt(np.diag(inverse @ meat @ inverse))
+    interval = coefficients[:, None] + errors[:, None] * np.array([-1, 1]) * 1.959963984540054
     report = a.regression(returns, market)
-    assert report["beta"] == pytest.approx(expected.params[1], abs=1e-12)
-    assert report["beta_95pct_CI"] == pytest.approx(expected.conf_int()[1], abs=1e-12)
-    assert report["daily_alpha_95pct_CI_pct"] == pytest.approx(
-        expected.conf_int()[0] * 100, abs=1e-12
-    )
+    assert report["beta"] == pytest.approx(coefficients[1], abs=1e-12)
+    assert report["beta_95pct_CI"] == pytest.approx(interval[1], abs=1e-12)
+    assert report["daily_alpha_95pct_CI_pct"] == pytest.approx(interval[0] * 100, abs=1e-12)
+    if optional_statsmodels and importlib.util.find_spec("statsmodels") is not None:
+        import statsmodels.api as sm
+
+        expected = sm.OLS(returns, design).fit(
+            cov_type="HAC", cov_kwds={"maxlags": 5, "use_correction": False}
+        )
+        assert coefficients == pytest.approx(expected.params, abs=1e-12)
+        np.testing.assert_allclose(interval, expected.conf_int(), rtol=0, atol=1e-12)
 
 
 def test_drawdown_includes_initial_capital_peak():
