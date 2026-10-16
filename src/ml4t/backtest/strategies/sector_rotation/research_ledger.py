@@ -209,10 +209,15 @@ def verify_research_ledger(inputs: ResearchInputs, assumptions, fills, orders, f
                 fill_index += 1
             active = {a: q for a, q in positions.items() if q}
             actual_positions = {a: number(q) for a, q in state["positions"].items() if number(q)}
-            if set(active) != set(actual_positions) or any(
-                abs(q - actual_positions[asset]) > (Decimal(0) if step == 1 else Decimal("1E-9"))
-                for asset, q in active.items()
-            ) or any(not _on_step(q, step) for q in active.values()):
+            if (
+                set(active) != set(actual_positions)
+                or any(
+                    abs(q - actual_positions[asset])
+                    > (Decimal(0) if step == 1 else Decimal("1E-9"))
+                    for asset, q in active.items()
+                )
+                or any(not _on_step(q, step) for q in active.values())
+            ):
                 raise ResearchLedgerMismatch("Independent quantity ledger mismatch")
             accrued = sum(receivables.values(), Decimal(0))
             settled = cash - sum((v for _, v in holds), Decimal(0))
