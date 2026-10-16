@@ -1,6 +1,7 @@
 """Invented inputs only: bounded capture, source binding and actual Engine replay."""
 
 import copy
+import gzip
 import json
 from dataclasses import replace
 from datetime import datetime, time, timedelta
@@ -419,6 +420,34 @@ def test_private_report_readback_and_independent_fresh_engine_run_match(normaliz
     second = u.execute(lambda: archive, SOURCE, verify_only=True, load_documents=lambda _: docs)
     assert first == second and archive.refs == before
     assert all(len(body) <= c.m.FILE_LIMIT for body in archive.blobs.values())
+    assert first["price_source_diagnostics"]["pairs"] == 576
+    assert first["price_source_diagnostics"]["economic_cause_verified"] is False
+    names = {
+        u.REPORT_PREFIX + name
+        for name in ("inputs.json.gz", "result.json.gz", "price-audit.json.gz", "manifest.json")
+    }
+    saved, _ = c.b.read(archive, u.REPORT_REF, names)
+    diagnostic = json.loads(gzip.decompress(saved[u.REPORT_PREFIX + "price-audit.json.gz"]))
+    manifest = json.loads(saved[u.REPORT_PREFIX + "manifest.json"])
+    assert len(diagnostic["pairs"]) == 576
+    assert diagnostic["summary"] == first["price_source_diagnostics"]
+    assert manifest["diagnostic_module_sha256"] == c.m.sha256(
+        Path(u.pa.__file__).read_bytes().replace(b"\r\n", b"\n")
+    )
+    assert manifest["schema"] == "rotation_research_report_manifest_v4"
+
+
+def test_failed_source_diagnostic_prevents_archiving_success(normalized_sources, monkeypatch):
+    docs, _, _ = normalized_sources
+    archive = FakeGitHub(c.m.DESTINATION)
+
+    def failure(*_args):
+        raise ValueError("PRICE_AUDIT_NAV_RECOMPUTE")
+
+    monkeypatch.setattr(u.pa.ClosePriceAudit, "finish", failure)
+    with pytest.raises(ValueError, match="PRICE_AUDIT_NAV_RECOMPUTE"):
+        u.execute(lambda: archive, SOURCE, load_documents=lambda _: docs)
+    assert archive.ref(u.REPORT_REF) is None
 
 
 def test_failed_funded_reference_prevents_a_successful_combined_archive(

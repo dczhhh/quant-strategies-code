@@ -161,3 +161,52 @@ independent ledger report. It preserves the existing rotation fields and uses
 `research-data/rotation-2025-v3-engine-report`, leaving v1/v2 results unchanged.
 Both successful economic replays are required before the operator can return
 success or write the report. Strict real/PIT admission remains blocked.
+
+## Source close diagnostics and valuation sensitivity
+
+Version-4 private reports additionally bind `price-audit.json.gz` and the SHA256
+of `tools/rotation_research_price_audit.py` in the immutable source manifest. The
+Engine, original inputs and independent ledger are unchanged. The audit never
+repairs a price, changes a threshold or marks an unexplained conflict resolved.
+It independently decodes the retained minute responses, checks source body hash,
+raw/unadjusted identity, millisecond request bounds and ordered minute starts.
+Its pair count and mismatches must equal the existing input-policy comparison.
+
+For every security/session pair it privately retains both source IDs, original
+closes, signed USD difference, relative basis-point difference and actual minute
+starts/ends from five minutes before through five minutes after exchange close.
+The last RTH observation starts one minute **before** the exchange close. NY local
+times, UTC-derived epochs, DST changes and early closing sessions are explicit.
+Per-security and per-session distributions use nearest-rank p50/p90/p95/p99/max;
+safe public summaries omit per-date prices, holdings and original source rows.
+
+The original three-session requests run from the first session's open through
+one millisecond before the third session's close. Post-close minutes can thus
+be inside a retained request for the first two sessions and outside it for the
+third. Each candidate is labeled `outside_retained_request`, `requested_no_bar`
+or `retained_bar`; none is silently filled. An available post-close minute that
+matches a daily close is a diagnostic observation, **not** proof of the listing
+exchange's official closing auction, eligible trade conditions or the cause of
+the RTH difference. A sparse response is not by itself evidence of lost trades.
+
+[Massive's aggregate construction documentation](https://massive.com/knowledge-base/article/how-does-massive-create-aggregate-bars)
+describes trade-eligibility, timestamp and correction differences across time
+scales. Its [session documentation](https://massive.com/knowledge-base/article/does-massive-offer-pre-market-and-after-hours-data)
+explains inclusive query endpoints and extended-hours bar sparsity. These
+present-day documents motivate tests; they do not establish the historical
+cause of any archived pair, an official close or historical PIT.
+
+For both executed portfolios, a second calculation keeps each actual end-of-day
+quantity, cash and net receivable unchanged and applies the original daily close
+instead of the minute mark. It first recomputes the existing minute NAV at the
+unchanged 1E-8 tolerance. The alternative return, drawdown and maximum NAV shift
+quantify **fixed-holdings valuation sensitivity only**. No order, fill, cash,
+tax or receivable is changed; future prices cannot trigger a hypothetical trade.
+This is not a re-run of the strategy with alternative signals, an independent
+ranking/allocation/order oracle, or a complete decision-sensitivity assessment.
+Those remain explicit unverified review items, along with official trade-level
+close reconciliation, the original account NAV bridge and strict historical PIT.
+
+The new ref is `research-data/rotation-2025-v4-engine-report`; v1/v2/v3 evidence
+is left untouched. Both the economic reports and private diagnostics must match
+in the independent fresh run. No new vendor/issuer request is needed.

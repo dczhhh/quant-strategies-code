@@ -45,8 +45,8 @@ jobs:
             [.workflow_runs[] | select(.head_sha == $sha and .status == "completed" and .conclusion == "success") | .name] |
             index("CI") != null and index("Ecosystem qualification") != null
           ' "$RUNNER_TEMP/rotation-source-checks.json"
-      - run: uv run pytest tests/test_rotation_research_operator.py tests/strategies/test_rotation_research.py -q --no-cov
-      - run: uv run ty check tools/rotation_research_capture.py tools/rotation_research_replay.py
+      - run: uv run pytest tests/test_rotation_research_operator.py tests/strategies/test_rotation_research.py tests/test_rotation_research_price_audit.py -q --no-cov
+      - run: uv run ty check tools/rotation_research_capture.py tools/rotation_research_replay.py tools/rotation_research_price_audit.py
 
   capture_reference:
     needs: preflight

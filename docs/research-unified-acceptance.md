@@ -45,6 +45,8 @@ entry and trusted dataset issuance remain blocked before Engine construction.
 | Canadian tax and associated FX workstream | `EXCLUDED_BY_OWNER_SCOPE` | Removed plan item 4; Canadian securities excluded from owner entry profiles, not marked tax-accepted |
 | ADR entry/tax workstream | `EXCLUDED_BY_OWNER_SCOPE` | All ADR new buys excluded; existing ADR credits remain private historical component evidence, not eligible strategy purchases |
 | Strategy return certification | `BLOCKED` | Requires remaining source/PIT, economic E2E and ETF acceptance; PR #6 remains unmerged |
+| Daily/minute source reconciliation | `UNVERIFIED` | v3 retained 474/576 differences above the original threshold. v4 adds per-security/session diagnostics and fixed-holdings mark sensitivity, not a causal explanation or source-price correction |
+| Independent strategy decision oracle | `UNVERIFIED` | The independent ledger verifies Engine fills/orders and economic state, not independently predicted signals, ranking, target allocation or intended orders. Diagnostic revaluation does not close this gap |
 
 The accepted SQQQ report hash remains
 `7db6cd97c99b681f516da1cb5995e4aae9ab6b0a182292ccbd09fc2cb3179d6c`.

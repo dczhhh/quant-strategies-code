@@ -14,6 +14,7 @@ from pathlib import Path
 # The runner invokes this file normally (not -I); only the named sibling is loaded.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import rotation_research_capture as c  # noqa: E402
+import rotation_research_price_audit as pa  # noqa: E402
 
 from ml4t.backtest.strategies.sector_rotation.research import (  # noqa: E402
     ResearchAssumptions,
@@ -36,8 +37,8 @@ from ml4t.backtest.strategies.sector_rotation.research_inputs import (  # noqa: 
 from quant_constraints.adapter import ConstrainedBroker  # noqa: E402
 from quant_constraints.calendar import NY  # noqa: E402
 
-REPORT_PREFIX = "research/verification/rotation_research_2025_v3/"
-REPORT_REF = "research-data/rotation-2025-v3-engine-report"
+REPORT_PREFIX = "research/verification/rotation_research_2025_v4/"
+REPORT_REF = "research-data/rotation-2025-v4-engine-report"
 ASSUMPTIONS = ResearchAssumptions(
     "owner CN-mainland 10-percent ordinary-US-fund research scenario",
     Decimal(100000),
@@ -201,7 +202,7 @@ def settlement_sessions():
     return tuple(result)
 
 
-def build_inputs(archive_factory, source_commit, docs):
+def build_inputs(archive_factory, source_commit, docs, *, audit=None):
     sources, bodies, closes, minutes, distributions, splits, securities = {}, {}, [], [], [], [], []
 
     def bind(identifier, item, product):
@@ -252,6 +253,8 @@ def build_inputs(archive_factory, source_commit, docs):
         for identifier, item, product in data:
             sid = bind(identifier, item, product)
             kind = product["kind"]
+            if kind == "minute" and audit is not None:
+                audit.observe(product, sources[sid], item["body"])
             if kind in {"daily", "minute"}:
                 for stamp, values, volume in bars(product, item["body"]):
                     if kind == "daily":
@@ -399,19 +402,29 @@ def execute(
     archive = archive_factory()
     archive.visibility(True)
     docs = (load_documents or c.a.issuer_documents)(archive)
-    inputs, normalized = build_inputs(archive_factory, source_commit, docs)
+    audit = pa.ClosePriceAudit()
+    inputs, normalized = build_inputs(archive_factory, source_commit, docs, audit=audit)
     result = replay(inputs, progress)
+    diagnostics = audit.finish(
+        inputs, {"rotation": result, "funded_spy": result["funded_spy"]}, ASSUMPTIONS.initial_cash
+    )
+    result["schema"] = "rotation_research_result_v4"
+    result["summary"]["price_source_diagnostics"] = diagnostics["summary"]
     payload = {
         REPORT_PREFIX + "inputs.json.gz": gzip.compress(normalized, mtime=0),
         REPORT_PREFIX + "result.json.gz": gzip.compress(canonical(result), mtime=0),
+        REPORT_PREFIX + "price-audit.json.gz": gzip.compress(canonical(diagnostics), mtime=0),
     }
     payload[REPORT_PREFIX + "manifest.json"] = canonical(
         {
-            "schema": "rotation_research_report_manifest_v3",
+            "schema": "rotation_research_report_manifest_v4",
             "source_commit": source_commit,
             "input_schema": inputs.bundle_schema,
             "close_policy": inputs.close_policy,
             "plan_sha256": c.PLAN_HASH,
+            "diagnostic_module_sha256": c.m.sha256(
+                Path(pa.__file__).read_bytes().replace(b"\r\n", b"\n")
+            ),
             "files": {name: c.m.sha256(body) for name, body in payload.items()},
         }
     )

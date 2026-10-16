@@ -43,8 +43,8 @@ minute NAV, in addition to its different fee/tax treatment.
 Separate observations require the version-2 input schema and an explicit policy;
 legacy version-1 bundles retain strict matching. Mode, source records and both
 prices enter the input fingerprint. New result bundles use the private
-`research-data/rotation-2025-v3-engine-report` ref, including the funded SPY
-comparison; prior version-1/version-2 refs remain unchanged. Both policies remain isolated historical research and cannot enter
+`research-data/rotation-2025-v4-engine-report` ref, including funded SPY and
+private price-source diagnostics; prior v1/v2/v3 refs remain unchanged. Both policies remain isolated historical research and cannot enter
 the strict real or synthetic factory.
 
 The separate calendar reference uses weekdays minus September 1 and October 13
@@ -127,8 +127,12 @@ uses the same minute marks, fee/tax scenario and independent ledger; its passive
 95%-initial-investment policy is not exposure matched to tactical rotation.
 Their return difference is reported in percentage points, not as certified alpha.
 SPY's earlier gross daily reinvestment series remains a separate diagnostic
-without fees or tax. New v3 reports retain both complete private Engine outputs;
+without fees or tax. The v3 reports retained both complete private Engine outputs;
 replay and independent fresh verification require both ledgers to pass.
+Version 4 also retains the [source-close audit and fixed-holdings mark sensitivity](rotation-retrospective-research.md#source-close-diagnostics-and-valuation-sensitivity).
+Both reports and diagnostic sidecar are recomputed byte for byte. Per-date raw
+prices stay private. Distribution statistics do not establish an economic cause,
+and fixed-holdings revaluation is not an independent decision/order oracle.
 Inputs and results remain retrospective: investor eligibility, historical PIT,
 actual broker execution and strict performance admission are not certified.
 The owner's original statement NAV discrepancy remains separate.
