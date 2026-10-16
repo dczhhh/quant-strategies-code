@@ -82,7 +82,9 @@ class _PassiveSPY(SectorRotationStrategy):
                 quantity - float(broker.research_quantity_step), broker.research_quantity_step
             )
         if quantity <= 0:
-            raise ValueError("Passive reference initial cash cannot fund one share step of SPY")
+            if broker.research_quantity_step == 1:
+                raise ValueError("Passive reference initial cash cannot fund one whole SPY share")
+            raise ValueError("Passive reference initial cash cannot fund 0.1 SPY share")
         calendar = broker.controller.calendar
         last = calendar.session(calendar.shift(timestamp.astimezone(NY).date(), 2))
         assert last is not None
