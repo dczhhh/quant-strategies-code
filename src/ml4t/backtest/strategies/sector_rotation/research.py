@@ -6,10 +6,10 @@ credits and the dated fee snapshot are disclosed modeling assumptions. The
 canonical constrained broker continues to own all economic state.
 """
 
+import math
 from dataclasses import asdict, dataclass, replace
 from datetime import datetime, time
 from decimal import Decimal
-import math
 from typing import Any
 
 import polars as pl
