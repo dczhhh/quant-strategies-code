@@ -5,9 +5,9 @@ portfolio or a strict real/PIT entry. Subsequent price drift is left alone and
 net distributions remain cash. No sector-rotation parameters are changed.
 """
 
-import math
 from dataclasses import asdict, replace
 from datetime import datetime
+from decimal import Decimal
 from typing import Any
 
 import polars as pl
@@ -24,7 +24,9 @@ from .research import (
     ResearchAssumptions,
     RetrospectiveRotationEngine,
     _ResearchBroker,
+    _ResearchParticipationLimit,
     _ResearchProvider,
+    _share_step_floor,
 )
 from .research_inputs import ResearchInputs, RetrospectiveCloseSource
 from .strategy import SectorRotationStrategy
@@ -72,14 +74,18 @@ class _PassiveSPY(SectorRotationStrategy):
         estimated = broker.estimate_execution_price("SPY", 1, price)
         # Same five-basis-point execution cushion as the rotation defaults.
         budget = state.equity * (0.95 - self.config.execution_cushion_bps / 10000)
-        quantity = math.floor(budget / estimated)
+        quantity = _share_step_floor(budget / estimated, broker.research_quantity_step)
         while quantity > 0:
             fees = broker.estimate_order_fees("SPY", quantity, estimated)
             if quantity * estimated + fees <= budget:
                 break
-            quantity -= 1
+            quantity = _share_step_floor(
+                quantity - float(broker.research_quantity_step), broker.research_quantity_step
+            )
         if quantity <= 0:
-            raise ValueError("Passive reference initial cash cannot fund one whole SPY share")
+            if broker.research_quantity_step == 1:
+                raise ValueError("Passive reference initial cash cannot fund one whole SPY share")
+            raise ValueError("Passive reference initial cash cannot fund 0.1 SPY share")
         calendar = broker.controller.calendar
         last = calendar.session(calendar.shift(timestamp.astimezone(NY).date(), 2))
         assert last is not None
@@ -131,7 +137,7 @@ def retrospective_spy_benchmark(
     controller = ConstraintController(constraints, InMemoryEarningsProvider())
     config = cash_backtest_config(
         initial_cash=float(assumptions.initial_cash),
-        share_type=ShareType.INTEGER,
+        share_type=ShareType.INTEGER if assumptions.share_step == 1 else ShareType.FRACTIONAL,
         execution_price=ExecutionPrice.CLOSE,
         slippage_type=SlippageType.PERCENTAGE,
         slippage_rate=float(assumptions.slippage_bps / 10000),
@@ -152,7 +158,13 @@ def retrospective_spy_benchmark(
         assert isinstance(broker, _ResearchBroker)
         broker.configure_constraints(controller, provider.context, backtest_config, None, provider)
         broker.bind_rotation(strategy)
-        broker.execution_limits = VolumeParticipationLimit(float(assumptions.maximum_participation))
+        broker.execution_limits = (
+            VolumeParticipationLimit(float(assumptions.maximum_participation))
+            if assumptions.share_step == 1
+            else _ResearchParticipationLimit(
+                float(assumptions.maximum_participation), assumptions.share_step
+            )
+        )
         return broker
 
     engine = RetrospectiveRotationEngine(
@@ -169,7 +181,9 @@ def retrospective_spy_benchmark(
         "benchmark_policy": dict(BENCHMARK_POLICY),
         "assumptions": {k: str(v) for k, v in asdict(assumptions).items()},
         "execution": "next_completed_minute_close_plus_scenario_slippage",
-        "fee_mode": "2026-10-10_normal_charge_snapshot_backcast_unknown_venue",
+        "fee_mode": "parent_order_tiered_account_observed_fractional_scenario_snapshot_backcast"
+        if assumptions.share_step == Decimal("0.1")
+        else "2026-10-10_normal_charge_snapshot_backcast_unknown_venue",
         "credit_mode": "modeled_pay_date_not_actual_broker_confirmation",
         "price_conventions": inputs.close_comparison,
         "source_observed_at": inputs.observed_at.isoformat(),

@@ -37,14 +37,14 @@ def run_pair(inputs, assumptions, progress):
     return rotation, funded, decision
 
 
-def compressed_payload(logical):
+def compressed_payload(logical, *, prefix=PREFIX):
     """Deterministic bounded parts; even a longer normalized minute bundle stays private."""
     payload, index = {}, {}
     for name, raw in logical.items():
         compressed = gzip.compress(raw, mtime=0)
         names = []
         for part, start in enumerate(range(0, len(compressed), c.m.FILE_LIMIT)):
-            path = PREFIX + name + f".gz.part-{part:02}.bin"
+            path = prefix + name + f".gz.part-{part:02}.bin"
             payload[path] = compressed[start : start + c.m.FILE_LIMIT]
             names.append(path)
         c.p.need(len(names) <= 8, "STRESS_REPORT_LOGICAL_FILE_TOO_LARGE")
@@ -66,15 +66,13 @@ def module_hashes():
     return result
 
 
-def execute(
+def compute_report(
     archive_factory,
     source,
     *,
-    verify_only=False,
     progress=None,
     input_builder=x.build_inputs,
-    diagnostic=False,
-    baseline_checker=None,
+    scenario=ASSUMPTIONS,
 ):
     progress = progress if progress is not None else {"engine_invoked": False}
     archive = archive_factory()
@@ -83,16 +81,16 @@ def execute(
     # Retain the original assumption document's actual publication identity;
     # a formatter-only code revision must not retag the frozen input fingerprint.
     inputs, normalized, provenance = input_builder(archive_factory, d.BASELINE_SOURCE, audit)
-    rotation, funded, decisions = run_pair(inputs, ASSUMPTIONS, progress)
-    analytics = a.describe(inputs, ASSUMPTIONS, rotation, funded, decisions)
+    rotation, funded, decisions = run_pair(inputs, scenario, progress)
+    analytics = a.describe(inputs, scenario, rotation, funded, decisions)
     diagnostics = audit.finish(
-        inputs, {"rotation": rotation, "funded_spy": funded}, ASSUMPTIONS.initial_cash
+        inputs, {"rotation": rotation, "funded_spy": funded}, scenario.initial_cash
     )
     variants, sensitivity = {}, []
     for rate in (Decimal(0), Decimal(".30")):
         assumptions = replace(
-            ASSUMPTIONS,
-            name=ASSUMPTIONS.name + " FIXED_TAX_SENSITIVITY_" + str(rate),
+            scenario,
+            name=scenario.name + " FIXED_TAX_SENSITIVITY_" + str(rate),
             dividend_tax_rate=rate,
         )
         strategy, benchmark, oracle = run_pair(inputs, assumptions, progress)
@@ -111,8 +109,8 @@ def execute(
         "execution_start": str(s.FIRST),
         "execution_end": str(s.LAST),
         "execution_sessions": len(c.sessions(s.FIRST, s.LAST)),
-        "initial_model_cash_usd": str(ASSUMPTIONS.initial_cash),
-        "share_quantum": "1",
+        "initial_model_cash_usd": str(scenario.initial_cash),
+        "share_quantum": str(scenario.share_step),
         "scenario": "REAL_RETAINED_PRICES_WITH_EXPLICIT_2024_ORDINARY_CLASSIFICATION_ASSUMPTION",
         "classification_2024_real_source_verified": False,
         "ordinary_2024_assumption_source": x.ASSUMPTION_PATH,
@@ -174,7 +172,7 @@ def execute(
         "schema": "rotation_stress_result_v2",
         "source_commit": source,
         "summary": summary,
-        "assumptions": asdict(ASSUMPTIONS),
+        "assumptions": asdict(scenario),
         "rotation": rotation,
         "funded_SPY": funded,
         "tax_sensitivity": variants,
@@ -187,6 +185,23 @@ def execute(
         "price-audit.json": u.canonical(diagnostics),
         "provenance.json": u.canonical(provenance),
     }
+    return archive, logical, result, provenance, inputs
+
+
+def execute(
+    archive_factory,
+    source,
+    *,
+    verify_only=False,
+    progress=None,
+    input_builder=x.build_inputs,
+    diagnostic=False,
+    baseline_checker=None,
+):
+    archive, logical, result, provenance, inputs = compute_report(
+        archive_factory, source, progress=progress, input_builder=input_builder
+    )
+    summary = result["summary"]
     comparison = (baseline_checker or d.compare_to_baseline)(archive, logical, source)
     comparison["rebuilt_modules_sha256"] = module_hashes()
     if diagnostic:

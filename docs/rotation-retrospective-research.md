@@ -1,5 +1,10 @@
 # Retrospective rotation execution
 
+Optional tenth-share research uses the separately disclosed
+[parent-order commission correction](ibkr-fractional-commission-correction.md),
+not commission-free fractional trading. Existing integer-source reports remain
+pinned to their original code and fee assumptions.
+
 The separate research factory runs the canonical Engine and constrained cash broker on original-share
 inputs. The ordinary `sector_rotation_engine` real entry remains blocked. Research inputs are also
 rejected by its synthetic entry. No broker connection or live order is involved.
@@ -44,9 +49,19 @@ assumptions, not observed historical NBBO or a PIT security attestation. No bid/
 Warm-up distributions may be explicitly unclassified and used for gross signals only. An execution-
 period distribution requires the supported ordinary-fund classification and its source. Unknown,
 special, capital-gain and ROC distributions cannot enter the modeled cash lifecycle through this path.
-Canadian securities and every ADR remain excluded. This scenario supports whole-share ETF holdings
-and the fee reference requires prices of at least one dollar. Fractional split outcomes fail closed;
-ordinary fractional per-share dividend amounts remain supported.
+Canadian securities and every ADR remain excluded. The accepted v3 baseline remains **whole-share**
+(`share_step=Decimal("1")`). An explicit opt-in `ResearchAssumptions(share_step=Decimal("0.1"))`
+enables **one-decimal ETF orders/fills only**. Both the rotation and funded-SPY benchmark
+use the same step, with downward rounding for buy/sell order deltas and minute-volume
+partial fills; the independent Decimal fee/cash/settlement ledger checks each fill
+against the exact tenth-grid. Unsupported steps (0.01, 0.05 and arbitrary precision)
+raise at scenario construction. No prior pinned reports are overwritten, and this
+research switch does not attest an IBKR security's real-world fractional eligibility.
+Some broker fractional trades require instrument/order/notional validation that
+historical aggregate bars cannot establish; execution remains an explicit simulation.
+The independent fee reference still requires prices of at least one dollar.
+Fractional **split cash-in-lieu** remains unsupported and fails closed, distinct from
+voluntary tenth-share purchases. Ordinary fractional dividend amounts remain supported.
 
 ## Execution assumptions
 
@@ -80,7 +95,7 @@ strict. Both policies remain excluded from the strict real/synthetic entry.
 Action identifiers must be unique per security across splits, distributions and
 generated modeled credits, so constructing the provider cannot overwrite an event.
 
-Whole-share cash reservations reject a quantity that rounds to zero before asking
+Minimum-step cash reservations reject an order that rounds to zero before asking
 the fee model for a quote. The constrained rejection audit likewise does not price
 a nonexistent fill. Neither path posts cash, positions or fees for that rejection.
 
@@ -136,7 +151,7 @@ payment-day cash modeling and independent Decimal ledger as the rotation run.
 Both start with the same cash and no positions, and finish at the same minute NAV
 mark without a terminal liquidation. Cash earns zero interest in both models.
 
-The reference submits one whole-share SPY entry at 09:35 in the first execution
+The reference submits one SPY entry at the configured share step at 09:35 in the first execution
 session, targeting 95% less the existing 5bp cushion, estimated slippage and fees.
 It uses only the completed observation visible at submission. Actual filled
 investment depends on integer shares, subsequent prices and available volume;
@@ -154,7 +169,7 @@ modeled payment falls after the end of the run; withholding is applied once.
 
 The earlier gross SPY daily ex-close reinvestment series remains a separately
 labeled diagnostic. The funded reference uses minute marks, actual modeled
-whole-share fills, net distributions left as cash and trading costs. Neither
+share-step-constrained fills, net distributions left as cash and trading costs. Neither
 series replaces or reconciles the retained daily/minute close differences.
 Private result schema v3 adds the complete funded-SPY trace, fills, actions and
 independent ledger report. It preserves the existing rotation fields and uses

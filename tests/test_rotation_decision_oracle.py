@@ -61,6 +61,30 @@ def test_fee_reservation_oracle_is_independent_of_production_helpers(monkeypatch
     assert o.fee_estimate(q, p) == expected
 
 
+def test_parent_order_fee_reservation_has_an_independent_decimal_calculation(monkeypatch):
+    def deny(*_args, **_kwargs):
+        pytest.fail("No production fee helper allowed")
+
+    monkeypatch.setattr("quant_constraints.fees.ibkr_tiered.IBKRProTieredUSStock.estimate", deny)
+    q, p = Decimal("3.4"), Decimal(250)
+    expected = Decimal(".35") * Decimal("1.000735") + 3 * Decimal(".0035") + q * Decimal(".000203")
+    assert o.fee_estimate(q, p, parent_tiered=True) == expected
+    assert o.fee_estimate(q, p) > expected
+
+
+@pytest.mark.parametrize("bear", [False, True])
+def test_tenth_share_engine_decisions_use_parent_fees_and_tenth_share_risk_rounding(bear):
+    assumptions = replace(ASSUMPTIONS, share_step=Decimal(".1"))
+    engine = retrospective_rotation_engine(inputs(bear=bear), assumptions, settings())
+    oracle = o.DecisionOracle(engine)
+    engine.run()
+    assert oracle.finish()["status"].endswith("ORACLE_PASS")
+    assert engine.broker.fee_model.fractional_policy == "parent_order_tiered"
+    assert (
+        engine.research_report["independent_ledger"]["status"] == "RETROSPECTIVE_ENGINE_LEDGER_PASS"
+    )
+
+
 def test_future_source_changes_cannot_change_earlier_reference():
     source = inputs()
     modified = replace(

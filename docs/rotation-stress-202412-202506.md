@@ -1,5 +1,24 @@
 # Issue #30: fixed stress-window evidence
 
+## Later integer v2 result (2026-10-16)
+
+Actual [run38891741639](https://github.com/dczhhh/quant-strategies-code/actions/runs/38891741639)
+at immutable source `6a28239db26e46f3eb11a6ef5b4adcca84d2afa1` passed preflight116942621794,
+replay116944160242 and independent fresh verifier116946350865. Both safe summaries
+match every field and private complete-report bytes match under different hash
+seeds1/33. Bundle SHA256 is
+`bab85f585d7fcdc1cf6c71bbdce9662cc7afcc769ec63a21275742b24ed87320`.
+Original v1 inputs/economic values matched exactly. The two actual close-sensitivity
+dates exposed equal zero representations0.00/0E-28, supporting the reproduced
+ordering ambiguity. The old v1 failure and efa36368 report remain unaccepted and
+preserved. Statements below saying v2 was pending are historical source-stage
+records, superseded only by this actual integer result.
+
+This does not certify the later optional0.1-share fee correction. Its
+[parent-order commission comparison](ibkr-fractional-commission-correction.md)
+has a separate report and requires its own real replay/fresh verification.
+Strict/PIT/broker/performance flags remain false and full real cases accepted0.
+
 The [fixed issue contract](https://github.com/dczhhh/quant-strategies-code/issues/30)
 selects 2024-12-02 through 2025-06-30 before looking at its results. It does not
 authorize tuning to this sample. The baseline is immutable source

@@ -200,7 +200,11 @@ class IBKRProTieredUSStock:
     Estimates never mutate state. All confirmed US/CA Tiered stock/ETF volume
     can be supplied through record_external_volume (no Canadian fee/FX model).
     Capped whole-share orders are excluded. Fractional execution components
-    use the published greater-of-1%-or-$0.01 rule, without cent rounding.
+    default to the retained published greater-of-1%-or-$0.01 interpretation.
+    An explicit parent_order_tiered research profile instead aggregates ALL
+    shares under one order minimum/cap and treats fractional executions as
+    internalized (no external venue proxy). It is an account-observed scenario,
+    not a universal reinterpretation of the public fractional-fee disclosure.
     """
 
     def __init__(
@@ -214,7 +218,14 @@ class IBKRProTieredUSStock:
         history_mode="strict_historical",
         snapshot_date="2026-10-10",
         backcast_regulatory_rate=BACKCAST_REGULATORY_RATE,
+        fractional_policy="published_per_execution",
     ):
+        if not isinstance(fractional_policy, str) or fractional_policy not in {
+            "published_per_execution",
+            "parent_order_tiered",
+        }:
+            raise ValueError("Invalid fractional commission policy")
+        self.fractional_policy = fractional_policy
         if history_mode not in {"current_snapshot_backcast", "strict_historical"}:
             raise ValueError("Invalid fee history mode")
         if snapshot_date != "2026-10-10":
@@ -300,17 +311,25 @@ class IBKRProTieredUSStock:
         old = _OrderCosts() if conservative else self._orders.get(context.bucket, _OrderCosts())
         whole = float(math.floor(quantity))
         fractional = quantity - whole
-        raw = old.raw + self.marginal(whole, 0 if conservative else volume)
-        whole_value = old.whole_value + whole * price
-        gross = max(raw, 0.35) if old.whole_quantity + whole > 0 else 0.0
+        parent_tiered = self.fractional_policy == "parent_order_tiered"
+        if parent_tiered and context.venue == "IBDRIPUS":
+            raise ValueError(
+                "Parent-order profile does not model dividend reinvestment commissions"
+            )
+        billed_quantity = quantity if parent_tiered else whole
+        raw = old.raw + self.marginal(billed_quantity, 0 if conservative else volume)
+        whole_value = old.whole_value + billed_quantity * price
+        gross = max(raw, 0.35) if old.whole_quantity + billed_quantity > 0 else 0.0
         capped = gross > 0.01 * whole_value and whole_value > 0
         cumulative = min(gross, 0.01 * whole_value)
         broker_fee = cumulative - old.broker_whole
-        if fractional > 1e-12:
+        if fractional > 1e-12 and not parent_tiered:
             broker_fee += max(0.01, 0.01 * fractional * price)
-        counted = 0.0 if capped else old.whole_quantity + whole
-        delta = counted - old.counted_whole + fractional
-        costs = _OrderCosts(raw, whole_value, old.whole_quantity + whole, cumulative, counted)
+        counted = 0.0 if capped else old.whole_quantity + billed_quantity
+        delta = counted - old.counted_whole + (0.0 if parent_tiered else fractional)
+        costs = _OrderCosts(
+            raw, whole_value, old.whole_quantity + billed_quantity, cumulative, counted
+        )
         assumptions = [
             "single-account; absent external US/CA Tiered volume assumed zero",
             "whole/fractional components split per execution; no cent rounding",
@@ -325,6 +344,20 @@ class IBKRProTieredUSStock:
             )
         else:
             assumptions.append("strict dated regulatory coverage; broker/venue/CAT remain proxies")
+        venue_quantity = whole if parent_tiered else quantity
+        if parent_tiered:
+            assumptions[1:3] = [
+                "venue components split per execution; broker fees aggregate per parent order",
+                "online cap eligibility; capped parent-order volume excluded",
+            ]
+            assumptions.extend(
+                (
+                    "fractional_policy=parent_order_tiered; explicit account-observed research scenario",
+                    "one cumulative broker minimum/cap across whole and fractional fills per order/day/generation",
+                    "fractional executions assumed internalized; external venue proxy only on whole components",
+                    "not a universal published tariff, DRIP model, or complete account commission reconciliation",
+                )
+            )
         # Only displayed regular-hours NASDAQ/ARCA/IEX schedules are modeled.
         # Unknown routing is an explicit scenario, not a universal upper bound.
         if context.venue in {"NASDAQ", "ARCA", "IEX"} and context.liquidity != "unknown":
@@ -332,16 +365,16 @@ class IBKRProTieredUSStock:
                 exchange = 0.0
                 assumptions.append("no rebate credit, even for known adding-liquidity fills")
             elif context.venue == "IEX" and price < 1:
-                exchange = quantity * price * 0.002
+                exchange = venue_quantity * price * 0.002
             else:
-                exchange = quantity * (0.003 if price >= 1 else price * 0.003)
+                exchange = venue_quantity * (0.003 if price >= 1 else price * 0.003)
             venue_source = {"NASDAQ": "INET", "ARCA": "ARCA", "IEX": "IEX"}[context.venue]
             venue_source = (
                 f"https://www.interactivebrokers.com/en/accounts/fees/{venue_source}stkfee.php"
             )
             assumptions.append("displayed regular-hours execution schedule assumed")
         else:
-            exchange = quantity * (
+            exchange = venue_quantity * (
                 self.unknown_venue_per_share if price >= 1 else price * self.unknown_venue_rate
             )
             venue_source = "https://www.interactivebrokers.com/en/accounts/fees/ARCAstkfee.php"

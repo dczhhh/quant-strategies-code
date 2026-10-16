@@ -332,16 +332,27 @@ class PortfolioGate:
             + committed
             + intent.quantity * reference
         ) / state.equity
-        if (
-            intent.target_weight is not None
-            and context.phase in {"submission", "amendment"}
-            and (
-                not math.isfinite(intent.target_weight)
-                or intent.target_weight < 0
-                or abs(intent.target_weight - contract_weight) > 1e-8
-            )
-        ):
-            return reject("target_quantity_mismatch", projected_weight=contract_weight)
+        if intent.target_weight is not None and context.phase in {"submission", "amendment"}:
+            exact = abs(intent.target_weight - contract_weight) <= 1e-8
+            # Only the explicitly labelled retrospective tenth-share scenario can
+            # round a planned share delta toward zero. The original target contract
+            # is never relaxed for other modes or for nonconservative rounding.
+            step = context.research_share_step
+            if not exact and step is not None and math.isfinite(intent.target_weight):
+                ideal = (
+                    intent.target_weight * state.equity
+                    - (current.quantity if current else 0) * reference
+                    - committed
+                ) / reference
+                units = abs(intent.quantity) / step
+                exact = (
+                    context.instrument == "plain_sector_etf"
+                    and ideal * intent.quantity > 0
+                    and abs(units - round(units)) <= 1e-8
+                    and -1e-8 <= abs(ideal) - abs(intent.quantity) < step + 1e-8
+                )
+            if not exact or not math.isfinite(intent.target_weight) or intent.target_weight < 0:
+                return reject("target_quantity_mismatch", projected_weight=contract_weight)
         floor = intent.target_weight if intent.target_weight is not None else target
         # A partial fill is not a new target; ordinary price drift never creates orders.
         if (

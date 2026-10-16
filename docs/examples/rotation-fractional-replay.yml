@@ -1,0 +1,91 @@
+name: Fixed fractional-fee stress comparison v1
+
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/rotation-research-operation.yml]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: real-action-capture-v1
+  cancel-in-progress: false
+
+env:
+  SOURCE_SHA: '__REVIEWED_SOURCE_SHA__'
+  ACTIONS_STEP_DEBUG: ${{ secrets.ACTIONS_STEP_DEBUG }}
+  ACTIONS_RUNNER_DEBUG: ${{ secrets.ACTIONS_RUNNER_DEBUG }}
+
+jobs:
+  preflight:
+    permissions:
+      contents: read
+      actions: read
+    if: >-
+      github.repository == 'dczhhh/quant-strategies-code' &&
+      github.actor == 'dczhhh' && github.event_name == 'push' &&
+      github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4
+      - run: uv sync --dev --locked --python 3.12
+      - name: Require successful checks on the immutable source
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh api "repos/dczhhh/quant-strategies-code/actions/runs?head_sha=$SOURCE_SHA&event=pull_request&per_page=100" > "$RUNNER_TEMP/stress-source-checks.json"
+          jq --exit-status --arg sha "$SOURCE_SHA" '
+            [.workflow_runs[] | select(.head_sha == $sha and .status == "completed" and .conclusion == "success") | .name] |
+            index("CI") != null and index("Ecosystem qualification") != null
+          ' "$RUNNER_TEMP/stress-source-checks.json"
+      - run: uv run pytest tests/test_rotation_fractional_replay.py tests/constraints/test_fractional_order_fees.py tests/test_rotation_stress_report_diagnostic.py tests/test_rotation_stress_replay.py tests/test_rotation_decision_oracle.py tests/test_rotation_stress_inputs.py tests/test_rotation_stress_analytics.py tests/strategies/test_rotation_assumed_distribution.py -q --no-cov
+      - run: uv run python -m tests.rotation_process_probe fractional_crash_compare
+      - run: uv run ty check tools/rotation_fractional_replay.py tools/rotation_stress_replay.py tools/rotation_decision_oracle.py tools/rotation_stress_inputs.py tools/rotation_stress_analytics.py tools/rotation_stress_report_diagnostic.py
+
+  replay:
+    needs: preflight
+    environment: private-archive
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4
+      - run: uv sync --dev --locked --python 3.12
+      - name: Retained-source integer/tenth-share twelve-engine comparison and private readback
+        env:
+          RUNNER_ENVIRONMENT: ${{ runner.environment }}
+          ARCHIVE_WRITE_TOKEN: ${{ secrets.ARCHIVE_WRITE_TOKEN }}
+          PYTHONHASHSEED: '1'
+        run: uv run python tools/rotation_fractional_replay.py run "$SOURCE_SHA"
+
+  verify:
+    needs: replay
+    environment: private-archive
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4
+      - run: uv sync --dev --locked --python 3.12
+      - name: Fresh twelve-engine comparison and byte-for-byte private verification
+        env:
+          RUNNER_ENVIRONMENT: ${{ runner.environment }}
+          ARCHIVE_WRITE_TOKEN: ${{ secrets.ARCHIVE_WRITE_TOKEN }}
+          PYTHONHASHSEED: '33'
+        run: uv run python tools/rotation_fractional_replay.py verify "$SOURCE_SHA"
+

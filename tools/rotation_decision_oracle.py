@@ -214,12 +214,13 @@ def monthly_expected(reference, state, settings):
     )
 
 
-def fee_estimate(quantity, price):
+def fee_estimate(quantity, price, *, parent_tiered=False):
     """Fresh minimum, first-tier quote including fractional estimate components, no state."""
     q, p = abs(D(quantity)), D(price)
     require(q > 0 and p >= 1, "FEE_QUOTE_SCOPE")
     whole = q // 1
     fraction = q - whole
+    billed = q if parent_tiered else whole
     raw, lower = Decimal(0), Decimal(0)
     for bound, rate in (
         (300000, ".0035"),
@@ -228,17 +229,17 @@ def fee_estimate(quantity, price):
         (100000000, ".001"),
         (Decimal("Infinity"), ".0005"),
     ):
-        raw += max(Decimal(0), min(whole, D(bound)) - lower) * D(rate)
+        raw += max(Decimal(0), min(billed, D(bound)) - lower) * D(rate)
         lower = D(bound)
-    broker = min(max(raw, D(".35")), whole * p / 100) if whole else Decimal(0)
-    if fraction > Decimal("1E-12"):
+    broker = min(max(raw, D(".35")), billed * p / 100) if billed else Decimal(0)
+    if fraction > Decimal("1E-12") and not parent_tiered:
         broker += max(D(".01"), fraction * p / 100)
     regulatory = q * D(".000003")
     if D(quantity) < 0:
         regulatory += q * p * D(".0000206") + min(q * D(".000195"), D("9.79"))
     return (
         broker * D("1.000735")
-        + q * D(".0035")
+        + (whole if parent_tiered else q) * D(".0035")
         + min(q * D(".0002"), q * p * D(".005"))
         + regulatory
     )
@@ -313,6 +314,8 @@ class DecisionOracle:
     def __init__(self, engine):
         self.engine, self.strategy = engine, engine.strategy
         self.settings = engine.strategy.config
+        self.share_step = D(engine.research_assumptions.share_step)
+        self.parent_tiered = self.share_step == D(".1")
         self.reference = reference_signals(engine.research_inputs, self.settings)
         self.monthly, self.signal_rows, self.execution_targets, self.orders, self.cash_blocks = (
             {},
@@ -472,14 +475,16 @@ class DecisionOracle:
                 held = D(state.holdings[a].quantity) if a in state.holdings else Decimal(0)
                 delta = weight * nav / price - held
                 estimated = price * (1 + slip if delta > 0 else 1 - slip)
-                fees += fee_estimate(delta, estimated)
+                fees += fee_estimate(delta, estimated, parent_tiered=self.parent_tiered)
                 lo[a], hi[a] = (
-                    D(self.settings.min_weight) + price / nav,
-                    D(self.settings.max_weight) - price / nav,
+                    D(self.settings.min_weight) + price * self.share_step / nav,
+                    D(self.settings.max_weight) - price * self.share_step / nav,
                 )
             for a, holding in state.holdings.items():
                 if a not in expected["targets"]:
-                    fees += fee_estimate(-holding.quantity, holding.price)
+                    fees += fee_estimate(
+                        -holding.quantity, holding.price, parent_tiered=self.parent_tiered
+                    )
             cushion = fees / nav + slip + D(self.settings.execution_cushion_bps) / 10000
             hi = {a: value - cushion for a, value in hi.items()}
             if expected["targets"]:
@@ -547,7 +552,13 @@ class DecisionOracle:
             )
             expected = {}
             for a, h in state.holdings.items():
-                q = math.floor(weights.get(a, 0) * D(state.equity) / D(h.price) + D("1E-10"))
+                q = (
+                    math.floor(
+                        weights.get(a, 0) * D(state.equity) / D(h.price) / self.share_step
+                        + D("1E-10")
+                    )
+                    * self.share_step
+                )
                 if D(q) * D(h.price) / D(state.equity) < D(self.settings.min_weight) - D("1E-10"):
                     q = 0
                 delta = min(Decimal(0), D(q) - D(h.quantity))
@@ -643,7 +654,9 @@ class DecisionOracle:
                     estimate = price * (
                         1 + D(self.engine.research_assumptions.slippage_bps) / 10000
                     )
-                    required = q * estimate + fee_estimate(q, estimate)
+                    required = q * estimate + fee_estimate(
+                        q, estimate, parent_tiered=self.parent_tiered
+                    )
                     if required > available - D(broker.controller.config.cash_reserve) * nav + D(
                         "1E-8"
                     ):

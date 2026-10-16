@@ -21,7 +21,7 @@ from tools import rotation_research_replay as u
 from tools import rotation_stress_analytics as a
 
 
-def stress(crash=False):
+def stress(crash=False, fractional=False):
     from pytest import MonkeyPatch
 
     from tests.test_private_archive_migration import FakeGitHub
@@ -71,7 +71,11 @@ def stress(crash=False):
                 published_at=datetime(2026, 10, 16, tzinfo=UTC),
             )
 
-        r.execute(
+        if fractional:
+            from tools import rotation_fractional_replay as report_operator
+        else:
+            report_operator = r
+        report_operator.execute(
             lambda: archive,
             "b" * 40,
             input_builder=builder,
@@ -80,10 +84,10 @@ def stress(crash=False):
                 "semantics_match": True,
             },
         )
-        commit = archive.commits[archive.refs[r.REPORT_REF]]
+        commit = archive.commits[archive.refs[report_operator.REPORT_REF]]
         tree = archive.trees[commit["tree"]["sha"]]
         saved = {row["path"]: archive.blobs[row["sha"]] for row in tree["tree"]}
-        manifest = json.loads(saved[r.PREFIX + "manifest.json"])
+        manifest = json.loads(saved[report_operator.PREFIX + "manifest.json"])
         return {
             name: json.loads(gzip.decompress(b"".join(saved[p] for p in item["parts"])))
             for name, item in manifest["logical_files"].items()
@@ -91,11 +95,16 @@ def stress(crash=False):
 
 
 def main(mode):
-    if mode == "stress_crash_compare":
+    if mode in {"stress_crash_compare", "fractional_crash_compare"}:
 
         def run(seed):
             return subprocess.check_output(
-                [sys.executable, "-m", "tests.rotation_process_probe", "stress_crash"],
+                [
+                    sys.executable,
+                    "-m",
+                    "tests.rotation_process_probe",
+                    "fractional_crash" if mode == "fractional_crash_compare" else "stress_crash",
+                ],
                 env=os.environ | {"PYTHONHASHSEED": str(seed)},
             )
 
@@ -105,11 +114,15 @@ def main(mode):
             "Invented full crash/recovery reports differ across independent hash seeds"
         )
         return {
-            "status": "INVENTED_FULL_STRESS_CROSS_PROCESS_BYTES_IDENTICAL",
+            "status": "INVENTED_FRACTIONAL_FULL_STRESS_CROSS_PROCESS_BYTES_IDENTICAL"
+            if mode == "fractional_crash_compare"
+            else "INVENTED_FULL_STRESS_CROSS_PROCESS_BYTES_IDENTICAL",
             "hash_seeds": [1, 33],
         }
     if mode in {"stress", "stress_crash"}:
         return stress(mode == "stress_crash")
+    if mode == "fractional_crash":
+        return stress(crash=True, fractional=True)
     source = inputs(bear=mode == "bear", end="2025-11-10")
     if mode == "replacement":
 

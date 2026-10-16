@@ -569,6 +569,7 @@ def test_completed_close_overlay_preserves_v8_pins_and_rejects_its_old_snapshot(
         RESEARCH_CLOSE_POLICY_SOURCE_SHA256,
         RESEARCH_EXECUTION_SOURCE_REVISION,
         RESEARCH_EXECUTION_SOURCE_SHA256,
+        RESEARCH_FRACTIONAL_SOURCE_SHA256,
         _versions,
     )
 
@@ -578,7 +579,10 @@ def test_completed_close_overlay_preserves_v8_pins_and_rejects_its_old_snapshot(
     assert proof["research_execution_source_sha256"] == RESEARCH_EXECUTION_SOURCE_SHA256
     assert proof["research_close_policy_source_sha256"] == RESEARCH_CLOSE_POLICY_SOURCE_SHA256
     assert all(
-        proof["reviewed_source_sha256"][name] == RESEARCH_ASSUMPTION_SOURCE_SHA256.get(name, sha)
+        proof["reviewed_source_sha256"][name]
+        == RESEARCH_FRACTIONAL_SOURCE_SHA256.get(
+            name, RESEARCH_ASSUMPTION_SOURCE_SHA256.get(name, sha)
+        )
         for name, sha in RESEARCH_EXECUTION_SOURCE_SHA256.items()
     )
     old = freeze(
@@ -593,6 +597,7 @@ def test_funded_benchmark_overlay_preserves_v9_sources_and_refuses_old_snapshot(
         RESEARCH_BENCHMARK_SOURCE_SHA256,
         RESEARCH_EXECUTION_SOURCE_REVISION,
         RESEARCH_EXECUTION_SOURCE_SHA256,
+        RESEARCH_FRACTIONAL_SOURCE_SHA256,
         _versions,
     )
 
@@ -602,7 +607,7 @@ def test_funded_benchmark_overlay_preserves_v9_sources_and_refuses_old_snapshot(
     assert proof["research_benchmark_source_sha256"] == RESEARCH_BENCHMARK_SOURCE_SHA256
     assert proof["research_execution_source_sha256"] == RESEARCH_EXECUTION_SOURCE_SHA256
     assert all(
-        proof["reviewed_source_sha256"][name] == sha
+        proof["reviewed_source_sha256"][name] == RESEARCH_FRACTIONAL_SOURCE_SHA256.get(name, sha)
         for name, sha in RESEARCH_BENCHMARK_SOURCE_SHA256.items()
     )
     old = freeze(req, records, pipeline=versions(code_revision=RESEARCH_EXECUTION_SOURCE_REVISION))
@@ -615,6 +620,7 @@ def test_assumed_distribution_overlay_retains_v10_pins_and_rejects_old_snapshot(
         RESEARCH_ASSUMPTION_SOURCE_SHA256,
         RESEARCH_BENCHMARK_SOURCE_REVISION,
         RESEARCH_BENCHMARK_SOURCE_SHA256,
+        RESEARCH_FRACTIONAL_SOURCE_SHA256,
         _versions,
     )
 
@@ -624,10 +630,32 @@ def test_assumed_distribution_overlay_retains_v10_pins_and_rejects_old_snapshot(
     assert proof["research_benchmark_source_sha256"] == RESEARCH_BENCHMARK_SOURCE_SHA256
     assert proof["research_assumption_source_sha256"] == RESEARCH_ASSUMPTION_SOURCE_SHA256
     assert all(
-        proof["reviewed_source_sha256"][name] == sha
+        proof["reviewed_source_sha256"][name] == RESEARCH_FRACTIONAL_SOURCE_SHA256.get(name, sha)
         for name, sha in RESEARCH_ASSUMPTION_SOURCE_SHA256.items()
     )
     old = freeze(req, records, pipeline=versions(code_revision=RESEARCH_BENCHMARK_SOURCE_REVISION))
+    rejected(run(old), "VERSION_MISMATCH", "versions")
+
+
+def test_fractional_fee_overlay_retains_v11_and_refuses_its_old_snapshot():
+    from quant_constraints.research.data.verification import (
+        RESEARCH_ASSUMPTION_SOURCE_REVISION,
+        RESEARCH_ASSUMPTION_SOURCE_SHA256,
+        RESEARCH_FRACTIONAL_SOURCE_REVISION,
+        RESEARCH_FRACTIONAL_SOURCE_SHA256,
+        _versions,
+    )
+
+    req, records = fixture()
+    proof = _versions(freeze(req, records))
+    assert proof["research_fractional_source_revision"] == RESEARCH_FRACTIONAL_SOURCE_REVISION
+    assert proof["research_fractional_source_sha256"] == RESEARCH_FRACTIONAL_SOURCE_SHA256
+    assert proof["research_assumption_source_sha256"] == RESEARCH_ASSUMPTION_SOURCE_SHA256
+    assert all(
+        proof["reviewed_source_sha256"][name] == sha
+        for name, sha in RESEARCH_FRACTIONAL_SOURCE_SHA256.items()
+    )
+    old = freeze(req, records, pipeline=versions(code_revision=RESEARCH_ASSUMPTION_SOURCE_REVISION))
     rejected(run(old), "VERSION_MISMATCH", "versions")
 
 
@@ -640,6 +668,9 @@ def test_assumed_distribution_overlay_retains_v10_pins_and_rejects_old_snapshot(
         "ml4t.backtest.strategies.sector_rotation.research_inputs",
         "ml4t.backtest.strategies.sector_rotation.research_ledger",
         "ml4t.backtest.strategies.sector_rotation.research_benchmark",
+        "ml4t.backtest.strategies.sector_rotation.strategy",
+        "quant_constraints.fees.ibkr_tiered",
+        "quant_constraints.gates",
     ],
 )
 def test_research_modules_are_bound_before_any_legacy_domain_replay(name, monkeypatch):
