@@ -833,19 +833,18 @@ def test_one_decimal_research_fills_stay_on_tenths_with_independent_cash_ledger(
     assert engine.research_report["PIT_verified"] is False
     assert engine.research_report["assumptions"]["share_step"] == "0.1"
     assert engine.broker.fills
-    assert any(
-        Decimal(str(fill.quantity)) % Decimal("1") != 0 for fill in engine.broker.fills
-    )
+    assert any(Decimal(str(fill.quantity)) % Decimal("1") != 0 for fill in engine.broker.fills)
     assert all(
         abs(
             Decimal(str(fill.quantity)) / Decimal("0.1")
             - (Decimal(str(fill.quantity)) / Decimal("0.1")).to_integral_value()
-        ) <= Decimal("1E-9")
+        )
+        <= Decimal("1E-9")
         for fill in engine.broker.fills
     )
-    assert Decimal(engine.research_report["independent_ledger"]["maximum_monetary_error"]) <= Decimal(
-        "1E-8"
-    )
+    assert Decimal(
+        engine.research_report["independent_ledger"]["maximum_monetary_error"]
+    ) <= Decimal("1E-8")
 
 
 def test_one_decimal_spy_benchmark_uses_same_cash_and_fee_oracle():
@@ -858,7 +857,10 @@ def test_one_decimal_spy_benchmark_uses_same_cash_and_fee_oracle():
         Decimal(str(fill.quantity)) % Decimal("1") != 0 for fill in engine.broker.fills
     )
     assert all(
-        abs(Decimal(str(fill.quantity)) * 10 - (Decimal(str(fill.quantity)) * 10).to_integral_value())
+        abs(
+            Decimal(str(fill.quantity)) * 10
+            - (Decimal(str(fill.quantity)) * 10).to_integral_value()
+        )
         <= Decimal("1E-9")
         for fill in engine.broker.fills
     )
@@ -872,8 +874,12 @@ def test_one_decimal_oracle_rejects_two_decimal_fill_corruption():
     fills[0].quantity += 0.05
     with pytest.raises(ResearchLedgerMismatch, match="share step"):
         verify_research_ledger(
-            engine.research_inputs, scenario, fills, engine.broker.orders,
-            engine.broker.fee_records, engine.research_trace,
+            engine.research_inputs,
+            scenario,
+            fills,
+            engine.broker.orders,
+            engine.broker.fee_records,
+            engine.research_trace,
         )
 
 
