@@ -25,6 +25,7 @@ from .research import (
     _ResearchBroker,
     _ResearchParticipationLimit,
     _ResearchProvider,
+    _TenthResearchPortfolioGate,
     _share_step_floor,
 )
 from .research_inputs import ResearchInputs, RetrospectiveCloseSource
@@ -134,6 +135,8 @@ def retrospective_spy_benchmark(
         fee_history_mode="current_snapshot_backcast",
     )
     controller = ConstraintController(constraints, InMemoryEarningsProvider())
+    if assumptions.share_step == Decimal("0.1"):
+        controller.portfolio = _TenthResearchPortfolioGate(constraints, controller.earnings)
     config = cash_backtest_config(
         initial_cash=float(assumptions.initial_cash),
         share_type=ShareType.INTEGER if assumptions.share_step == 1 else ShareType.FRACTIONAL,
