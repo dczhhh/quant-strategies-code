@@ -817,3 +817,81 @@ def test_committed_fee_evidence_and_fill_sequence_are_independently_checked(corr
         verify_research_ledger(
             engine.research_inputs, ASSUMPTIONS, fills, orders, records, engine.research_trace
         )
+
+
+@pytest.mark.parametrize("step", ["0.01", "0.05", "0", "-0.1", "0.2"])
+def test_research_share_step_accepts_only_whole_or_one_decimal(step):
+    with pytest.raises(ValueError, match="Invalid research assumptions"):
+        replace(ASSUMPTIONS, share_step=Decimal(step))
+
+
+def test_one_decimal_research_fills_stay_on_tenths_with_independent_cash_ledger():
+    scenario = replace(ASSUMPTIONS, share_step=Decimal("0.1"))
+    engine = retrospective_rotation_engine(inputs(end="2025-10-03"), scenario, settings())
+    engine.run()
+    assert engine.research_report["status"] == "RETROSPECTIVE_ENGINE_LEDGER_PASS"
+    assert engine.research_report["PIT_verified"] is False
+    assert engine.research_report["assumptions"]["share_step"] == "0.1"
+    assert engine.broker.fills
+    assert any(Decimal(str(fill.quantity)) % Decimal("1") != 0 for fill in engine.broker.fills)
+    assert all(
+        abs(
+            Decimal(str(fill.quantity)) / Decimal("0.1")
+            - (Decimal(str(fill.quantity)) / Decimal("0.1")).to_integral_value()
+        )
+        <= Decimal("1E-9")
+        for fill in engine.broker.fills
+    )
+    assert Decimal(
+        engine.research_report["independent_ledger"]["maximum_monetary_error"]
+    ) <= Decimal("1E-8")
+
+
+def test_one_decimal_spy_benchmark_uses_same_cash_and_fee_oracle():
+    scenario = replace(ASSUMPTIONS, share_step=Decimal("0.1"))
+    engine = retrospective_spy_benchmark(inputs(end="2025-10-03"), scenario)
+    engine.run()
+    assert engine.research_report["status"] == "RETROSPECTIVE_ENGINE_LEDGER_PASS"
+    assert engine.research_report["assumptions"]["share_step"] == "0.1"
+    assert any(Decimal(str(fill.quantity)) % Decimal("1") != 0 for fill in engine.broker.fills)
+    assert all(
+        abs(
+            Decimal(str(fill.quantity)) * 10
+            - (Decimal(str(fill.quantity)) * 10).to_integral_value()
+        )
+        <= Decimal("1E-9")
+        for fill in engine.broker.fills
+    )
+
+
+def test_one_decimal_oracle_rejects_two_decimal_fill_corruption():
+    scenario = replace(ASSUMPTIONS, share_step=Decimal("0.1"))
+    engine = retrospective_spy_benchmark(inputs(end="2025-10-03"), scenario)
+    engine.run()
+    fills = copy.deepcopy(engine.broker.fills)
+    fills[0].quantity += 0.05
+    with pytest.raises(ResearchLedgerMismatch, match="share step"):
+        verify_research_ledger(
+            engine.research_inputs,
+            scenario,
+            fills,
+            engine.broker.orders,
+            engine.broker.fee_records,
+            engine.research_trace,
+        )
+
+
+def test_one_decimal_partial_volume_cap_never_exceeds_limit():
+    from ml4t.backtest.strategies.sector_rotation.research import (
+        _ResearchParticipationLimit,
+    )
+
+    limiter = _ResearchParticipationLimit(0.05, Decimal("0.1"))
+    partial = limiter.calculate(2.0, 25.0, 100.0)
+    assert partial.fillable_quantity == pytest.approx(1.2)
+    assert partial.remaining_quantity == pytest.approx(0.8)
+    assert partial.participation_rate <= 0.05
+    tiny = limiter.calculate(2.0, 1.0, 100.0)
+    assert tiny.fillable_quantity == 0.0 and tiny.remaining_quantity == 2.0
+    with pytest.raises(ValueError, match="observed volume"):
+        limiter.calculate(2.0, None, 100.0)
