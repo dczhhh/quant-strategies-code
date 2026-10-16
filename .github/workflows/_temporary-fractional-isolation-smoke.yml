@@ -1,4 +1,4 @@
-name: Temporary isolated fractional smoke v2
+name: Temporary isolated fractional smoke v3
 
 on:
   push:
