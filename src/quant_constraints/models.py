@@ -78,6 +78,7 @@ class MarketContext:
     execution_liquidity: str = "unknown"
     fee_metadata_available_at: datetime | None = None
     reference_price: float | None = None  # observed mark for external target-quantity contract
+    research_share_step: float | None = None  # retrospective-only exact target rounding contract
     security_id: str | None = None  # stable source identifier, not a ticker
     execution_data_mode: str | None = None
     signal_data_mode: str | None = None
@@ -98,6 +99,10 @@ class MarketContext:
             not math.isfinite(self.reference_price) or self.reference_price <= 0
         ):
             raise ValueError("Observed reference_price must be finite and positive")
+        if self.research_share_step is not None and (
+            self.research_share_step != 0.1 or self.instrument != "plain_sector_etf"
+        ):
+            raise ValueError("Research share-step contract only supports tenth-share ETFs")
         for timestamp in (
             self.liquidity_available_at,
             self.vix_available_at,
