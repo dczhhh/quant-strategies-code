@@ -3545,7 +3545,7 @@
       },
       "module": "ml4t.backtest.strategies.sector_rotation.research",
       "qualname": "ResearchAssumptions",
-      "signature": "(name: str, initial_cash: decimal.Decimal, dividend_tax_rate: decimal.Decimal, modeled_spread: decimal.Decimal, slippage_bps: decimal.Decimal, maximum_participation: decimal.Decimal = Decimal('0.01'), assumed_ordinary_years: tuple[int, ...] = (), share_step: decimal.Decimal = Decimal('1')) -> None"
+      "signature": "(name: str, initial_cash: decimal.Decimal, dividend_tax_rate: decimal.Decimal, modeled_spread: decimal.Decimal, slippage_bps: decimal.Decimal, maximum_participation: decimal.Decimal = Decimal('0.01'), assumed_ordinary_years: tuple[int, ...] = ()) -> None"
     },
     "ml4t.backtest.strategies.sector_rotation.research:retrospective_rotation_engine": {
       "kind": "function",
