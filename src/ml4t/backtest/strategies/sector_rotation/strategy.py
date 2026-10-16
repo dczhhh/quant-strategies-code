@@ -202,7 +202,7 @@ class SectorRotationStrategy(Strategy):
         return True
 
     def _execution_targets(self, broker: Any, decision: AllocationDecision) -> dict[str, float]:
-        """Reserve estimated costs and one whole-share quantum at holding bounds."""
+        """Reserve estimated costs and one executable share quantum at holding bounds."""
         state = broker.constraint_state()
         if not decision.targets:
             return {}
@@ -218,7 +218,10 @@ class SectorRotationStrategy(Strategy):
             estimated = broker.estimate_execution_price(asset, quantity, price)
             costs += broker.estimate_order_fees(asset, quantity, estimated)
             slips = max(slips, abs(estimated / price - 1))
-            quantum = price / state.equity if broker.share_type.value == "integer" else 0.0
+            step = float(getattr(broker, "research_quantity_step", 0.0))
+            if not step and broker.share_type.value == "integer":
+                step = 1.0
+            quantum = price * step / state.equity
             lower[asset] = self.config.min_weight + quantum
             upper[asset] = self.config.max_weight - quantum
         # Include exits too, as their commissions reduce the allocation NAV.
@@ -272,8 +275,11 @@ class SectorRotationStrategy(Strategy):
         submitted = False
         for asset, holding in snapshot.holdings.items():
             target_quantity = targets.get(asset, 0) * snapshot.equity / holding.price
-            if broker.share_type.value == "integer":
-                target_quantity = math.floor(target_quantity + 1e-10)
+            step = float(getattr(broker, "research_quantity_step", 0.0))
+            if not step and broker.share_type.value == "integer":
+                step = 1.0
+            if step:
+                target_quantity = math.floor(target_quantity / step + 1e-10) * step
                 if (
                     target_quantity * holding.price / snapshot.equity
                     < self.config.min_weight - 1e-10
