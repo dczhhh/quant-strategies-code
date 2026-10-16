@@ -46,7 +46,8 @@ entry and trusted dataset issuance remain blocked before Engine construction.
 | ADR entry/tax workstream | `EXCLUDED_BY_OWNER_SCOPE` | All ADR new buys excluded; existing ADR credits remain private historical component evidence, not eligible strategy purchases |
 | Strategy return certification | `BLOCKED` | Requires remaining source/PIT, economic E2E and ETF acceptance; PR #6 remains unmerged |
 | Daily/minute source reconciliation | `UNVERIFIED` | v3 retained 474/576 differences above the original threshold. v4 adds per-security/session diagnostics and fixed-holdings mark sensitivity, not a causal explanation or source-price correction |
-| Independent strategy decision oracle | `UNVERIFIED` | The independent ledger verifies Engine fills/orders and economic state, not independently predicted signals, ranking, target allocation or intended orders. Diagnostic revaluation does not close this gap |
+| Independent strategy decision oracle | Implemented; actual stress verification pending | Independent Decimal signals/ranking/targets and submitted-intent observers add more than a fill ledger. They remain conditioned on verified past Engine state, not a second fill engine or proof of all unsubmitted opportunities |
+| Issue #30 cross-regime stress window | Capture/source verification and first six-case Engine replay pass; v1 fresh verification FAILED | [Pinned v1 failure and v2 reproducibility correction](rotation-stress-202412-202506.md). Cross-process equal-zero text ordering reproduced on invented crash/recovery data. V2 preserves v1, gates identical inputs/economic values and requires a new every-byte verifier; actual v2 pending. 2024 classification remains an assumption, never strict/PIT admission |
 
 The accepted SQQQ report hash remains
 `7db6cd97c99b681f516da1cb5995e4aae9ab6b0a182292ccbd09fc2cb3179d6c`.

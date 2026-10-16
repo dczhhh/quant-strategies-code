@@ -564,6 +564,7 @@ def test_close_policy_overlay_preserves_v7_evidence_and_refuses_its_old_snapshot
 
 def test_completed_close_overlay_preserves_v8_pins_and_rejects_its_old_snapshot():
     from quant_constraints.research.data.verification import (
+        RESEARCH_ASSUMPTION_SOURCE_SHA256,
         RESEARCH_CLOSE_POLICY_SOURCE_REVISION,
         RESEARCH_CLOSE_POLICY_SOURCE_SHA256,
         RESEARCH_EXECUTION_SOURCE_REVISION,
@@ -577,7 +578,7 @@ def test_completed_close_overlay_preserves_v8_pins_and_rejects_its_old_snapshot(
     assert proof["research_execution_source_sha256"] == RESEARCH_EXECUTION_SOURCE_SHA256
     assert proof["research_close_policy_source_sha256"] == RESEARCH_CLOSE_POLICY_SOURCE_SHA256
     assert all(
-        proof["reviewed_source_sha256"][name] == sha
+        proof["reviewed_source_sha256"][name] == RESEARCH_ASSUMPTION_SOURCE_SHA256.get(name, sha)
         for name, sha in RESEARCH_EXECUTION_SOURCE_SHA256.items()
     )
     old = freeze(
@@ -605,6 +606,28 @@ def test_funded_benchmark_overlay_preserves_v9_sources_and_refuses_old_snapshot(
         for name, sha in RESEARCH_BENCHMARK_SOURCE_SHA256.items()
     )
     old = freeze(req, records, pipeline=versions(code_revision=RESEARCH_EXECUTION_SOURCE_REVISION))
+    rejected(run(old), "VERSION_MISMATCH", "versions")
+
+
+def test_assumed_distribution_overlay_retains_v10_pins_and_rejects_old_snapshot():
+    from quant_constraints.research.data.verification import (
+        RESEARCH_ASSUMPTION_SOURCE_REVISION,
+        RESEARCH_ASSUMPTION_SOURCE_SHA256,
+        RESEARCH_BENCHMARK_SOURCE_REVISION,
+        RESEARCH_BENCHMARK_SOURCE_SHA256,
+        _versions,
+    )
+
+    req, records = fixture()
+    proof = _versions(freeze(req, records))
+    assert proof["research_assumption_source_revision"] == RESEARCH_ASSUMPTION_SOURCE_REVISION
+    assert proof["research_benchmark_source_sha256"] == RESEARCH_BENCHMARK_SOURCE_SHA256
+    assert proof["research_assumption_source_sha256"] == RESEARCH_ASSUMPTION_SOURCE_SHA256
+    assert all(
+        proof["reviewed_source_sha256"][name] == sha
+        for name, sha in RESEARCH_ASSUMPTION_SOURCE_SHA256.items()
+    )
+    old = freeze(req, records, pipeline=versions(code_revision=RESEARCH_BENCHMARK_SOURCE_REVISION))
     rejected(run(old), "VERSION_MISMATCH", "versions")
 
 

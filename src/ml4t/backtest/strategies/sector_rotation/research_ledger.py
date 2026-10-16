@@ -70,18 +70,20 @@ class _FeeReference:
         )
         whole = quantity.to_integral_value(rounding=ROUND_FLOOR)
         fractional = quantity - whole
-        raw = prior_raw + _broker_charge(whole, self.months[month])
-        value = prior_value + whole * price
-        gross = max(Decimal("0.35"), raw) if prior_quantity + whole > 0 else Decimal(0)
+        parent_tiered = self.share_step == Decimal("0.1")
+        billed = quantity if parent_tiered else whole
+        raw = prior_raw + _broker_charge(billed, self.months[month])
+        value = prior_value + billed * price
+        gross = max(Decimal("0.35"), raw) if prior_quantity + billed > 0 else Decimal(0)
         capped = gross > value / 100 and value > 0
         cumulative = min(gross, value / 100)
         broker = cumulative - prior_paid
-        if fractional > Decimal("1E-12"):
+        if fractional > Decimal("1E-12") and not parent_tiered:
             broker += max(Decimal("0.01"), fractional * price / 100)
-        counted = Decimal(0) if capped else prior_quantity + whole
-        self.months[month] += counted - prior_counted + fractional
-        self.orders[key] = raw, value, cumulative, prior_quantity + whole, counted
-        venue = quantity * Decimal("0.0035")
+        counted = Decimal(0) if capped else prior_quantity + billed
+        self.months[month] += counted - prior_counted + (0 if parent_tiered else fractional)
+        self.orders[key] = raw, value, cumulative, prior_quantity + billed, counted
+        venue = (whole if parent_tiered else quantity) * Decimal("0.0035")
         clearing = min(quantity * Decimal("0.0002"), quantity * price * Decimal("0.005"))
         regulatory = quantity * Decimal("0.000003")
         if fill.side.value == "sell":
@@ -138,7 +140,9 @@ def verify_research_ledger(inputs: ResearchInputs, assumptions, fills, orders, f
                 key = event.asset, event.event_id
                 if kind == 0:
                     quantity = positions[event.asset] * number(event.new_per_old)
-                    if quantity != quantity.to_integral_value():
+                    if not _on_step(quantity, step) or (
+                        number(event.new_per_old) < 1 and quantity != quantity.to_integral_value()
+                    ):
                         raise ResearchLedgerMismatch(
                             "UNSUPPORTED_CASH_IN_LIEU: fractional split result"
                         )

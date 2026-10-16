@@ -1,5 +1,10 @@
 # Retrospective rotation execution
 
+Optional tenth-share research uses the separately disclosed
+[parent-order commission correction](ibkr-fractional-commission-correction.md),
+not commission-free fractional trading. Existing integer-source reports remain
+pinned to their original code and fee assumptions.
+
 The separate research factory runs the canonical Engine and constrained cash broker on original-share
 inputs. The ordinary `sector_rotation_engine` real entry remains blocked. Research inputs are also
 rejected by its synthetic entry. No broker connection or live order is involved.

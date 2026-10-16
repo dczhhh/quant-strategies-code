@@ -116,6 +116,28 @@ jobs:
           uv run ruff format --check tools/rotation_research_capture.py tools/rotation_research_replay.py tools/rotation_research_price_audit.py tests/test_rotation_research_operator.py tests/test_rotation_research_price_audit.py
           uv run ty check tools/rotation_research_capture.py tools/rotation_research_replay.py tools/rotation_research_price_audit.py
           uv run pytest tests/test_rotation_research_operator.py tests/test_rotation_research_price_audit.py -q --no-cov
+          uv run ruff check --no-fix tools/rotation_stress_inventory.py tests/test_rotation_stress_inventory.py
+          uv run ruff format --check tools/rotation_stress_inventory.py tests/test_rotation_stress_inventory.py
+          uv run ty check tools/rotation_stress_inventory.py
+          uv run pytest tests/test_rotation_stress_inventory.py -q --no-cov
+          uv run ruff check --no-fix tools/rotation_stress_capture.py tests/test_rotation_stress_capture.py
+          uv run ruff format --check tools/rotation_stress_capture.py tests/test_rotation_stress_capture.py
+          uv run ty check tools/rotation_stress_capture.py
+          uv run pytest tests/test_rotation_stress_capture.py -q --no-cov
+          uv run ruff check --no-fix tools/rotation_decision_oracle.py tools/rotation_stress_inputs.py tools/rotation_stress_analytics.py tools/rotation_stress_replay.py tests/test_rotation_decision_oracle.py tests/test_rotation_stress_inputs.py tests/test_rotation_stress_analytics.py tests/test_rotation_stress_replay.py
+          uv run ruff format --check tools/rotation_decision_oracle.py tools/rotation_stress_inputs.py tools/rotation_stress_analytics.py tools/rotation_stress_replay.py tests/test_rotation_decision_oracle.py tests/test_rotation_stress_inputs.py tests/test_rotation_stress_analytics.py tests/test_rotation_stress_replay.py
+          uv run ty check tools/rotation_decision_oracle.py tools/rotation_stress_inputs.py tools/rotation_stress_analytics.py tools/rotation_stress_replay.py
+          uv run pytest tests/test_rotation_decision_oracle.py tests/test_rotation_stress_inputs.py tests/test_rotation_stress_analytics.py tests/test_rotation_stress_replay.py -q --no-cov
+          uv run ruff check --no-fix tools/rotation_stress_report_diagnostic.py tests/test_rotation_stress_report_diagnostic.py tests/rotation_process_probe.py
+          uv run ruff format --check tools/rotation_stress_report_diagnostic.py tests/test_rotation_stress_report_diagnostic.py tests/rotation_process_probe.py
+          uv run ty check tools/rotation_stress_report_diagnostic.py
+          uv run pytest tests/test_rotation_stress_report_diagnostic.py -q --no-cov
+          uv run python -m tests.rotation_process_probe stress_crash_compare
+          uv run ruff check --no-fix tools/rotation_fractional_replay.py tests/test_rotation_fractional_replay.py tests/constraints/test_fractional_order_fees.py
+          uv run ruff format --check tools/rotation_fractional_replay.py tests/test_rotation_fractional_replay.py tests/constraints/test_fractional_order_fees.py
+          uv run ty check tools/rotation_fractional_replay.py
+          uv run pytest tests/test_rotation_fractional_replay.py tests/constraints/test_fractional_order_fees.py -q --no-cov
+          uv run python -m tests.rotation_process_probe fractional_crash_compare
 
       - name: Validate private sample workflow expressions without executing capture
         run: |

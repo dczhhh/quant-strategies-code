@@ -14,7 +14,12 @@ from typing import Any
 
 import polars as pl
 
-from quant_constraints import ConstraintController, InMemoryEarningsProvider, MarketContext
+from quant_constraints import (
+    ConstraintController,
+    IBKRProTieredUSStock,
+    InMemoryEarningsProvider,
+    MarketContext,
+)
 from quant_constraints.adapter import cash_backtest_config
 from quant_constraints.calendar import NY
 from quant_constraints.corporate_actions import CorporateAction, CorporateActionCoverage
@@ -38,13 +43,18 @@ class ResearchAssumptions:
     modeled_spread: Decimal
     slippage_bps: Decimal
     maximum_participation: Decimal = Decimal("0.01")
-    share_step: Decimal = Decimal(
-        "1"
-    )  # Optional 0.1-share research mode; baseline stays whole shares.
+    assumed_ordinary_years: tuple[int, ...] = ()
+    share_step: Decimal = Decimal("1")
 
     def __post_init__(self):
         if not self.name.strip():
             raise ValueError("A named research scenario is required")
+        years = tuple(self.assumed_ordinary_years)
+        if years not in ((), (2024,)) or any(type(year) is not int for year in years):
+            raise ValueError(
+                "Only the separately disclosed 2024 ordinary-fund assumption is supported"
+            )
+        object.__setattr__(self, "assumed_ordinary_years", years)
         for field in (
             "initial_cash",
             "dividend_tax_rate",
@@ -72,6 +82,19 @@ class _ResearchProvider:
         self.securities = {s.asset: s for s in inputs.securities}
         self.start = inputs.bars[0].end.astimezone(NY).date()
         self.end = inputs.bars[-1].end.astimezone(NY).date()
+        if any(
+            event.classification == "assumed_ordinary_fund"
+            and self.start <= event.ex_date <= self.end
+            and (
+                event.ex_date.year not in assumptions.assumed_ordinary_years
+                or not event.classification_source_id
+                or not event.classification_source_id.startswith("assumption:")
+            )
+            for event in inputs.distributions
+        ):
+            raise ValueError(
+                "Assumed distribution requires an explicit year-bound research scenario"
+            )
         self.events = []
         for split in inputs.splits:
             if self.start <= split.session <= self.end:
@@ -102,7 +125,7 @@ class _ResearchProvider:
                     dividend_per_share=float(event.cash_amount),
                     record_date=event.record_date,
                     payable_date=event.pay_date,
-                    distribution_type="ordinary_fund",
+                    distribution_type=event.classification,
                     tax_source_country="US",
                     tax_source=event.classification_source_id,
                     tax_source_known_at=inputs.source_map[
@@ -194,7 +217,7 @@ class _ResearchActions(CorporateActionProcessor):
     def _tax_rate(self, event, asof):
         provider = self.provider
         if not isinstance(provider, _ResearchProvider) or (
-            event.distribution_type != "ordinary_fund"
+            event.distribution_type not in {"ordinary_fund", "assumed_ordinary_fund"}
             or event.currency != "USD"
             or event.tax_source_country != "US"
             or event.terms != "ordinary"
@@ -204,6 +227,7 @@ class _ResearchActions(CorporateActionProcessor):
             "basis": "explicit_research_tax_scenario",
             "name": provider.assumptions.name,
             "investor_eligibility_verified": False,
+            "classification_assumed": event.distribution_type == "assumed_ordinary_fund",
             "historical_PIT_verified": False,
             "classification_observed_at": event.tax_source_known_at.isoformat()
             if event.tax_source_known_at
@@ -241,18 +265,14 @@ class _ResearchActions(CorporateActionProcessor):
 
 
 def _share_step_floor(quantity: float, step: Decimal) -> float:
-    """Round absolute order/fill sizes DOWN to a supported research share increment."""
+    """Conservatively quantize order sizes, permitting only binary representation drift."""
     if not math.isfinite(quantity):
         raise ValueError("Non-finite research share quantity")
-    unit = float(step)
-    units = math.floor(abs(quantity) / unit + 1e-8)
-    # Decimal conversion prevents 0.1 binary drift from reaching the order journal.
+    units = math.floor(abs(quantity) / float(step) + 1e-8)
     return float(Decimal(units) * step)
 
 
 class _ResearchParticipationLimit(VolumeParticipationLimit):
-    """Apply the same step to partial fills; never round a volume cap upward."""
-
     def __init__(self, max_participation: float, share_step: Decimal):
         super().__init__(max_participation)
         self.share_step = share_step
@@ -275,7 +295,6 @@ class _ResearchBroker(SectorRotationBroker):
     research_quantity_step: Decimal = Decimal("1")
 
     def submit_order(self, asset, quantity, *args, **kwargs):
-        # Constrain ALL research entries/rebalances/risk exits, not just target sizing.
         if self.research_quantity_step != 1:
             size = _share_step_floor(quantity, self.research_quantity_step)
             if not size:
@@ -303,6 +322,19 @@ class _ResearchBroker(SectorRotationBroker):
             raise ValueError("Research broker requires its bound input provider")
         self.research_provider = corporate_action_provider
         self.research_quantity_step = corporate_action_provider.assumptions.share_step
+        if self.research_quantity_step == Decimal("0.1"):
+            if fee_model is not None:
+                raise ValueError("Tenth-share research owns its explicit parent-order fee profile")
+            settings = controller.config
+            fee_model = IBKRProTieredUSStock(
+                initial_monthly_volume=settings.fee_initial_monthly_volume,
+                initial_month=settings.fee_initial_month,
+                unknown_venue_per_share=settings.fee_unknown_venue_per_share,
+                unknown_venue_rate=settings.fee_unknown_venue_rate,
+                history_mode=settings.fee_history_mode,
+                snapshot_date=settings.fee_snapshot_date,
+                fractional_policy="parent_order_tiered",
+            )
         super().configure_constraints(
             controller, context_provider, config, fee_model, corporate_action_provider
         )
@@ -362,7 +394,7 @@ def retrospective_rotation_engine(
 ) -> RetrospectiveRotationEngine:
     """Build a separately labeled historical simulation with no strict admission.
 
-    Configurable one-share or 0.1-share steps, 2026 fee snapshot backcast, next completed-minute
+    Integer shares, unknown-venue 2026 fee snapshot backcast, next completed-minute
     close plus explicit slippage, and modeled payment-day credit are fixed here.
     """
     if not isinstance(inputs, ResearchInputs) or not isinstance(assumptions, ResearchAssumptions):
@@ -429,7 +461,9 @@ def retrospective_rotation_engine(
     engine.research_inputs, engine.research_assumptions = inputs, assumptions
     engine.research_trace = []
     engine.research_report = {
-        "schema": "rotation_retrospective_engine_v2"
+        "schema": "rotation_retrospective_engine_v3_assumed_distribution"
+        if assumptions.assumed_ordinary_years
+        else "rotation_retrospective_engine_v2"
         if inputs.bundle_schema.endswith("v2")
         else "rotation_retrospective_engine_v1",
         "status": "NOT_RUN",
@@ -449,7 +483,9 @@ def retrospective_rotation_engine(
         "assumptions": {k: str(v) for k, v in asdict(assumptions).items()},
         "execution": "next_completed_minute_close_plus_scenario_slippage",
         "price_conventions": inputs.close_comparison,
-        "fee_mode": "2026-10-10_normal_charge_snapshot_backcast_unknown_venue",
+        "fee_mode": "parent_order_tiered_account_observed_fractional_scenario_snapshot_backcast"
+        if assumptions.share_step == Decimal("0.1")
+        else "2026-10-10_normal_charge_snapshot_backcast_unknown_venue",
         "identity_mode": "fixed_domestic_SPDR_retrospective_metadata_not_PIT_attestation",
         "credit_mode": "modeled_pay_date_not_actual_broker_confirmation",
         "warmup_sessions": len(prehistory),

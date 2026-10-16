@@ -895,3 +895,15 @@ def test_one_decimal_partial_volume_cap_never_exceeds_limit():
     assert tiny.fillable_quantity == 0.0 and tiny.remaining_quantity == 2.0
     with pytest.raises(ValueError, match="observed volume"):
         limiter.calculate(2.0, None, 100.0)
+
+
+@pytest.mark.parametrize("ratio", [Decimal("0.5"), Decimal("0.25")])
+def test_tenth_share_support_does_not_waive_reverse_split_cash_in_lieu(ratio):
+    source = inputs()
+    source = replace(source, splits=tuple(replace(s, new_per_old=ratio) for s in source.splits))
+    scenario = replace(ASSUMPTIONS, share_step=Decimal("0.1"))
+    engine = retrospective_rotation_engine(source, scenario, settings())
+    # The canonical action processor must reject before the reference ledger runs.
+    with pytest.raises(ValueError, match="UNSUPPORTED_CASH_IN_LIEU"):
+        engine.run()
+    assert engine.research_report["status"] == "RETROSPECTIVE_RUN_FAILED"
