@@ -236,6 +236,19 @@ class _ResearchActions(CorporateActionProcessor):
 class _ResearchBroker(SectorRotationBroker):
     research_provider: _ResearchProvider
 
+    def _process_orders(self, *args, **kwargs):
+        # The canonical NEXT_BAR lifecycle supplies use_open=True. Here each
+        # input event is a completed minute, so both prechecks and actual fills
+        # must use that minute's close, not its earlier open or a stale trigger.
+        if args:
+            args = (False, *args[1:])
+            kwargs.pop("use_open", None)
+        else:
+            kwargs["use_open"] = False
+        for order in self._order_state.pending:
+            order._risk_fill_price = None
+        return super()._process_orders(*args, **kwargs)
+
     def configure_constraints(
         self, controller, context_provider, config, fee_model=None, corporate_action_provider=None
     ):

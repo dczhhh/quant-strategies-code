@@ -52,6 +52,11 @@ ordinary fractional per-share dividend amounts remain supported.
 
 The research factory fixes next-bar execution at the **next completed minute close**, plus the stated
 slippage. This permits completed-minute volume to be used without presenting it as opening liquidity.
+The research broker explicitly disables the canonical NEXT_BAR open-price override
+when processing these completed events. Pending risk-trigger prices also do not
+replace the next observed completed close. Original OHLC inputs remain unchanged,
+and order creation must still precede the fill. The ordinary brokers retain their
+existing execution lifecycle.
 Orders must predate fills. The normal 09:35–09:45 New York window, cash reserve, floating weights,
 monthly plan and owner security restrictions are unchanged. The dataset requires every execution-
 window minute, the first completed RTH minute and each session's closing mark; gaps are rejected.

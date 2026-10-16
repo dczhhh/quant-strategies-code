@@ -427,12 +427,26 @@ def main():
         )
         return 0
     except Exception as error:
+        ledger_reasons = {
+            "next_completed_minute_close_plus_slippage": "LEDGER_EXECUTION_PRICE_MISMATCH",
+            "slippage": "LEDGER_SLIPPAGE_MISMATCH",
+            "snapshot_tiered_fee": "LEDGER_SNAPSHOT_FEE_MISMATCH",
+            "committed_fee_record": "LEDGER_COMMITTED_FEE_MISMATCH",
+            "cash": "LEDGER_CASH_MISMATCH",
+            "settled_cash": "LEDGER_SETTLED_CASH_MISMATCH",
+            "receivables": "LEDGER_RECEIVABLE_MISMATCH",
+            "NAV": "LEDGER_NAV_MISMATCH",
+        }
         reason = {
             "Raw daily/minute close mismatch; reconcile source basis": "RAW_DAILY_MINUTE_CLOSE_CONFLICT",
             "Missing raw-close session": "RAW_DAILY_SESSION_GAP",
             "Missing execution-window minute or daily NAV close": "REQUIRED_MINUTE_MISSING",
             "Missing execution session": "EXECUTION_SESSION_GAP",
             "Insufficient raw-close warm-up for the configured strategy": "SIGNAL_WARMUP_INCOMPLETE",
+            **{
+                "Independent research ledger mismatch: " + field: reason
+                for field, reason in ledger_reasons.items()
+            },
         }.get(str(error), c.r.r.code(error))
         print(
             json.dumps(

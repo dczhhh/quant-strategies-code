@@ -593,6 +593,48 @@ def test_old_v1_bundle_defaults_to_strict_comparison_and_new_mode_keeps_gap_reje
         replace(paired, closes=paired.closes[1:])
 
 
+@pytest.mark.parametrize("bear,volume", [(False, 100000), (False, 1000), (True, 1000)])
+def test_next_completed_close_survives_intraminute_prices_partial_fills_and_risk(bear, volume):
+    original = paired_inputs()
+    if bear:
+        bearish = inputs(bear=True)
+        original = replace(
+            original,
+            closes=bearish.closes,
+            bars=tuple(replace(b, source_id="minute-fixture") for b in bearish.bars),
+        )
+    bars = []
+    for index, bar in enumerate(original.bars):
+        close = bar.close * (1 + Decimal((index * 17 % 101) - 50) / 10000)
+        bars.append(
+            replace(
+                bar,
+                open=close * Decimal("0.9995"),
+                close=close,
+                high=close * Decimal("1.005"),
+                low=close * Decimal("0.995"),
+                volume=Decimal(volume),
+            )
+        )
+    bundle = replace(original, bars=tuple(bars))
+    assumptions = replace(ASSUMPTIONS, initial_cash=Decimal(100000))
+    engine = retrospective_rotation_engine(bundle, assumptions, settings())
+    engine.run()
+    assert engine.research_report["status"] == "RETROSPECTIVE_ENGINE_LEDGER_PASS"
+    assert engine.broker.fills
+    if volume == 1000:
+        assert len(engine.broker.fills) > len({fill.order_id for fill in engine.broker.fills})
+    by_time = {(b.end, b.asset): b for b in bars}
+    for fill in engine.broker.fills:
+        bar = by_time[fill.timestamp, fill.asset]
+        signed_slip = Decimal("0.0002") * (1 if fill.side.value == "buy" else -1)
+        assert fill.price == pytest.approx(float(bar.close * (1 + signed_slip)), abs=1e-8)
+        assert abs(fill.price - float(bar.open * (1 + signed_slip))) > 0.00001
+    assert Decimal(
+        engine.research_report["independent_ledger"]["maximum_monetary_error"]
+    ) <= Decimal("1E-8")
+
+
 @pytest.mark.parametrize("field", ["asset", "side"])
 def test_ledger_binds_each_fill_to_the_original_order_identity(field):
     from ml4t.backtest.types import OrderSide

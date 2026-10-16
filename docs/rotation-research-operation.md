@@ -88,6 +88,14 @@ guards and environment permissions are untouched. The user's already granted acq
 applies; this is not a new request for permission or a strict-real admission waiver.
 
 The replay assembles and hash-checks all retained inputs before Engine construction.
+The isolated research broker processes pending orders at the next completed
+minute close, explicitly disabling NEXT_BAR's default open-price override and
+discarding stale trigger execution prices. All canonical account, window,
+causality, settlement, participation and fee checks remain in that path. Tests
+use unequal minute opens/closes, variable prices, partial fills and risk exits;
+flat OHLC fixtures alone cannot verify this execution-price contract. Sanitized
+ledger failures distinguish execution-price, slippage, fee, cash, settled cash,
+receivable and NAV mismatches without printing source prices or local values.
 Issuer documents retain the original `real_etf_issuer_receipt_v1` observation
 time from `fetched_at`; market and calendar captures use `response_received_at`.
 These are separate receipt protocols, and neither is replaced by replay time.

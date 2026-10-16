@@ -80,6 +80,19 @@ def test_failure_location_does_not_print_exception_messages_or_source_values(mon
     assert report["location"]["line"] > 0
 
 
+def test_ledger_error_reports_only_the_allowlisted_failed_field(monkeypatch, capsys):
+    def failure(*_args, **_kwargs):
+        raise ValueError(
+            "Independent research ledger mismatch: next_completed_minute_close_plus_slippage"
+        )
+
+    monkeypatch.setattr(u.sys, "argv", ["replay", "run", SOURCE])
+    monkeypatch.setattr(c, "guarded", lambda _: None)
+    monkeypatch.setattr(u, "execute", failure)
+    assert u.main() == 1
+    assert json.loads(capsys.readouterr().out)["reason"] == "LEDGER_EXECUTION_PRICE_MISMATCH"
+
+
 def price(ticker, day):
     slope = Decimal(c.p.TICKERS.index(ticker) + 1) / 100
     return float(100 + slope * (day - c.START).days)
