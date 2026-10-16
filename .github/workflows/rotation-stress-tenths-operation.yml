@@ -1,0 +1,89 @@
+name: Fixed Issue 30 one-decimal share stress comparison
+
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/rotation-stress-tenths-operation.yml]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: real-action-capture-v1
+  cancel-in-progress: false
+
+env:
+  SOURCE_SHA: 'e70fc4f831d77d0c1d260437d45342db383cdf7a'
+
+jobs:
+  preflight:
+    if: >-
+      github.repository == 'dczhhh/quant-strategies-code' &&
+      github.actor == 'dczhhh' && github.event_name == 'push' &&
+      github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+      actions: read
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4
+      - run: uv sync --dev --locked --python 3.12
+      - name: Confirm both CI suites passed on exact source SHA
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh api "repos/dczhhh/quant-strategies-code/actions/runs?head_sha=$SOURCE_SHA&event=pull_request&per_page=100" > "$RUNNER_TEMP/tenths-source-checks.json"
+          jq --exit-status --arg sha "$SOURCE_SHA" '
+            [.workflow_runs[] | select(.head_sha == $sha and .status == "completed" and .conclusion == "success") | .name] |
+            index("CI") != null and index("Ecosystem qualification") != null
+          ' "$RUNNER_TEMP/tenths-source-checks.json"
+      - run: uv run pytest tests/strategies/test_rotation_research.py tests/strategies/test_rotation_assumed_distribution.py tests/test_rotation_stress_inputs.py -q --no-cov
+      - run: uv run ruff check tools/rotation_stress_tenths_compare.py
+      - run: uv run ruff format --check tools/rotation_stress_tenths_compare.py
+      - run: uv run ty check tools/rotation_stress_tenths_compare.py
+
+  replay:
+    needs: preflight
+    environment: private-archive
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4
+      - run: uv sync --dev --locked --python 3.12
+      - name: Run original and decimal-tenth replay on retained archives
+        env:
+          RUNNER_ENVIRONMENT: ${{ runner.environment }}
+          ARCHIVE_WRITE_TOKEN: ${{ secrets.ARCHIVE_WRITE_TOKEN }}
+          PYTHONHASHSEED: '1'
+        run: uv run python tools/rotation_stress_tenths_compare.py run "$SOURCE_SHA"
+
+  verify:
+    needs: replay
+    environment: private-archive
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4
+      - run: uv sync --dev --locked --python 3.12
+      - name: Independent deterministic rebuild without write permission
+        env:
+          RUNNER_ENVIRONMENT: ${{ runner.environment }}
+          ARCHIVE_WRITE_TOKEN: ${{ secrets.ARCHIVE_WRITE_TOKEN }}
+          PYTHONHASHSEED: '33'
+        run: uv run python tools/rotation_stress_tenths_compare.py verify "$SOURCE_SHA"
