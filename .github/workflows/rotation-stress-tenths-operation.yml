@@ -13,7 +13,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  SOURCE_SHA: 'e70fc4f831d77d0c1d260437d45342db383cdf7a'
+  SOURCE_SHA: 'fcaee700ff9c0c5803a63832e30237101387b1ba'
 
 jobs:
   preflight:
