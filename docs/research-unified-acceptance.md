@@ -91,7 +91,11 @@ binds source `e11883fca0a70f2b10bb9b547c8589e6efd27682`: strict default matching
 is preserved, while an explicit v2 research bundle may retain separate daily
 signal and completed-minute execution/NAV prices with unreconciled-pair counts.
 No price is substituted and neither monetary nor strict source tolerance changes.
-Earlier v7/v6/v5/v4 identities fail closed
+The v9 execution overlay binds source `a8942d9621badaf8ee949655b0a135cc98e0fb1f`,
+explicitly disabling NEXT_BAR's open-price override only in the isolated completed-
+minute research broker. Unequal opens/closes, partial fills and risk reductions
+must match the independent ledger at the unchanged 1E-8 threshold. All v8 and
+older source maps remain intact. Earlier v8/v7/v6/v5/v4 identities fail closed
 instead of silently approving new source. Existing raw archives, receipts and
 unknown request reservations remain unchanged. The separate
 [retrospective research entry](rotation-retrospective-research.md) can invoke the
