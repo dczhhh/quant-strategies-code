@@ -1,4 +1,4 @@
-name: Fixed Issue 30 gap capture
+name: Fixed Issue 30 conditional stress replay
 
 on:
   push:
@@ -13,7 +13,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  SOURCE_SHA: '7dc70778fe0d1bb4d2a76e9265f6d7d310d541eb'
+  SOURCE_SHA: '6a430cc0ce0afc76913d980087b05f3444ef8109'
   ACTIONS_STEP_DEBUG: ${{ secrets.ACTIONS_STEP_DEBUG }}
   ACTIONS_RUNNER_DEBUG: ${{ secrets.ACTIONS_RUNNER_DEBUG }}
 
@@ -27,7 +27,7 @@ jobs:
       github.actor == 'dczhhh' && github.event_name == 'push' &&
       github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -45,19 +45,14 @@ jobs:
             [.workflow_runs[] | select(.head_sha == $sha and .status == "completed" and .conclusion == "success") | .name] |
             index("CI") != null and index("Ecosystem qualification") != null
           ' "$RUNNER_TEMP/stress-source-checks.json"
-      - run: uv run pytest tests/test_rotation_stress_capture.py tests/test_rotation_stress_inventory.py -q --no-cov
-      - run: uv run ty check tools/rotation_stress_capture.py tools/rotation_stress_inventory.py
+      - run: uv run pytest tests/test_rotation_stress_replay.py tests/test_rotation_decision_oracle.py tests/test_rotation_stress_inputs.py tests/test_rotation_stress_analytics.py tests/strategies/test_rotation_assumed_distribution.py -q --no-cov
+      - run: uv run ty check tools/rotation_stress_replay.py tools/rotation_decision_oracle.py tools/rotation_stress_inputs.py tools/rotation_stress_analytics.py
 
-  capture:
+  replay:
     needs: preflight
     environment: private-archive
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
-    strategy:
-      fail-fast: true
-      max-parallel: 2
-      matrix:
-        ticker: [XLB, XLC, XLE, XLF, XLI, XLK, XLP, XLRE, XLU, XLV, XLY, SPY]
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -65,23 +60,17 @@ jobs:
           persist-credentials: false
       - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4
       - run: uv sync --dev --locked --python 3.12
-      - name: Reuse retained groups or reserve only the fixed missing-source group
+      - name: Retained-source conditional replay and private report readback
         env:
           RUNNER_ENVIRONMENT: ${{ runner.environment }}
           ARCHIVE_WRITE_TOKEN: ${{ secrets.ARCHIVE_WRITE_TOKEN }}
-          MASSIVE_API_KEY: ${{ secrets.MASSIVE }}
-        run: uv run python tools/rotation_stress_capture.py capture "${{ matrix.ticker }}" "$SOURCE_SHA"
+        run: uv run python tools/rotation_stress_replay.py run "$SOURCE_SHA"
 
   verify:
-    needs: capture
+    needs: replay
     environment: private-archive
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
-    strategy:
-      fail-fast: true
-      max-parallel: 2
-      matrix:
-        ticker: [XLB, XLC, XLE, XLF, XLI, XLK, XLP, XLRE, XLU, XLV, XLY, SPY]
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -89,8 +78,8 @@ jobs:
           persist-credentials: false
       - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4
       - run: uv sync --dev --locked --python 3.12
-      - name: Fresh read-only source verification without a provider credential
+      - name: Fresh six-engine recomputation and byte-for-byte private report verification
         env:
           RUNNER_ENVIRONMENT: ${{ runner.environment }}
           ARCHIVE_WRITE_TOKEN: ${{ secrets.ARCHIVE_WRITE_TOKEN }}
-        run: uv run python tools/rotation_stress_capture.py verify "${{ matrix.ticker }}" "$SOURCE_SHA"
+        run: uv run python tools/rotation_stress_replay.py verify "$SOURCE_SHA"
