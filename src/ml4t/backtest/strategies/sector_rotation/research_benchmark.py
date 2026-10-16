@@ -24,8 +24,8 @@ from .research import (
     RetrospectiveRotationEngine,
     _ResearchBroker,
     _ResearchParticipationLimit,
-    _share_step_floor,
     _ResearchProvider,
+    _share_step_floor,
 )
 from .research_inputs import ResearchInputs, RetrospectiveCloseSource
 from .strategy import SectorRotationStrategy
