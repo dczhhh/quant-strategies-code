@@ -20,6 +20,7 @@ jobs:
       - run: uv sync --dev --locked --python 3.12
       - run: uv run ruff check --diff src/ml4t/backtest/strategies/sector_rotation/research.py src/ml4t/backtest/strategies/sector_rotation/research_benchmark.py tools/rotation_stress_tenths_compare.py || true
       - run: uv run ruff check src/ml4t/backtest/strategies/sector_rotation/research.py src/ml4t/backtest/strategies/sector_rotation/research_benchmark.py tools/rotation_stress_tenths_compare.py
+      - run: uv run ruff format --diff src/ml4t/backtest/strategies/sector_rotation/research.py src/ml4t/backtest/strategies/sector_rotation/research_benchmark.py tools/rotation_stress_tenths_compare.py || true
       - run: uv run ruff format --check src/ml4t/backtest/strategies/sector_rotation/research.py src/ml4t/backtest/strategies/sector_rotation/research_benchmark.py tools/rotation_stress_tenths_compare.py
       - run: uv run pytest tests/strategies/test_rotation_research.py tests/strategies/test_rotation_assumed_distribution.py -q --no-cov
       - run: uv run ty check tools/rotation_stress_tenths_compare.py
