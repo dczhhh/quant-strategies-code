@@ -53,7 +53,7 @@ def summarize(inputs, assumptions, result):
             "FILL_NOT_ON_QUANTUM",
         )
     require(
-        result["report"]["status"] == "RETROSPECTIVE_ENGINE_LEDGER_PASS",
+        result["engine"]["status"] == "RETROSPECTIVE_ENGINE_LEDGER_PASS",
         "CANONICAL_LEDGER_FAILED",
     )
     return {
@@ -86,7 +86,7 @@ def summarize(inputs, assumptions, result):
             for row in port["months"]
         ],
         "asset_net_pnl_usd": port["asset_net_pnl_usd"],
-        "independent_ledger": result["report"]["independent_ledger"],
+        "independent_ledger": result["engine"]["independent_ledger"],
     }
 
 
