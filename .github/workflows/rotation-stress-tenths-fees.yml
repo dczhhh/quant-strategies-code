@@ -1,0 +1,103 @@
+name: Conditional fractional parent-order fee replay
+
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/rotation-stress-tenths-fees.yml]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: real-action-capture-v1
+  cancel-in-progress: false
+
+env:
+  SOURCE_SHA: '961bb5d1088bb76734b70d88849d0f0772f0c457'
+  ACTIONS_STEP_DEBUG: ${{ secrets.ACTIONS_STEP_DEBUG }}
+  ACTIONS_RUNNER_DEBUG: ${{ secrets.ACTIONS_RUNNER_DEBUG }}
+
+jobs:
+  preflight:
+    permissions:
+      contents: read
+      actions: read
+    if: >-
+      github.repository == 'dczhhh/quant-strategies-code' &&
+      github.actor == 'dczhhh' && github.event_name == 'push' &&
+      github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4
+      - run: uv sync --dev --locked --python 3.12
+      - name: Require successful source CI and ecosystem qualification
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh api "repos/dczhhh/quant-strategies-code/actions/runs?head_sha=$SOURCE_SHA&event=pull_request&per_page=100" > "$RUNNER_TEMP/fractional-fee-source-checks.json"
+          jq --exit-status --arg sha "$SOURCE_SHA" '
+            [.workflow_runs[] | select(.head_sha == $sha and .status == "completed" and .conclusion == "success") | .name] |
+            index("CI") != null and index("Ecosystem qualification") != null
+          ' "$RUNNER_TEMP/fractional-fee-source-checks.json"
+      - name: Sealed original PIT tests and added fee/report regressions
+        run: >-
+          uv run pytest
+          tests/constraints/test_verification_contracts.py
+          tests/constraints/test_verification_orchestration.py
+          tests/constraints/test_verification_wire.py
+          tests/constraints/test_verification_archive_binding.py
+          tests/constraints/test_research_entry.py
+          tests/constraints/test_research_entry_e2e.py
+          tests/constraints/test_fractional_order_fees.py
+          tests/strategies/test_rotation_fractional_fees.py
+          tests/test_fractional_fee_report.py -q --no-cov
+      - run: uv run ruff check --no-fix tools/rotation_stress_tenths_compare.py tests/fractional_fee_process_probe.py
+      - run: uv run ty check tools/rotation_stress_tenths_compare.py
+      - run: uv run python -m tests.fractional_fee_process_probe compare
+
+  replay:
+    needs: preflight
+    environment: private-archive
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4
+      - run: uv sync --dev --locked --python 3.12
+      - name: Reproduce immutable old controls then replay corrected rotation and funded SPY
+        env:
+          RUNNER_ENVIRONMENT: ${{ runner.environment }}
+          ARCHIVE_WRITE_TOKEN: ${{ secrets.ARCHIVE_WRITE_TOKEN }}
+          PYTHONHASHSEED: '1'
+        run: uv run python tools/rotation_stress_tenths_compare.py run "$SOURCE_SHA"
+
+  fresh_verify:
+    needs: replay
+    environment: private-archive
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4
+      - run: uv sync --dev --locked --python 3.12
+      - name: Fresh runner rebuilds every report byte without writes or provider requests
+        env:
+          RUNNER_ENVIRONMENT: ${{ runner.environment }}
+          ARCHIVE_WRITE_TOKEN: ${{ secrets.ARCHIVE_WRITE_TOKEN }}
+          PYTHONHASHSEED: '33'
+        run: uv run python tools/rotation_stress_tenths_compare.py verify "$SOURCE_SHA"
