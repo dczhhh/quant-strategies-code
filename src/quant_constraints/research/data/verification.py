@@ -66,7 +66,7 @@ from .verification_contracts import (
 )
 from .verification_wire import RECORD_TYPES, _encode, decode_records, safe_field
 
-VERIFICATION_VERSION = "research_verification_orchestration_synthetic_v11_assumed_distribution"
+VERIFICATION_VERSION = "research_verification_orchestration_synthetic_v12_fractional_order_fees"
 LEGACY_IMPLEMENTATION_BASE = "fb870fd70a5d3438c20adcdb3c606c04533719a0"
 TAX_RUNTIME_SOURCE_REVISION = "9938de9c441e289b9eb5b5e5bf3814e2ff726ebb"
 SECURITY_ENTRY_SOURCE_REVISION = "f38b3e8b75e1e555d3d66d8dad0b609371515e22"
@@ -76,7 +76,8 @@ RESEARCH_CLOSE_POLICY_SOURCE_REVISION = "e11883fca0a70f2b10bb9b547c8589e6efd2768
 RESEARCH_EXECUTION_SOURCE_REVISION = "a8942d9621badaf8ee949655b0a135cc98e0fb1f"
 RESEARCH_BENCHMARK_SOURCE_REVISION = "61540910b9dc8349562d3ae7b845762f28397d61"
 RESEARCH_ASSUMPTION_SOURCE_REVISION = "f507ba87893aeb0ae9ec4dca5e516f93149d4058"
-REVIEWED_IMPLEMENTATION_BASE = RESEARCH_ASSUMPTION_SOURCE_REVISION
+RESEARCH_FRACTIONAL_SOURCE_REVISION = "9bbb8fbbcc87d97247e76ec53622ec7b01dfbcff"
+REVIEWED_IMPLEMENTATION_BASE = RESEARCH_FRACTIONAL_SOURCE_REVISION
 # Source bytes of the accepted 5A/B/C/D implementations and their direct contracts.
 # Wheel source files must match too; a declared git SHA alone is not evidence.
 BASE_SOURCE_SHA256 = {
@@ -161,6 +162,17 @@ RESEARCH_ASSUMPTION_SOURCE_SHA256 = {
     "ml4t.backtest.strategies.sector_rotation.research": "eedfe43adfead70d653a33feab5219f199d44f2e5db8e06c3798d63324d1a7e8",
     "ml4t.backtest.strategies.sector_rotation.research_inputs": "36a8d01a82472eede36829894afe21a16ab530ded4e91f6136d3b0fd49104017",
 }
+# Additive only: retain all v11 and older hashes, and bind the optional tenth-share
+# execution contract plus its explicit account-observed parent-order fee scenario.
+RESEARCH_FRACTIONAL_SOURCE_SHA256 = {
+    "ml4t.backtest.strategies.sector_rotation.research": "c10bcaf8a1827f29d9ca8b1c4f2ebc7803ed2a4f2f70e22871bcd00e47d945b7",
+    "ml4t.backtest.strategies.sector_rotation.research_ledger": "97245a8c7f1f3621f87b7c128dbe625ac8eaf8608a948a3774d82c7daa381297",
+    "ml4t.backtest.strategies.sector_rotation.research_benchmark": "bbb429d2ab321d15dc0b6da3d179b1accb578368221b8665638de6c8940cafda",
+    "ml4t.backtest.strategies.sector_rotation.strategy": "176d272950a360b173c9189b66a6f363a077512f7598fd4b2fd1dee4471a31fb",
+    "quant_constraints.fees.ibkr_tiered": "0872008df58e638b7bcaedd1da01d91f5f2200105a83ef23403b2ed48be1eb4c",
+    "quant_constraints.gates": "fed7e019046323527a4eca99b6b42381b55c1d6af58f30167d8411839ad97bcc",
+    "quant_constraints.models": "dedc997d6df07c63966c30d95a9c5a51c3687639103c4eff499559f6ad065932",
+}
 ROLE_DEPENDENCIES = {
     EvidenceRole.RAW: {EvidenceRole.IDENTITIES},
     EvidenceRole.COMPARISON: {
@@ -211,6 +223,7 @@ def _versions(snapshot: FrozenDatasetInput) -> dict:
         **RESEARCH_EXECUTION_SOURCE_SHA256,
         **RESEARCH_BENCHMARK_SOURCE_SHA256,
         **RESEARCH_ASSUMPTION_SOURCE_SHA256,
+        **RESEARCH_FRACTIONAL_SOURCE_SHA256,
     }
     actual_sources = {name: _source_digest(name) for name in expected_sources}
     if actual_sources != expected_sources:
@@ -236,6 +249,8 @@ def _versions(snapshot: FrozenDatasetInput) -> dict:
         "research_benchmark_source_revision": RESEARCH_BENCHMARK_SOURCE_REVISION,
         "research_assumption_source_sha256": RESEARCH_ASSUMPTION_SOURCE_SHA256,
         "research_assumption_source_revision": RESEARCH_ASSUMPTION_SOURCE_REVISION,
+        "research_fractional_source_sha256": RESEARCH_FRACTIONAL_SOURCE_SHA256,
+        "research_fractional_source_revision": RESEARCH_FRACTIONAL_SOURCE_REVISION,
         "reviewed_source_sha256": actual_sources,
         "orchestration_version": VERIFICATION_VERSION,
         "orchestration_source_sha256": {
