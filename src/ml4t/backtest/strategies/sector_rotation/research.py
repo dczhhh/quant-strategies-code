@@ -306,21 +306,15 @@ class _TenthResearchPortfolioGate(PortfolioGate):
             and state.equity > 0
         ):
             reference = (
-                context.reference_price
-                if context.reference_price is not None
-                else context.price
+                context.reference_price if context.reference_price is not None else context.price
             )
             if reference > 0:
                 current = state.holdings.get(intent.asset)
                 current_qty = current.quantity if current else 0.0
                 committed = state.pending_buys.get(intent.asset, 0.0)
-                weight = (
-                    (current_qty + intent.quantity) * reference + committed
-                ) / state.equity
+                weight = ((current_qty + intent.quantity) * reference + committed) / state.equity
                 ideal = (
-                    intent.target_weight * state.equity
-                    - current_qty * reference
-                    - committed
+                    intent.target_weight * state.equity - current_qty * reference - committed
                 ) / reference
                 step = 0.1
                 units = abs(intent.quantity) / step
