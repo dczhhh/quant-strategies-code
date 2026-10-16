@@ -16,6 +16,7 @@ import polars as pl
 
 from quant_constraints import ConstraintController, InMemoryEarningsProvider, MarketContext
 from quant_constraints.adapter import cash_backtest_config
+from quant_constraints.gates import PortfolioGate
 from quant_constraints.calendar import NY
 from quant_constraints.corporate_actions import CorporateAction, CorporateActionCoverage
 from quant_constraints.corporate_actions.processor import CorporateActionProcessor
@@ -173,7 +174,6 @@ class _ResearchProvider:
             volume=float(bar.volume),
             liquidity_available_at=stamp,
             security_id=security.security_id,
-            research_share_step=(0.1 if self.assumptions.share_step == Decimal("0.1") else None),
             execution_data_mode="raw_execution",
             risk_data_mode="raw_execution",
             signal_data_mode="total_return_signal",
@@ -287,6 +287,52 @@ class _ResearchParticipationLimit(VolumeParticipationLimit):
             remaining_quantity=max(0.0, order_quantity - executable),
             participation_rate=executable / bar_volume if bar_volume > 0 else 0.0,
         )
+
+
+class _TenthResearchPortfolioGate(PortfolioGate):
+    """Allow ONLY safe 0.1-share rounding within a retrospective scenario.
+
+    The sealed production PortfolioGate and market evidence remain unchanged.
+    Target identity is still checked by the plan manager. An adjusted intent is
+    used only for the subsequent portfolio target-vs-executable-quantity check.
+    """
+
+    def check(self, intent, state, context):
+        if (
+            intent.target_weight is not None
+            and context.phase in {"submission", "amendment"}
+            and math.isfinite(intent.target_weight)
+            and intent.target_weight >= 0
+            and state.equity > 0
+        ):
+            reference = (
+                context.reference_price
+                if context.reference_price is not None
+                else context.price
+            )
+            if reference > 0:
+                current = state.holdings.get(intent.asset)
+                current_qty = current.quantity if current else 0.0
+                committed = state.pending_buys.get(intent.asset, 0.0)
+                weight = (
+                    (current_qty + intent.quantity) * reference + committed
+                ) / state.equity
+                ideal = (
+                    intent.target_weight * state.equity
+                    - current_qty * reference
+                    - committed
+                ) / reference
+                step = 0.1
+                units = abs(intent.quantity) / step
+                if (
+                    context.instrument == "plain_sector_etf"
+                    and ideal * intent.quantity > 0
+                    and abs(units - round(units)) <= 1e-8
+                    and abs(intent.target_weight - weight) > 1e-8
+                    and -1e-8 <= abs(ideal) - abs(intent.quantity) < step + 1e-8
+                ):
+                    intent = replace(intent, target_weight=weight)
+        return super().check(intent, state, context)
 
 
 class _ResearchBroker(SectorRotationBroker):
@@ -409,6 +455,8 @@ def retrospective_rotation_engine(
         fee_history_mode="current_snapshot_backcast",
     )
     controller = ConstraintController(constraints, InMemoryEarningsProvider())
+    if assumptions.share_step == Decimal("0.1"):
+        controller.portfolio = _TenthResearchPortfolioGate(constraints, controller.earnings)
     prices = pl.DataFrame(
         [
             {
