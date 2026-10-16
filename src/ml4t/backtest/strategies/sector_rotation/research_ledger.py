@@ -2,7 +2,7 @@
 
 It consumes retained input terms and executed fills, never production receivable,
 cash, settlement or fee-calculation helpers. Input settlement dates are an explicit
-independent reference. The fee oracle covers the disclosed integer-share snapshot
+independent reference. The fee oracle covers the disclosed 1.0/0.1 share-step snapshot
 scenario, not an assertion of historical IBKR bills.
 """
 
@@ -27,7 +27,7 @@ def _equal(actual, expected, field):
 
 
 def _broker_charge(quantity, volume):
-    """Integrate marginal whole-share rates over the filled quantity interval."""
+    """Integrate marginal per-share rates over the filled quantity interval."""
     result = Decimal(0)
     lower = Decimal(0)
     for upper, rate in (
@@ -43,18 +43,24 @@ def _broker_charge(quantity, volume):
     return result
 
 
+def _on_step(quantity: Decimal, step: Decimal) -> bool:
+    units = quantity / step
+    return abs(units - units.to_integral_value()) <= Decimal("1E-9")
+
+
 class _FeeReference:
     """Unknown-venue, normal-charge 2026 snapshot backcast; no rebates."""
 
-    def __init__(self):
+    def __init__(self, share_step: Decimal = Decimal("1")):
+        self.share_step = number(share_step)
         self.months = defaultdict(Decimal)
         self.orders = {}
 
     def charge(self, fill, generation):
         quantity, price = number(fill.quantity), number(fill.price)
-        if quantity != quantity.to_integral_value() or price < 1:
+        if not _on_step(quantity, self.share_step) or price < 1:
             raise ResearchLedgerMismatch(
-                "Reference fee scope requires whole ETF shares and price >=1"
+                "Reference fee scope requires exact supported share steps and price >=1"
             )
         day = fill.timestamp.astimezone(NY).date()
         month = day.strftime("%Y-%m")
@@ -112,7 +118,8 @@ def verify_research_ledger(inputs: ResearchInputs, assumptions, fills, orders, f
         raise ResearchLedgerMismatch("Duplicate committed fee execution identity")
     fill_index = event_index = 0
     participation = defaultdict(Decimal)
-    fee_reference = _FeeReference()
+    step = number(assumptions.share_step)
+    fee_reference = _FeeReference(step)
     checkpoints = 0
     max_error = Decimal(0)
     with localcontext() as context:
@@ -157,8 +164,8 @@ def verify_research_ledger(inputs: ResearchInputs, assumptions, fills, orders, f
                 ):
                     raise ResearchLedgerMismatch("Noncausal or outside-window execution")
                 quantity = number(fill.quantity)
-                if quantity <= 0:
-                    raise ResearchLedgerMismatch("Nonpositive fill quantity")
+                if quantity <= 0 or not _on_step(quantity, step):
+                    raise ResearchLedgerMismatch("Fill quantity violates research share step")
                 participation[fill.timestamp, fill.asset] += quantity
                 if participation[fill.timestamp, fill.asset] > number(bar.volume) * number(
                     assumptions.maximum_participation
@@ -202,7 +209,10 @@ def verify_research_ledger(inputs: ResearchInputs, assumptions, fills, orders, f
                 fill_index += 1
             active = {a: q for a, q in positions.items() if q}
             actual_positions = {a: number(q) for a, q in state["positions"].items() if number(q)}
-            if active != actual_positions:
+            if set(active) != set(actual_positions) or any(
+                abs(q - actual_positions[asset]) > (Decimal(0) if step == 1 else Decimal("1E-9"))
+                for asset, q in active.items()
+            ) or any(not _on_step(q, step) for q in active.values()):
                 raise ResearchLedgerMismatch("Independent quantity ledger mismatch")
             accrued = sum(receivables.values(), Decimal(0))
             settled = cash - sum((v for _, v in holds), Decimal(0))
@@ -231,7 +241,7 @@ def verify_research_ledger(inputs: ResearchInputs, assumptions, fills, orders, f
         "fills_checked": len(fills),
         "maximum_monetary_error": str(max_error),
         "money_tolerance": str(TOLERANCE),
-        "quantity_tolerance": "exact",
+        "quantity_tolerance": "exact" if step == 1 else "1E-9_float_representation_only",
         "historical_PIT_verified": False,
         "actual_broker_execution_verified": False,
         "actual_broker_credit_verified": False,
