@@ -16,10 +16,10 @@ import polars as pl
 
 from quant_constraints import ConstraintController, InMemoryEarningsProvider, MarketContext
 from quant_constraints.adapter import cash_backtest_config
-from quant_constraints.gates import PortfolioGate
 from quant_constraints.calendar import NY
 from quant_constraints.corporate_actions import CorporateAction, CorporateActionCoverage
 from quant_constraints.corporate_actions.processor import CorporateActionProcessor
+from quant_constraints.gates import PortfolioGate
 
 from ... import DataFeed, Engine
 from ...config import ExecutionPrice, ShareType, SlippageType
