@@ -124,6 +124,10 @@ jobs:
           uv run ruff format --check tools/rotation_stress_capture.py tests/test_rotation_stress_capture.py
           uv run ty check tools/rotation_stress_capture.py
           uv run pytest tests/test_rotation_stress_capture.py -q --no-cov
+          uv run ruff check --no-fix tools/rotation_decision_oracle.py tools/rotation_stress_inputs.py tools/rotation_stress_analytics.py tools/rotation_stress_replay.py tests/test_rotation_decision_oracle.py tests/test_rotation_stress_inputs.py tests/test_rotation_stress_analytics.py tests/test_rotation_stress_replay.py
+          uv run ruff format --check tools/rotation_decision_oracle.py tools/rotation_stress_inputs.py tools/rotation_stress_analytics.py tools/rotation_stress_replay.py tests/test_rotation_decision_oracle.py tests/test_rotation_stress_inputs.py tests/test_rotation_stress_analytics.py tests/test_rotation_stress_replay.py
+          uv run ty check tools/rotation_decision_oracle.py tools/rotation_stress_inputs.py tools/rotation_stress_analytics.py tools/rotation_stress_replay.py
+          uv run pytest tests/test_rotation_decision_oracle.py tests/test_rotation_stress_inputs.py tests/test_rotation_stress_analytics.py tests/test_rotation_stress_replay.py -q --no-cov
 
       - name: Validate private sample workflow expressions without executing capture
         run: |

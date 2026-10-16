@@ -84,12 +84,79 @@ and prior research reports remain untouched. This follow-on operator executes th
 owner-authorized finite proposal; the earlier inventory itself remains read-only
 with respect to acquisition.
 
-G2 still needs complete inputs, a separately implemented signal/rank/target/order
-oracle and frozen Engine/ledger checks. G3 needs an actual Engine replay and fresh
-reconstruction; funded SPY and explicitly ex-post exposure-matched attribution;
-monthly holdings, contributions, cash, fees and risk transitions; and beta/alpha
-estimates with uncertainty. G1 supplies none of those returns or statistical
-conclusions. Final classification, daily/minute source differences, settlement,
-PIT and brokerage-confirmed credit limits remain visible. Production strict-real
-stays blocked and strategy PR #6 stays open/unmerged. Owner exclusions and
-Canadian/ADR entry restrictions are unchanged.
+Actual capture [38864409822](https://github.com/dczhhh/quant-strategies-code/actions/runs/38864409822)
+completed its preflight, all 12 capture jobs and all 12 fresh verification jobs.
+Each capture made 51 requests (612 total); every verifier made zero requests.
+Their plan SHA256 is
+`b2100ba76ae1e929f342d28d27c855f2ac8366f659950ee7abc88f9f50350566`.
+This is source-retention evidence, not a backtest result.
+
+## G2/G3: conditional replay, not strict-real admission
+
+The [conditional replay launcher](examples/rotation-stress-replay.yml) checks the
+immutable source's CI and ecosystem qualification before private archive access.
+It has no vendor credential. `rotation_stress_inputs.py` requires all 415 raw
+daily closes and 1859 completed execution bars per asset, bidirectional issuer /
+vendor event-date coverage, original ex/record/pay/cash fields and stable CUSIP.
+It rehashes all retained source bytes through `ResearchInputs.from_bundle` before
+invoking the canonical Engine. Missing minutes are never filled by daily prices.
+
+The real final 2024 classification is still missing. The separately versioned
+`config/research/rotation_stress_assumed_2024.json` labels that year's executed
+distributions **assumed ordinary**, never issuer-confirmed. Inputs use a distinct
+v3 schema and origin, with `assumption:2024` source identity. The Engine rejects
+them unless the caller explicitly enables precisely 2024. Default behavior and
+strict-real entry remain unchanged. The owner-requested 10% research tax scenario
+is not proof of treaty eligibility. Fixed 0% and 30% variants describe sensitivity;
+they do not select parameters or establish the account's actual tax treatment.
+The additive formal v11 source overlay preserves all previous source pins.
+The reviewed compatibility snapshot adds only the optional, default-empty
+`ResearchAssumptions.assumed_ordinary_years` parameter; old positional callers
+and default ordinary-only behavior remain supported.
+
+`rotation_decision_oracle.py` independently computes original-share reinvestment,
+63/126/252 excess momentum, causal SPY regimes and confirmation streaks, rankings,
+monthly retention/targets, next-session/expiry timing, conservative execution
+targets, risk sell quantities and submitted order intents. Its Decimal breakpoint
+allocation and fee arithmetic do not call the production helpers. Read-only
+observers check actual Engine call boundaries, monthly completeness and cash
+deferrals. The oracle is **conditioned on the separately verified past ledger**;
+it is not an independent fill simulator and does not certify every unsubmitted
+opportunity. It cannot convert that narrower check into full G2 admission.
+
+`rotation_stress_analytics.py` bridges daily and whole-period asset PnL to NAV at
+USD1E-8 without plugs. Reports include monthly returns/drawdowns/holdings/cash/
+receivables/fees/turnover, asset contributions and observed risk transitions.
+Funded SPY uses the same canonical Engine. A third, lagged-exposure SPY index is
+explicitly **ex-post attribution**, not an executable settlement/cost-matched
+strategy. Regression and attribution use common close-to-close intervals and
+exclude the first partial execution day. CAPM OLS uses deterministic Decimal
+arithmetic, fixed Newey-West HAC5 and descriptive 95% normal intervals. The selected
+short window has no independent out-of-sample evidence: alpha remains
+`INCONCLUSIVE`, irrespective of the estimate's sign.
+
+Daily versus final-RTH-minute prices are never corrected or silently reconciled.
+The existing price audit retains exact differences and fixed-holdings mark
+sensitivity. A separate conditional signal/rank/target sensitivity uses retained
+execution-window minute closes on the same past ledger; it lacks presample
+minute coverage and is not a full alternate trading/funding path. Economic cause
+and official closing-price equivalence remain unverified.
+
+Each runner executes six Engine cases (rotation and funded SPY at 10%, 0%, 30%).
+Inputs, full ledgers, decisions, analytics, original-price diagnostics and provenance
+are losslessly retained only in the private data repository. Bounded gzip parts
+and a manifest bind every byte, source commit, module hashes, G1 hash and capture
+plan. A fresh runner reconstructs all cases and compares every report byte; it
+cannot create a missing report. Public output contains safe aggregates only.
+
+Unified acceptance must distinguish retained-source pass, conditional ledger /
+decision / statistical research evidence, and formal blockers. Final 2024
+classification, full independent execution-path verification, daily/minute source
+causality, NSCC settlement attestation, PIT and brokerage-confirmed credit are
+not supplied by this replay. The original account NAV bridge's four unresolved
+rows are not repaired by a model backtest. Production strict-real stays blocked
+and strategy PR #6 stays open/unmerged; an issue's closed state is not independent
+acceptance evidence. The separate fractional-share PR is not silently incorporated.
+Owner exclusions and Canadian/ADR new-entry
+restrictions are unchanged. Actual backtest numbers may be added only after the
+hosted replay and fresh verifier succeed.
