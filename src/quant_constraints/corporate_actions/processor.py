@@ -24,6 +24,7 @@ from ml4t.backtest.risk.position.static import StopLoss, TakeProfit, TimeExit
 from ml4t.backtest.types import OrderSide, OrderStatus
 
 from ..calendar import NY
+from ..dividend_tax import resolve_dividend_tax_rate
 from ..models import aware
 from .events import CorporateAction, CorporateActionProvider
 
@@ -170,16 +171,7 @@ class CorporateActionProcessor:
         for sid in sorted(securities):
             coverage, supplied = self.provider.snapshot(sid, asof)
             start = last.astimezone(NY).date() if last is not None else day
-            if (
-                coverage is None
-                or coverage.security_id != sid
-                or coverage.available_at > asof
-                or coverage.missing
-                or not coverage.point_in_time
-                or coverage.covered_from > start
-                or coverage.covered_until < day
-            ):
-                raise ValueError(f"Missing point-in-time corporate action coverage: {sid}")
+            self._validate_coverage(coverage, sid, asof, start, day)
             latest: dict[str, CorporateAction] = {}
             for event in sorted(supplied, key=lambda e: (e.available_at, e.version)):
                 if event.security_id == sid and event.available_at <= asof:
@@ -250,10 +242,42 @@ class CorporateActionProcessor:
                     raise ValueError(f"Cannot reconstruct pre-event entitlement/basis: {event.key}")
                 if exposed or event.kind == "CASH_CREDIT":
                     self.validate_terms(event)
+                if event.kind == "SPLIT" and asset is not None:
+                    self.validate_fractional_reverse_split(asset, event)
+                if event.kind == "CASH_DIVIDEND" and pos is not None:
+                    self._validate_dividend_tax(event, asset, asof)
                 events.append((effective, asset, event, False))
         rank = {"SPLIT": 0, "CASH_DIVIDEND": 1, "CASH_CREDIT": 2}
         events.sort(key=lambda item: (item[0], rank.get(item[2].kind, 3), item[2].key))
         return identities, events, quantities, empty
+
+    def _validate_coverage(self, coverage, sid, asof, start, day):
+        if (
+            coverage is None
+            or coverage.security_id != sid
+            or coverage.available_at > asof
+            or coverage.missing
+            or not coverage.point_in_time
+            or coverage.covered_from > start
+            or coverage.covered_until < day
+        ):
+            raise ValueError(f"Missing point-in-time corporate action coverage: {sid}")
+
+    def _validate_dividend_tax(self, event, asset, asof):
+        if (
+            self.broker.controller.config.dividend_tax_profile != "legacy"
+            and self.broker.context_provider(asof, asset, "corporate_action").instrument != "equity"
+        ):
+            raise ValueError(
+                "Country ordinary-stock tax profile does not support ETF distributions"
+            )
+        self._tax_rate(event, asof)
+
+    def _tax_rate(self, event, asof):
+        return resolve_dividend_tax_rate(self.broker.controller.config, event, asof)
+
+    def _credit_requires_confirmation(self):
+        return self.broker.controller.config.dividend_tax_profile != "legacy"
 
     @staticmethod
     def validate_terms(event: CorporateAction):
@@ -350,7 +374,36 @@ class CorporateActionProcessor:
             for name, value in asdict(event).items()
         }
 
+    def validate_fractional_reverse_split(self, asset: str, event: CorporateAction) -> None:
+        """Formal replay cannot infer tradable fractions or a cash-in-lieu price."""
+        ratio = event.split_ratio
+        if (
+            ratio is None
+            or ratio >= 1
+            or self.broker.controller.config.dividend_tax_profile == "legacy"
+        ):
+            return
+        position = self.broker.positions.get(asset)
+        quantities = [position.quantity] if position is not None else []
+        for order in self.broker.orders:
+            if order.asset == asset and order.status is OrderStatus.PENDING:
+                quantities.extend(
+                    (order.quantity, abs(order.quantity) - abs(order.filled_quantity))
+                )
+        pending_exit = self.broker._risk_state.pending_exits.get(asset)
+        if pending_exit is not None:
+            quantities.append(pending_exit["quantity"])
+        if any(
+            not math.isclose(q * ratio, round(q * ratio), rel_tol=0, abs_tol=1e-12)
+            for q in quantities
+        ):
+            raise ValueError(
+                "UNSUPPORTED_CASH_IN_LIEU: authoritative fractional entitlement, rounding "
+                "and credit evidence required; formal replay cannot retain a virtual fraction"
+            )
+
     def split(self, asset: str, event: CorporateAction, observed: set[str]):
+        self.validate_fractional_reverse_split(asset, event)
         broker = self.broker
         ratio = event.split_ratio
         assert ratio is not None
@@ -543,10 +596,11 @@ class CorporateActionProcessor:
         if quantity == 0:
             record.update(status="observed_no_entitlement")
             return
-        rate = (
-            event.withholding_rate
-            if event.withholding_rate is not None
-            else self.broker.controller.config.dividend_withholding_rate
+        rate, tax_evidence = self._tax_rate(
+            event,
+            self.state["last_asof"] or event.available_at
+            if "processed_at" not in record
+            else datetime.fromisoformat(record["processed_at"]),
         )
         gross = quantity * event.dividend_per_share
         withholding, fees = gross * rate, quantity * event.fee_per_share
@@ -560,6 +614,13 @@ class CorporateActionProcessor:
             "quantity": quantity,
             "credited": False,
         }
+        if self.broker.controller.config.dividend_tax_profile != "legacy":
+            self.state["entitlements"][event.key].update(
+                withholding=withholding,
+                fees=fees,
+                tax_evidence=tax_evidence,
+                event_version=event.version,
+            )
         record.update(
             status="dividend_receivable",
             gross=gross,
@@ -567,6 +628,7 @@ class CorporateActionProcessor:
             fees=fees,
             income_delta=net,
             withholding_rate=rate,
+            tax_evidence=tax_evidence,
             tax_scenario=(
                 "source_account_withholding"
                 if event.withholding_rate is not None
@@ -595,20 +657,126 @@ class CorporateActionProcessor:
         if quantity <= 0:
             raise ValueError(f"No qualifying shares for dividend credit: {parent}")
         estimate = item["net"]
+        actual_tax = self._credit_requires_confirmation()
+        correction = None
+        if actual_tax:
+            observed_at = (
+                datetime.fromisoformat(record["processed_at"])
+                if "processed_at" in record
+                else event.available_at
+            )
+            correction = self.validate_credit_reconciliation(event, item, observed_at)
+        elif event.credit_correction_of_version is not None:
+            raise ValueError("Explicit credit corrections require a formal tax profile")
         actual = estimate if event.credited_net is None else event.credited_net
-        if actual > item["gross"] + 1e-8:
+        confirmed_gross = item["gross"]
+        if correction is not None:
+            assert event.credited_gross is not None
+            confirmed_gross = event.credited_gross
+        if actual > confirmed_gross + 1e-8:
             raise ValueError(f"Confirmed credit exceeds eligible gross entitlement: {parent}")
+        receivable_key = entitlement_key(*parent)
+        receivable = self.broker.account._receivables.get(receivable_key)
+        if receivable is None or not math.isclose(receivable, estimate, rel_tol=0, abs_tol=1e-8):
+            raise ValueError(f"Dividend receivable checkpoint does not reconcile: {parent}")
         self.broker.account.cash += actual
         self.broker.account._lock_notional_free_cash += actual
-        self.broker.account._receivables.pop(entitlement_key(*parent))
+        self.broker.account._receivables.pop(receivable_key)
         item["credited"] = True
+        if "tax_evidence" in item:
+            item["credited_net"] = actual
         record.update(
             status="cash_credited",
             eligible_quantity=quantity,
             cash_delta=actual,
             income_delta=actual - estimate,
             parent_event_id=event.parent_event_id,
+            tax_evidence=copy.deepcopy(item.get("tax_evidence")),
+            reconciled_net_difference=actual - estimate,
+            withholding_applied_again=False,
         )
+        if actual_tax:
+            assert (
+                event.credited_gross is not None
+                and event.credited_withheld is not None
+                and event.credited_fee is not None
+            )
+            record.update(
+                confirmed_gross=event.credited_gross,
+                confirmed_withheld=event.credited_withheld,
+                confirmed_fee=event.credited_fee,
+                confirmed_net=event.credited_net,
+                withholding=event.credited_withheld - item.get("withholding", 0.0),
+                fees=event.credited_fee - item.get("fees", 0.0),
+                reconciliation_source=event.source,
+                reconciliation_available_at=event.available_at.isoformat(),
+            )
+            if correction is not None:
+                item["credit_correction"] = copy.deepcopy(correction)
+                record.update(
+                    credit_correction=correction,
+                    reconciled_gross_difference=event.credited_gross - item["gross"],
+                )
+
+    @staticmethod
+    def validate_credit_reconciliation(
+        event: CorporateAction, item: dict, observed_at: datetime
+    ) -> dict | None:
+        """Actual account amounts are mandatory; payable dates/estimates are not credits."""
+        amounts = (
+            event.credited_gross,
+            event.credited_withheld,
+            event.credited_fee,
+            event.credited_net,
+        )
+        if any(amount is None for amount in amounts):
+            raise ValueError("UNVERIFIED: actual gross/withheld/fee/net credit evidence required")
+        gross, withheld, fee, net = amounts
+        assert gross is not None and withheld is not None and fee is not None and net is not None
+        aware(observed_at)
+        if event.available_at > observed_at:
+            raise ValueError("Actual dividend credit is not visible at observation time")
+        if abs(gross - withheld - fee - net) > 0.00500001 or withheld + fee > gross + 1e-8:
+            raise ValueError("Actual dividend credit components do not reconcile")
+        correction = None
+        if event.credit_correction_of_version is not None:
+            if (
+                event.credit_correction_quantity is None
+                or event.credit_correction_prior_gross is None
+                or event.credit_correction_known_at is None
+                or not event.credit_correction_source
+            ):
+                raise ValueError("Incomplete dividend credit correction evidence")
+            if (
+                item.get("event_version") != event.credit_correction_of_version
+                or "quantity" not in item
+                or not math.isclose(
+                    item["quantity"], event.credit_correction_quantity, rel_tol=0, abs_tol=1e-12
+                )
+                or not math.isclose(
+                    item["gross"],
+                    event.credit_correction_prior_gross,
+                    rel_tol=0,
+                    abs_tol=0.00500001,
+                )
+                or event.credit_correction_known_at > observed_at
+            ):
+                raise ValueError(
+                    "Credit correction does not bind the original dividend entitlement"
+                )
+            correction = {
+                "parent_event_id": event.parent_event_id,
+                "prior_version": event.credit_correction_of_version,
+                "prior_gross": item["gross"],
+                "locked_quantity": item["quantity"],
+                "source": event.credit_correction_source,
+                "known_at": event.credit_correction_known_at.isoformat(),
+                "observed_at": observed_at.isoformat(),
+                "cash_credit_available_at": event.available_at.isoformat(),
+            }
+        elif abs(gross - item["gross"]) > 0.01000001:
+            raise ValueError("Actual dividend credit components do not reconcile")
+        return correction
 
     def evidence(self):
         records = copy.deepcopy(self.state["records"])
@@ -623,6 +791,8 @@ class CorporateActionProcessor:
             "records": records,
             "observation_revisions": copy.deepcopy(self.state.get("revisions", [])),
             "income": sum(r["income_delta"] for r in records),
+            "withholding": sum(r["withholding"] for r in records),
+            "capital_gains_tax_mode": self.broker.controller.config.capital_gains_tax_mode,
             "receivables": dict(self.broker.account._receivables),
             "outstanding": self.broker.account._receivable_value,
             "failures": copy.deepcopy(self.failures),

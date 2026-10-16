@@ -673,6 +673,8 @@
     "from ml4t.backtest.risk.position import TighteningTrailingStop",
     "from ml4t.backtest.risk.position import TimeExit",
     "from ml4t.backtest.risk.position import VolatilityStop",
+    "from ml4t.backtest.strategies.sector_rotation import SectorRotationConfig, strength_weights",
+    "from ml4t.backtest.strategies.sector_rotation.research import ResearchAssumptions, retrospective_rotation_engine",
     "from ml4t.backtest.strategies.templates import LongShortStrategy",
     "from ml4t.backtest.strategies.templates import MeanReversionStrategy",
     "from ml4t.backtest.strategies.templates import MomentumStrategy",
@@ -3532,6 +3534,54 @@
       "module": "ml4t.backtest.risk.position.dynamic",
       "qualname": "VolatilityStop",
       "signature": "(multiplier: float = 2.0, atr_key: str = 'atr', use_entry_atr: bool = True, _entry_atr: float | None = None) -> None"
+    },
+    "ml4t.backtest.strategies.sector_rotation.research:ResearchAssumptions": {
+      "kind": "class",
+      "members": {
+        "__repr__": {
+          "kind": "method",
+          "signature": "(self)"
+        }
+      },
+      "module": "ml4t.backtest.strategies.sector_rotation.research",
+      "qualname": "ResearchAssumptions",
+      "signature": "(name: str, initial_cash: decimal.Decimal, dividend_tax_rate: decimal.Decimal, modeled_spread: decimal.Decimal, slippage_bps: decimal.Decimal, maximum_participation: decimal.Decimal = Decimal('0.01'), assumed_ordinary_years: tuple[int, ...] = ()) -> None"
+    },
+    "ml4t.backtest.strategies.sector_rotation.research:retrospective_rotation_engine": {
+      "kind": "function",
+      "module": "ml4t.backtest.strategies.sector_rotation.research",
+      "qualname": "retrospective_rotation_engine",
+      "signature": "(inputs: ml4t.backtest.strategies.sector_rotation.research_inputs.ResearchInputs, assumptions: ml4t.backtest.strategies.sector_rotation.research.ResearchAssumptions, settings: ml4t.backtest.strategies.sector_rotation.config.SectorRotationConfig | None = None) -> ml4t.backtest.strategies.sector_rotation.research.RetrospectiveRotationEngine"
+    },
+    "ml4t.backtest.strategies.sector_rotation:SectorRotationConfig": {
+      "kind": "class",
+      "members": {
+        "__repr__": {
+          "kind": "method",
+          "signature": "(self)"
+        },
+        "constraints": {
+          "kind": "method",
+          "signature": "(self, **changes) -> quant_constraints.config.ConstraintConfig"
+        },
+        "from_yaml": {
+          "kind": "method",
+          "signature": "(cls, path: 'str | Path') -> 'SectorRotationConfig'"
+        },
+        "history_sessions": {
+          "kind": "property",
+          "signature": "(self) -> int"
+        }
+      },
+      "module": "ml4t.backtest.strategies.sector_rotation.config",
+      "qualname": "SectorRotationConfig",
+      "signature": "(lookbacks: tuple[int, int, int] = (63, 126, 252), momentum_weights: tuple[float, float, float] = (0.5, 0.3, 0.2), short_ma: int = 50, long_ma: int = 200, peak_lookback: int = 252, down_confirm: int = 5, recovery_confirm: int = 10, trend_buffer: float = 0.02, deep_drawdown: float = 0.2, min_weight: float = 0.15, max_weight: float = 0.25, normal_exposure: float = 0.95, warning_exposure: float = 0.7, bear_exposure: float = 0.45, deep_exposure: float = 0.2, rank_buffer: int = 2, execution_start_minutes: int = 5, execution_end_minutes: int = 15, plan_sessions: int = 3, execution_cushion_bps: float = 5.0) -> None"
+    },
+    "ml4t.backtest.strategies.sector_rotation:strength_weights": {
+      "kind": "function",
+      "module": "ml4t.backtest.strategies.sector_rotation.allocation",
+      "qualname": "strength_weights",
+      "signature": "(scores: collections.abc.Mapping[str, float], exposure: float, *, minimum: float = 0.15, maximum: float = 0.25, lower_bounds: collections.abc.Mapping[str, float] | None = None, upper_bounds: collections.abc.Mapping[str, float] | None = None) -> dict[str, float]"
     },
     "ml4t.backtest.strategies.templates:LongShortStrategy": {
       "kind": "class",

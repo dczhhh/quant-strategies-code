@@ -143,6 +143,22 @@ def test_paid_fractional_purchase_can_sell_same_day_without_pdt_limit():
     assert broker.settled_cash == 875 and broker.get_buying_power() == 875
 
 
+@pytest.mark.parametrize("quantity", [0.01, 0.99, -0.01, -0.99])
+def test_integer_dust_rejects_before_cost_estimation_without_mutating_cash(quantity):
+    from unittest.mock import Mock
+
+    broker = _broker(share_type=ShareType.INTEGER)
+    _tick(broker)
+    broker.commission_model = Mock()
+    order = broker.submit_order("TEST", quantity)
+    assert order is not None and order.status is OrderStatus.REJECTED
+    assert order.rejection_code == "account_restriction"
+    broker.commission_model.calculate.assert_not_called()
+    assert broker.cash == broker.settled_cash == 200
+    assert not broker.positions and not broker.fills
+    assert broker.get_buying_power() == 200
+
+
 def test_sale_receivable_counts_in_equity_but_cannot_fund_new_buy():
     broker = _broker(cash=150)
     _tick(broker)

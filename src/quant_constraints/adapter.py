@@ -941,7 +941,13 @@ class ConstrainedBroker(Broker):
         required = max(
             0,
             intent.quantity * price
-            + calculate_commission(self.commission_model, order.asset, abs(intent.quantity), price),
+            + (
+                calculate_commission(
+                    self.commission_model, order.asset, abs(intent.quantity), price
+                )
+                if intent.quantity != 0 and price > 0
+                else 0
+            ),
         )
         self.controller.audit.append(
             Audit(
