@@ -19,6 +19,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import rotation_stress_analytics as a  # noqa: E402
 import rotation_stress_inputs as x  # noqa: E402
 import rotation_stress_report_diagnostic as d  # noqa: E402
+from ml4t.backtest.strategies.sector_rotation.research_fractional import (  # noqa: E402
+    ResearchAssumptions as TenthResearchAssumptions,
+    retrospective_rotation_engine as tenth_rotation_engine,
+)
+from ml4t.backtest.strategies.sector_rotation.research_fractional_benchmark import (  # noqa: E402
+    retrospective_spy_benchmark as tenth_spy_engine,
+)
 
 u, c = x.u, x.c
 PREFIX = "research/verification/rotation_stress_202412_202506_tenths_v1/"
@@ -36,16 +43,18 @@ def require(ok, code):
     c.p.need(ok, "TENTHS_" + code)
 
 
-def replay(inputs, assumptions):
-    r = u.engine_result(u.retrospective_rotation_engine(inputs, assumptions))
-    b = u.engine_result(u.retrospective_spy_benchmark(inputs, assumptions))
+def replay(inputs, assumptions, *, fractional=False):
+    rotation_engine = tenth_rotation_engine if fractional else u.retrospective_rotation_engine
+    spy_engine = tenth_spy_engine if fractional else u.retrospective_spy_benchmark
+    r = u.engine_result(rotation_engine(inputs, assumptions))
+    b = u.engine_result(spy_engine(inputs, assumptions))
     return r, b
 
 
 def summarize(inputs, assumptions, result):
     port = a.portfolio(inputs, assumptions, result)
     fills = result["fills"]
-    quantum = assumptions.share_step
+    quantum = getattr(assumptions, "share_step", Decimal("1"))
     for fill in fills:
         units = Decimal(str(fill["quantity"])) / quantum
         require(
@@ -98,8 +107,12 @@ def build(archive_factory, source):
     )
     cases = {}
     for tag, step in (("whole", Decimal("1")), ("tenths", Decimal("0.1"))):
-        assumptions = replace(ASSUMPTIONS, share_step=step)
-        rotation, funded = replay(inputs, assumptions)
+        assumptions = (
+            TenthResearchAssumptions(**asdict(ASSUMPTIONS), share_step=step)
+            if tag == "tenths"
+            else ASSUMPTIONS
+        )
+        rotation, funded = replay(inputs, assumptions, fractional=tag == "tenths")
         cases[tag] = {
             "step": str(step),
             "rotation": summarize(inputs, assumptions, rotation),
