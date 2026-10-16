@@ -19,6 +19,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import rotation_stress_analytics as a  # noqa: E402
 import rotation_stress_inputs as x  # noqa: E402
 import rotation_stress_report_diagnostic as d  # noqa: E402
+
 from ml4t.backtest.strategies.sector_rotation.research_fractional import (  # noqa: E402
     ResearchAssumptions as TenthResearchAssumptions,
 )
