@@ -38,7 +38,9 @@ class ResearchAssumptions:
     modeled_spread: Decimal
     slippage_bps: Decimal
     maximum_participation: Decimal = Decimal("0.01")
-    share_step: Decimal = Decimal("1")  # Optional 0.1-share research mode; baseline stays whole shares.
+    share_step: Decimal = Decimal(
+        "1"
+    )  # Optional 0.1-share research mode; baseline stays whole shares.
 
     def __post_init__(self):
         if not self.name.strip():
@@ -419,7 +421,9 @@ def retrospective_rotation_engine(
     engine.broker.execution_limits = (
         VolumeParticipationLimit(float(assumptions.maximum_participation))
         if assumptions.share_step == 1
-        else _ResearchParticipationLimit(float(assumptions.maximum_participation), assumptions.share_step)
+        else _ResearchParticipationLimit(
+            float(assumptions.maximum_participation), assumptions.share_step
+        )
     )
     engine.research_inputs, engine.research_assumptions = inputs, assumptions
     engine.research_trace = []
