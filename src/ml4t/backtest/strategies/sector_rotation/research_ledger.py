@@ -8,7 +8,7 @@ scenario, not an assertion of historical IBKR bills.
 
 from collections import defaultdict
 from datetime import date
-from decimal import Decimal, localcontext
+from decimal import ROUND_FLOOR, Decimal, localcontext
 
 from quant_constraints.calendar import NY
 
@@ -68,14 +68,19 @@ class _FeeReference:
         prior_raw, prior_value, prior_paid, prior_quantity, prior_counted = self.orders.get(
             key, (Decimal(0),) * 5
         )
-        raw = prior_raw + _broker_charge(quantity, self.months[month])
-        value = prior_value + quantity * price
-        capped = max(Decimal("0.35"), raw) > value / 100
-        cumulative = min(max(Decimal("0.35"), raw), value / 100)
+        whole = quantity.to_integral_value(rounding=ROUND_FLOOR)
+        fractional = quantity - whole
+        raw = prior_raw + _broker_charge(whole, self.months[month])
+        value = prior_value + whole * price
+        gross = max(Decimal("0.35"), raw) if prior_quantity + whole > 0 else Decimal(0)
+        capped = gross > value / 100 and value > 0
+        cumulative = min(gross, value / 100)
         broker = cumulative - prior_paid
-        counted = Decimal(0) if capped else prior_quantity + quantity
-        self.months[month] += counted - prior_counted
-        self.orders[key] = raw, value, cumulative, prior_quantity + quantity, counted
+        if fractional > Decimal("1E-12"):
+            broker += max(Decimal("0.01"), fractional * price / 100)
+        counted = Decimal(0) if capped else prior_quantity + whole
+        self.months[month] += counted - prior_counted + fractional
+        self.orders[key] = raw, value, cumulative, prior_quantity + whole, counted
         venue = quantity * Decimal("0.0035")
         clearing = min(quantity * Decimal("0.0002"), quantity * price * Decimal("0.005"))
         regulatory = quantity * Decimal("0.000003")
