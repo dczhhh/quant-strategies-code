@@ -1,0 +1,80 @@
+name: Conditional research-only tenth-share stress preview
+
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/rotation-stress-tenths-preview.yml]
+
+permissions:
+  contents: read
+
+env:
+  SOURCE_SHA: 'aabaf88f527a586113edd8e1d993e198eb3d8a3f'
+
+concurrency:
+  group: real-action-capture-v1
+  cancel-in-progress: false
+
+jobs:
+  bounded-research-check:
+    if: >-
+      github.repository == 'dczhhh/quant-strategies-code' &&
+      github.actor == 'dczhhh' && github.event_name == 'push' &&
+      github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 16
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4
+      - run: uv sync --dev --locked --python 3.12
+      - name: Confirm immutable original PIT audits and full 2024 stress design fixtures
+        run: |
+          uv run pytest tests/constraints/test_verification_orchestration.py tests/constraints/test_verification_wire.py tests/strategies/test_rotation_research.py tests/strategies/test_rotation_assumed_distribution.py tests/test_rotation_stress_inputs.py tests/test_rotation_stress_analytics.py -q --no-cov
+      - name: Verify experimental source basic validity
+        run: |
+          uv run ruff check src/ml4t/backtest/strategies/sector_rotation/research_fractional.py src/ml4t/backtest/strategies/sector_rotation/research_fractional_ledger.py src/ml4t/backtest/strategies/sector_rotation/research_fractional_benchmark.py tools/rotation_stress_tenths_compare.py
+          uv run ruff format --check src/ml4t/backtest/strategies/sector_rotation/research_fractional.py src/ml4t/backtest/strategies/sector_rotation/research_fractional_ledger.py src/ml4t/backtest/strategies/sector_rotation/research_fractional_benchmark.py tools/rotation_stress_tenths_compare.py
+          uv run ty check tools/rotation_stress_tenths_compare.py
+
+  conditional-private-replay:
+    needs: bounded-research-check
+    environment: private-archive
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4
+      - run: uv sync --dev --locked --python 3.12
+      - name: Execute conditional research-only 1-share vs tenth-share stress replay
+        env:
+          RUNNER_ENVIRONMENT: ${{ runner.environment }}
+          ARCHIVE_WRITE_TOKEN: ${{ secrets.ARCHIVE_WRITE_TOKEN }}
+          PYTHONHASHSEED: '1'
+        run: uv run python tools/rotation_stress_tenths_compare.py run "$SOURCE_SHA"
+
+  conditional-private-fresh-verify:
+    needs: conditional-private-replay
+    environment: private-archive
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4
+      - run: uv sync --dev --locked --python 3.12
+      - name: Rebuild in separate runner and verify every private report byte
+        env:
+          RUNNER_ENVIRONMENT: ${{ runner.environment }}
+          ARCHIVE_WRITE_TOKEN: ${{ secrets.ARCHIVE_WRITE_TOKEN }}
+          PYTHONHASHSEED: '33'
+        run: uv run python tools/rotation_stress_tenths_compare.py verify "$SOURCE_SHA"
