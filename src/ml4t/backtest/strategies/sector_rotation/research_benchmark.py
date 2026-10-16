@@ -7,6 +7,7 @@ net distributions remain cash. No sector-rotation parameters are changed.
 
 from dataclasses import asdict, replace
 from datetime import datetime
+from decimal import Decimal
 from typing import Any
 
 import polars as pl
@@ -25,8 +26,8 @@ from .research import (
     _ResearchBroker,
     _ResearchParticipationLimit,
     _ResearchProvider,
-    _TenthResearchPortfolioGate,
     _share_step_floor,
+    _TenthResearchPortfolioGate,
 )
 from .research_inputs import ResearchInputs, RetrospectiveCloseSource
 from .strategy import SectorRotationStrategy
