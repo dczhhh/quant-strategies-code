@@ -15,7 +15,11 @@ jobs:
       - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4
       - name: Show public-source formatting differences only
         run: |
-          uvx ruff==0.14.10 format --diff src/ml4t/backtest/strategies/sector_rotation/research.py src/ml4t/backtest/strategies/sector_rotation/research_ledger.py tests/strategies/test_rotation_research.py || true
+          uvx ruff==0.14.10 format --diff src/ml4t/backtest/strategies/sector_rotation/research.py src/ml4t/backtest/strategies/sector_rotation/research_ledger.py src/quant_constraints/models.py src/quant_constraints/gates.py tests/strategies/test_rotation_research.py || true
+      - name: Run focused invented-only regression
+        run: |
+          uv sync --dev --locked --python 3.12
+          uv run pytest tests/strategies/test_rotation_research.py -q --no-cov
       - name: Inspect invented-only fractional scenario acceptance
         run: |
           uv sync --dev --locked --python 3.12
