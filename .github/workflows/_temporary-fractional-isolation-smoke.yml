@@ -1,0 +1,44 @@
+name: Temporary isolated fractional smoke
+
+on:
+  push:
+    branches: [feat/rotation-tenths-stress-20261016]
+    paths: [.github/workflows/_temporary-fractional-isolation-smoke.yml]
+
+permissions:
+  contents: read
+
+jobs:
+  research-smoke:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 17
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4
+      - run: uv sync --dev --locked --python 3.12
+      - run: uv run ruff check --diff src/ml4t/backtest/strategies/sector_rotation/research_fractional.py src/ml4t/backtest/strategies/sector_rotation/research_fractional_ledger.py src/ml4t/backtest/strategies/sector_rotation/research_fractional_benchmark.py tools/rotation_stress_tenths_compare.py || true
+      - run: uv run ruff format --diff src/ml4t/backtest/strategies/sector_rotation/research_fractional.py src/ml4t/backtest/strategies/sector_rotation/research_fractional_ledger.py src/ml4t/backtest/strategies/sector_rotation/research_fractional_benchmark.py tools/rotation_stress_tenths_compare.py || true
+      - run: uv run ruff check src/ml4t/backtest/strategies/sector_rotation/research_fractional.py src/ml4t/backtest/strategies/sector_rotation/research_fractional_ledger.py src/ml4t/backtest/strategies/sector_rotation/research_fractional_benchmark.py tools/rotation_stress_tenths_compare.py
+      - run: uv run ruff format --check src/ml4t/backtest/strategies/sector_rotation/research_fractional.py src/ml4t/backtest/strategies/sector_rotation/research_fractional_ledger.py src/ml4t/backtest/strategies/sector_rotation/research_fractional_benchmark.py tools/rotation_stress_tenths_compare.py
+      - name: Smoke real design on wholly invented test inputs
+        run: |
+          uv run python - <<'PY'
+          import runpy
+          from dataclasses import asdict
+          from decimal import Decimal
+          from ml4t.backtest.strategies.sector_rotation.research_fractional import ResearchAssumptions, retrospective_rotation_engine
+          from ml4t.backtest.strategies.sector_rotation.research_fractional_benchmark import retrospective_spy_benchmark
+          m=runpy.run_path('tests/strategies/test_rotation_research.py')
+          ins=m['inputs'](end='2025-10-03')
+          args=ResearchAssumptions(**asdict(m['ASSUMPTIONS']),share_step=Decimal('0.1'))
+          e=retrospective_rotation_engine(ins,args,m['settings']())
+          e.run()
+          b=retrospective_spy_benchmark(ins,args)
+          b.run()
+          print({'rotation_status':e.research_report['status'],'spy_status':b.research_report['status'],'rotation_fills':len(e.broker.fills),'spy_fills':len(b.broker.fills),'rotation_quantities':[f.quantity for f in e.broker.fills[:5]],'spy_quantities':[f.quantity for f in b.broker.fills[:1]]})
+          assert e.research_report['status']==b.research_report['status']=='RETROSPECTIVE_ENGINE_LEDGER_PASS'
+          assert any(f.quantity%1 for f in e.broker.fills)
+          PY
+      - run: uv run pytest tests/constraints/test_verification_orchestration.py tests/constraints/test_verification_wire.py -q --no-cov
