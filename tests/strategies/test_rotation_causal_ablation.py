@@ -42,7 +42,7 @@ def test_factorial_books_preserve_synthetic_cash_and_fee_ledger(sector, risk):
         assert isinstance(engine.strategy.book, CausalAblationBook)
         if not sector:
             assert engine.strategy.book.frozen_on is not None
-            assert engine.strategy.book.frozen_on <= engine.strategy.book.freeze_sector_at
+            assert engine.strategy.book.frozen_on >= engine.strategy.book.freeze_sector_at
             assert engine.strategy.book._frozen_scores is not None
         if not risk:
             assert all(event["code"] != "spy_downgrade" for event in engine.strategy.events)
