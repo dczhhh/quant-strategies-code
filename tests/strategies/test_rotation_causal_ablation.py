@@ -45,15 +45,10 @@ def test_factorial_books_preserve_synthetic_cash_and_fee_ledger(sector, risk):
             assert engine.strategy.book.frozen_on <= engine.strategy.book.freeze_sector_at
             assert engine.strategy.book._frozen_scores is not None
         if not risk:
-            assert all(
-                event["code"] != "spy_downgrade"
-                for event in engine.strategy.events
-            )
+            assert all(event["code"] != "spy_downgrade" for event in engine.strategy.events)
 
 
 @pytest.mark.parametrize("sector,risk", [(0, True), (True, 1), ("yes", False)])
 def test_factorial_switches_never_accept_nontyped_values(sector, risk):
     with pytest.raises(ValueError, match="explicit booleans"):
-        experimental_rotation_engine(
-            None, None, None, sector_rotation=sector, risk_tiers=risk
-        )
+        experimental_rotation_engine(None, None, None, sector_rotation=sector, risk_tiers=risk)
