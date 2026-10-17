@@ -38,6 +38,7 @@ class CausalAblationBook(SignalBook):
         self.sector_rotation = sector_rotation
         self.risk_tiers = risk_tiers
         self._frozen_scores: tuple[dict[str, float], frozenset[str]] | None = None
+        self.frozen_on: date | None = None
         self.shadow_regimes: list[tuple[date, MarketRegime]] = []
         self._shadow = SignalBook(config) if not risk_tiers else None
 
@@ -59,6 +60,7 @@ class CausalAblationBook(SignalBook):
         if self._frozen_scores is None and observed is not None:
             scores, eligible = observed
             self._frozen_scores = (dict(scores), frozenset(eligible))
+            self.frozen_on = self.latest.session
         if self._frozen_scores is None:
             return None
         frozen, eligible = self._frozen_scores
