@@ -138,6 +138,11 @@ jobs:
           uv run ty check tools/rotation_stress_tenths_compare.py
           uv run pytest tests/constraints/test_fractional_order_fees.py tests/strategies/test_rotation_fractional_fees.py tests/test_fractional_fee_report.py -q --no-cov
           uv run python -m tests.fractional_fee_process_probe compare
+          uv run ruff check --no-fix tools/rotation_ablation_oracle.py tools/rotation_ablation_spy.py tools/rotation_v_reversal_experiment.py tests/test_rotation_v_reversal.py tests/rotation_ablation_process_probe.py
+          uv run ruff format --check tools/rotation_ablation_oracle.py tools/rotation_ablation_spy.py tools/rotation_v_reversal_experiment.py tests/test_rotation_v_reversal.py tests/rotation_ablation_process_probe.py
+          uv run ty check tools/rotation_ablation_oracle.py tools/rotation_ablation_spy.py tools/rotation_v_reversal_experiment.py
+          uv run pytest tests/test_rotation_v_reversal.py tests/strategies/test_rotation_causal_ablation.py -q --no-cov
+          uv run python -m tests.rotation_ablation_process_probe compare
 
       - name: Validate private sample workflow expressions without executing capture
         run: |
