@@ -1,4 +1,4 @@
-name: Temporary no-secret ablation verification v2
+name: Temporary no-secret ablation verification v3
 on:
   push:
     branches: [research/rotation-causal-ablation-20261017]
