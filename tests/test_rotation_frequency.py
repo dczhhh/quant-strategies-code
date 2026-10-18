@@ -320,3 +320,57 @@ def test_ledger_failure_reports_only_a_registered_check_name(field):
 )
 def test_arbitrary_failure_details_are_never_published(message):
     assert w.failure_reason(ValueError(message)) == "UNVERIFIED_RUNTIME_FAILURE"
+
+
+def intraminute_overweight_inputs():
+    source = overweight_inputs()
+    return replace(
+        source,
+        bars=tuple(
+            replace(
+                bar,
+                open=bar.close * Decimal(".9995"),
+                high=bar.close * Decimal("1.005"),
+                low=bar.close * Decimal(".995"),
+            )
+            for bar in source.bars
+        ),
+    )
+
+
+@pytest.mark.parametrize("step", ["1", "0.1"])
+def test_original_deferred_drift_open_price_reproduces_strict_ledger_failure(step):
+    engine = v.experimental_rotation_engine(
+        intraminute_overweight_inputs(),
+        w.assumptions(step, primary=False),
+        settings(),
+        sector_rotation=True,
+        risk_tiers=True,
+    )
+    with pytest.raises(ValueError, match="next_completed_minute_close_plus_slippage"):
+        engine.run()
+
+
+@pytest.mark.parametrize("step", ["1", "0.1"])
+@pytest.mark.parametrize("case", CASES)
+def test_deferred_drift_uses_next_completed_close_with_original_guards(step, case):
+    source = intraminute_overweight_inputs()
+    engine = frequency_engine(source, w.assumptions(step, primary=False), settings(), case)
+    oracle = FrequencyOracle(engine, case)
+    engine.run()
+    oracle.finish()
+    drift = {row["order_id"] for row in oracle.monitor_orders}
+    fills = [fill for fill in engine.broker.fills if fill.order_id in drift]
+    assert fills
+    bars = {(bar.end, bar.asset): bar for bar in source.bars}
+    for fill in fills:
+        bar = bars[fill.timestamp, fill.asset]
+        assert fill.price == pytest.approx(float(bar.close * Decimal(".9998")), abs=1e-8)
+        assert abs(fill.price - float(bar.open * Decimal(".9998"))) > 0.00001
+        assert 35 <= fill.timestamp.astimezone(o.NY).minute < 45
+        assert fill.timestamp.astimezone(o.NY).hour == 9
+    assert engine.broker._fill_executor.market is engine.broker._market_state
+    assert all(bar.open != bar.close for bar in source.bars)
+    assert (
+        engine.research_report["independent_ledger"]["status"] == "RETROSPECTIVE_ENGINE_LEDGER_PASS"
+    )

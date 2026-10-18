@@ -7,16 +7,22 @@ import sys
 from concurrent.futures import ThreadPoolExecutor
 
 from tests.strategies.test_rotation_research import inputs, settings
+from tests.test_rotation_frequency import intraminute_overweight_inputs
 from tools import rotation_frequency_experiment as v
 
 
 def build():
-    source = inputs(bear=True)
-    summary, raw = v.matrix(source, primary=False, settings=settings())
-    assert all(row["status"] == "CONDITIONAL_RESEARCH_PASS" for row in summary["cells"].values()), (
-        summary
-    )
-    logical = {name: v.u.canonical({"summary": summary, "raw": raw}) for name in v.LOGICAL}
+    scenarios = {}
+    for name, source in {
+        "bear": inputs(bear=True),
+        "drift": intraminute_overweight_inputs(),
+    }.items():
+        summary, raw = v.matrix(source, primary=False, settings=settings())
+        assert all(
+            row["status"] == "CONDITIONAL_RESEARCH_PASS" for row in summary["cells"].values()
+        ), summary
+        scenarios[name] = {"summary": summary, "raw": raw}
+    logical = {name: v.u.canonical(scenarios) for name in v.LOGICAL}
     payload = v.pack(logical, "b" * 40)
     return {key: base64.b64encode(body).decode() for key, body in sorted(payload.items())}
 

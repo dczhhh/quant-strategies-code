@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import timedelta
 
 from ml4t.backtest.strategies.sector_rotation.adapter import SectorRotationBroker
@@ -10,6 +11,7 @@ from ml4t.backtest.strategies.sector_rotation.research_ablation import (
 )
 from ml4t.backtest.strategies.sector_rotation.signals import SignalBook
 from ml4t.backtest.strategies.sector_rotation.strategy import SectorRotationStrategy
+from quant_constraints.adapter import ConstraintFillExecutor
 from quant_constraints.calendar import NY, SessionCalendar
 from quant_constraints.gates import RebalanceGate
 
@@ -80,6 +82,51 @@ class FrequencyGate(RebalanceGate):
         return asof.astimezone(NY).date() in self.execution_days
 
 
+class CompletedMinuteRiskExecutor(ConstraintFillExecutor):
+    """Honor the existing research close-price contract for deferred risk too.
+
+    The inherited executor reads ``opens`` for deferred risk. Give only that
+    collaborator a per-call view of the completed close; original market state,
+    raw input OHLC, every guard and canonical economic state remain intact.
+    """
+
+    def execute(self, order, base_price):
+        broker, market = self.broker, self.market
+        assert isinstance(broker, SectorRotationBroker)
+        if (
+            order.order_id not in broker.deferred_risk
+            or order.asset not in market.opens
+            or order.asset not in market.prices
+        ):
+            return super().execute(order, base_price)
+        self.market = replace(
+            market, opens={**market.opens, order.asset: market.prices[order.asset]}
+        )
+        try:
+            return super().execute(order, base_price)
+        finally:
+            self.market = market
+
+
+def bind_completed_minute_risk(engine):
+    broker = engine.broker
+    assert isinstance(broker, SectorRotationBroker)
+    original = broker._fill_executor
+    assert isinstance(original, ConstraintFillExecutor)
+    executor = CompletedMinuteRiskExecutor(
+        broker,
+        account=original.account,
+        market=original.market,
+        orders=original.orders,
+        risk=original.risk,
+        journal=original.journal,
+        record_pnl=original.record_pnl,
+    )
+    executor.fill_engine = original.fill_engine
+    broker._fill_executor = executor
+    broker._fill_engine.executor = executor
+
+
 def frequency_engine(inputs, assumptions, settings, case):
     if case not in CASES:
         raise ValueError("FREQUENCY_UNKNOWN_CASE")
@@ -87,6 +134,7 @@ def frequency_engine(inputs, assumptions, settings, case):
         inputs, assumptions, settings, sector_rotation=True, risk_tiers=True
     )
     assert isinstance(engine.strategy, SectorRotationStrategy)
+    bind_completed_minute_risk(engine)
     if case != "M":
         first = inputs.bars[0].end.astimezone(NY).date()
         last = inputs.bars[-1].end.astimezone(NY).date()
