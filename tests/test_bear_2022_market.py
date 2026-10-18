@@ -27,7 +27,9 @@ def test_fixed_market_plan_fits_requested_2022_scope():
 
 def test_all_groups_fresh_read_without_network_or_writes_and_within_client_budget():
     archive = FakeGitHub(m.c.m.DESTINATION)
-    first, made = m.capture(archive, "SPY", SOURCE, lambda: "INVENTED_KEY", get=lambda *_: (200, BODY))
+    first, made = m.capture(
+        archive, "SPY", SOURCE, lambda: "INVENTED_KEY", get=lambda *_: (200, BODY)
+    )
     assert len(first) == made == 86
     assert len(archive.events) < m.c.m.CALL_LIMIT
     assert all(len(body) <= m.c.m.FILE_LIMIT for body in archive.blobs.values())

@@ -87,7 +87,9 @@ def products(ticker):
     return tuple(rows)
 
 
-PLAN_HASH = s.digest(s.canonical({"policy": POLICY, "products": {t: products(t) for t in s.TICKERS}}))
+PLAN_HASH = s.digest(
+    s.canonical({"policy": POLICY, "products": {t: products(t) for t in s.TICKERS}})
+)
 
 
 def groups(ticker):
@@ -157,7 +159,8 @@ def read_group(archive, ticker, index):
         parent == c.m.BOOTSTRAP
         and len(commit["parents"]) == 1
         and commit["parents"][0]["sha"] == archive.ref(ref(ticker, index, True))
-        and held[prefix + "reservation.json"] == hold_bytes(ticker, index, manifest["source_commit"])
+        and held[prefix + "reservation.json"]
+        == hold_bytes(ticker, index, manifest["source_commit"])
         and manifest["bundle_sha256"] == s.digest(packed),
         "MARKET_RAW_BINDING",
     )
