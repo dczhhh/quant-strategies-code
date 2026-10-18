@@ -1,0 +1,126 @@
+name: Frozen bear 2022 source qualification
+
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/bear-2022-source.yml]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: real-action-capture-v1
+  cancel-in-progress: false
+
+env:
+  SOURCE_SHA: 'a5ef9da0ef03a62b12f33f842590d0af389eb1cf'
+  ACTIONS_STEP_DEBUG: ${{ secrets.ACTIONS_STEP_DEBUG }}
+  ACTIONS_RUNNER_DEBUG: ${{ secrets.ACTIONS_RUNNER_DEBUG }}
+
+jobs:
+  preflight:
+    permissions:
+      contents: read
+      actions: read
+    if: >-
+      github.repository == 'dczhhh/quant-strategies-code' &&
+      github.actor == 'dczhhh' && github.event_name == 'push' &&
+      github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4
+      - run: uv sync --dev --locked --python 3.12
+      - name: Require source CI, ecosystem, and source-specific tests
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh api "repos/dczhhh/quant-strategies-code/actions/runs?head_sha=$SOURCE_SHA&event=pull_request&per_page=100" > "$RUNNER_TEMP/bear2022-source-checks.json"
+          jq --exit-status --arg sha "$SOURCE_SHA" '
+            [.workflow_runs[] | select(.head_sha == $sha)] |
+            group_by(.name) | map(sort_by(.run_started_at) | last) |
+            [.[] | select(.status == "completed" and .conclusion == "success") | .name] |
+            index("CI") != null and index("Ecosystem qualification") != null and index("Bear 2022 source checks") != null
+          ' "$RUNNER_TEMP/bear2022-source-checks.json"
+      - run: uv run pytest tests/test_bear_2022_sources.py tests/test_bear_2022_capture.py tests/test_rotation_frequency.py tests/constraints/test_verification_contracts.py tests/constraints/test_verification_archive_binding.py tests/constraints/test_research_entry_e2e.py -q --no-cov
+      - run: uv run ruff format --check tools/bear_2022_*.py tests/test_bear_2022_*.py
+      - run: uv run ruff check --no-fix tools/bear_2022_*.py tests/test_bear_2022_*.py
+      - run: uv run ty check tools/bear_2022_*.py
+
+  canary:
+    needs: preflight
+    environment: private-archive
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4
+      - run: uv sync --dev --locked --python 3.12
+      - name: One SPY canary; any source denial blocks the remaining symbols
+        env:
+          RUNNER_ENVIRONMENT: ${{ runner.environment }}
+          ARCHIVE_WRITE_TOKEN: ${{ secrets.ARCHIVE_WRITE_TOKEN }}
+          MASSIVE_API_KEY: ${{ secrets.massive }}
+          PYTHONHASHSEED: '1'
+        run: uv run python tools/bear_2022_capture.py capture SPY "$SOURCE_SHA"
+
+  capture:
+    needs: canary
+    environment: private-archive
+    strategy:
+      fail-fast: true
+      max-parallel: 2
+      matrix:
+        ticker: [XLB, XLC, XLE, XLF, XLI, XLK, XLP, XLRE, XLU, XLV, XLY]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4
+      - run: uv sync --dev --locked --python 3.12
+      - name: Four frozen products only; immutable private capture and source audit
+        env:
+          RUNNER_ENVIRONMENT: ${{ runner.environment }}
+          ARCHIVE_WRITE_TOKEN: ${{ secrets.ARCHIVE_WRITE_TOKEN }}
+          MASSIVE_API_KEY: ${{ secrets.massive }}
+          PYTHONHASHSEED: '1'
+        run: uv run python tools/bear_2022_capture.py capture "${{ matrix.ticker }}" "$SOURCE_SHA"
+
+  fresh_verify:
+    needs: [canary, capture]
+    environment: private-archive
+    strategy:
+      fail-fast: true
+      max-parallel: 2
+      matrix:
+        ticker: [SPY, XLB, XLC, XLE, XLF, XLI, XLK, XLP, XLRE, XLU, XLV, XLY]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4
+      - run: uv sync --dev --locked --python 3.12
+      - name: Fresh source-audit rebuild with no market key, network requests, or archive writes
+        env:
+          RUNNER_ENVIRONMENT: ${{ runner.environment }}
+          ARCHIVE_WRITE_TOKEN: ${{ secrets.ARCHIVE_WRITE_TOKEN }}
+          PYTHONHASHSEED: '33'
+        run: uv run python tools/bear_2022_capture.py verify "${{ matrix.ticker }}" "$SOURCE_SHA"
