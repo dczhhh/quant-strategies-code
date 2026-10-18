@@ -1,0 +1,21 @@
+# A2 research settings. Signal input must be causal, dividend-inclusive total return.
+lookbacks: [63, 126, 252]
+momentum_weights: [0.5, 0.3, 0.2]
+short_ma: 50
+long_ma: 200
+peak_lookback: 252
+down_confirm: 5
+recovery_confirm: 10
+trend_buffer: 0.02
+deep_drawdown: 0.20
+min_weight: 0.15
+max_weight: 0.25
+normal_exposure: 0.95
+warning_exposure: 0.70
+bear_exposure: 0.45
+deep_exposure: 0.20
+rank_buffer: 2
+execution_start_minutes: 5
+execution_end_minutes: 15
+plan_sessions: 3
+execution_cushion_bps: 5.0

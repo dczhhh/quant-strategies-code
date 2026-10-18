@@ -595,6 +595,33 @@ def test_action_binding_fail_closed(change):
 
 
 def test_pr8_interface_required_instead_of_silent_legacy_tax():
+    @dataclass(frozen=True)
+    class LegacyAction:
+        security_id: str = "stable-A"
+        event_id: str = "dividend"
+        kind: str = "CASH_DIVIDEND"
+        effective_date: date = date(2026, 10, 12)
+        currency: str = "USD"
+        terms: str = "ordinary"
+        available_at: datetime = at("2026-10-01")
+        cancelled: bool = False
+
+    action = LegacyAction()
+    fails(
+        "PIT_PR8_INTERFACE_REQUIRED",
+        lambda: tax().adapt(
+            action, rule_factory=SimpleNamespace, qualification_factory=SimpleNamespace
+        ),
+    )
+
+
+def test_pit_tax_adapter_reaches_formal_public_runtime_not_only_frozen_pr8():
+    from quant_constraints import (
+        ConstraintConfig,
+        DividendTaxQualification,
+        DividendTaxRule,
+        resolve_dividend_tax_rate,
+    )
     from quant_constraints.corporate_actions import CorporateAction
 
     action = CorporateAction(
@@ -606,12 +633,17 @@ def test_pr8_interface_required_instead_of_silent_legacy_tax():
         "synthetic",
         dividend_per_share=1,
     )
-    fails(
-        "PIT_PR8_INTERFACE_REQUIRED",
-        lambda: tax().adapt(
-            action, rule_factory=SimpleNamespace, qualification_factory=SimpleNamespace
-        ),
+    event, r, q = tax().adapt(
+        action, rule_factory=DividendTaxRule, qualification_factory=DividendTaxQualification
     )
+    config = replace(
+        ConstraintConfig(),
+        dividend_tax_profile="cn_mainland_individual_treaty",
+        dividend_tax_scenario="synthetic",
+        dividend_tax_rules=(r,),
+        dividend_tax_qualification=q,
+    )
+    assert resolve_dividend_tax_rate(config, event, at("2026-10-12"))[0] == 0.10
 
 
 @pytest.mark.parametrize(

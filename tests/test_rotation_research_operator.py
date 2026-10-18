@@ -1,0 +1,561 @@
+"""Invented inputs only: bounded capture, source binding and actual Engine replay."""
+
+import copy
+import gzip
+import json
+from dataclasses import replace
+from datetime import datetime, time, timedelta
+from decimal import Decimal
+from pathlib import Path
+from unittest.mock import patch
+
+import pytest
+import yaml
+
+from tests.test_private_archive_migration import FakeGitHub
+from tests.test_real_etf_2025 import documents, workbook
+from tools import private_archive_migration as migration
+from tools import rotation_research_replay as u
+
+c = u.c
+SOURCE = "d" * 40
+OBSERVED = "2026-10-15T00:00:00+00:00"
+
+
+def item(product, body):
+    return {"body": body, "receipt": {"product": product, "response_received_at": OBSERVED}}
+
+
+def all_documents():
+    template = documents()
+    history = c.p.workbook(template[c.p.DOCUMENTS[0]["id"]]["body"])["dividend"][:1]
+    primary = c.p.workbook(template[c.p.DOCUMENTS[1]["id"]]["body"])["2025 ICI Primary"][:13]
+    for i, ticker in enumerate(c.p.TICKERS):
+        docs = documents(ticker)
+        h = c.p.workbook(docs[c.p.DOCUMENTS[0]["id"]]["body"])["dividend"][1]
+        tax = c.p.workbook(docs[c.p.DOCUMENTS[1]["id"]]["body"])["2025 ICI Primary"][13]
+        h["C"] = tax["B"] = f"{i + 1:09d}"
+        history.append(h)
+        primary.append(tax)
+    result = {
+        doc["id"]: item(
+            doc,
+            workbook("dividend" if i == 0 else "2025 ICI Primary", history if i == 0 else primary),
+        )
+        for i, doc in enumerate(c.p.DOCUMENTS[:2])
+    }
+    for held in result.values():
+        receipt = held["receipt"]
+        receipt["schema"] = "real_etf_issuer_receipt_v1"
+        receipt["document"] = receipt.pop("product")
+        receipt["fetched_at"] = receipt.pop("response_received_at")
+    return result
+
+
+def test_issuer_observation_uses_original_document_receipt_time():
+    doc = c.p.DOCUMENTS[0]
+    receipt = {"schema": "real_etf_issuer_receipt_v1", "fetched_at": OBSERVED}
+    bound = u.source(doc["id"], b"invented document", receipt, doc["url"])
+    assert bound.observed_at == datetime.fromisoformat(OBSERVED)
+    with pytest.raises(KeyError):
+        u.source(doc["id"], b"invented document", {"schema": receipt["schema"]}, doc["url"])
+    with pytest.raises(ValueError, match="ISSUER_RECEIPT_SCHEMA_INVALID"):
+        u.source(doc["id"], b"invented document", {"response_received_at": OBSERVED}, doc["url"])
+
+
+def test_failure_location_does_not_print_exception_messages_or_source_values(monkeypatch, capsys):
+    private = "invented private response / credential value"
+
+    def failure(*_args, **_kwargs):
+        raise KeyError(private)
+
+    monkeypatch.setattr(u.sys, "argv", ["replay", "run", SOURCE])
+    monkeypatch.setattr(c, "guarded", lambda _: None)
+    monkeypatch.setattr(u, "execute", failure)
+    assert u.main() == 1
+    output = capsys.readouterr().out
+    assert private not in output
+    report = json.loads(output)
+    assert report["error_type"] == "KeyError"
+    assert report["location"]["file"] == "tests/test_rotation_research_operator.py"
+    assert report["location"]["line"] > 0
+
+
+def test_ledger_error_reports_only_the_allowlisted_failed_field(monkeypatch, capsys):
+    def failure(*_args, **_kwargs):
+        raise ValueError(
+            "Independent research ledger mismatch: next_completed_minute_close_plus_slippage"
+        )
+
+    monkeypatch.setattr(u.sys, "argv", ["replay", "run", SOURCE])
+    monkeypatch.setattr(c, "guarded", lambda _: None)
+    monkeypatch.setattr(u, "execute", failure)
+    assert u.main() == 1
+    assert json.loads(capsys.readouterr().out)["reason"] == "LEDGER_EXECUTION_PRICE_MISMATCH"
+
+
+def price(ticker, day):
+    slope = Decimal(c.p.TICKERS.index(ticker) + 1) / 100
+    return float(100 + slope * (day - c.START).days)
+
+
+def market(product):
+    ticker, kind = product["ticker"], product["kind"]
+    rows = []
+    first, last = (c.a.day(product[k]) for k in ("start", "end"))
+    if kind in {"daily", "minute"}:
+        for day in c.sessions(first, last):
+            at = datetime.combine(day, time(), u.NY)
+            ends = (
+                [at]
+                if kind == "daily"
+                else [
+                    c.CAL.session(day).market_open + timedelta(minutes=m)
+                    for m in (1, *range(5, 16))
+                ]
+                + [c.CAL.session(day).market_close]
+            )
+            for end in ends:
+                stamp = end if kind == "daily" else end - timedelta(minutes=1)
+                value = price(ticker, day)
+                rows.append(
+                    {
+                        "t": int(stamp.timestamp() * 1000),
+                        "o": value,
+                        "h": value,
+                        "l": value,
+                        "c": value,
+                        "v": 1000000,
+                    }
+                )
+    elif kind == "dividends" and first <= c.a.day("2025-09-19") <= last:
+        rows.append(
+            {
+                "ticker": ticker,
+                "id": "invented-dividend-" + ticker,
+                "ex_dividend_date": "2025-09-19",
+                "record_date": "2025-09-19",
+                "pay_date": "2025-10-31",
+                "cash_amount": 1,
+                "split_adjusted_cash_amount": 999,
+                "currency": "USD",
+            }
+        )
+    return {
+        "status": "OK",
+        "ticker": ticker,
+        "adjusted": False,
+        "results": rows,
+        "resultsCount": len(rows),
+    }
+
+
+@pytest.fixture
+def normalized_sources(monkeypatch):
+    old, new = {}, {}
+    for ticker in c.p.TICKERS:
+        old[ticker] = {}
+        for kind in ("raw", "dividends", "splits"):
+            product = next(p for p in c.a.products(ticker) if c.r.r.kind(p) == kind)
+            normalized = dict(
+                product,
+                kind="daily" if kind == "raw" else kind,
+                start=c.a.START,
+                end=c.a.SPLIT_END if kind == "splits" else c.a.END,
+            )
+            old[ticker][kind] = item(product, c.m.canonical(market(normalized)))
+        new[ticker] = {p["id"]: item(p, c.m.canonical(market(p))) for p in c.products(ticker)}
+    new["REFERENCE"] = {
+        p["id"]: item(p, b"%PDF-invented calendar reference") for p in c.products("REFERENCE")
+    }
+    monkeypatch.setattr(
+        c.r.r, "capture", lambda _archive, ticker, *_args, **_kwargs: (old[ticker], 0)
+    )
+    monkeypatch.setattr(c, "capture", lambda _archive, ticker, *_args, **_kwargs: (new[ticker], 0))
+    return all_documents(), old, new
+
+
+def test_plan_fetches_only_missing_daily_intervals_and_finite_three_session_minutes():
+    assert len(c.sessions()) == 48
+    assert len(c.sessions(c.START, c.CAL.shift(c.FIRST, -1))) == 253
+    assert sum(len(c.products(t)) for t in c.p.TICKERS) == 252
+    for ticker in c.p.TICKERS:
+        rows = c.products(ticker)
+        assert len(rows) == 21
+        assert all("adjusted=false" in p["url"] for p in rows if p["kind"] in {"daily", "minute"})
+        assert all(
+            len(c.sessions(c.a.day(p["start"]), c.a.day(p["end"]))) == 3
+            for p in rows
+            if p["kind"] == "minute"
+        )
+    with pytest.raises(ValueError, match="SCOPE"):
+        c.products("GME")
+
+
+def test_capture_is_append_only_and_verify_never_asks_for_market_credentials():
+    archive = FakeGitHub(c.m.DESTINATION)
+    count = []
+
+    def fetch(product, key):
+        count.append(product["id"])
+        return 200, c.m.canonical(market(product))
+
+    _, made = c.capture(archive, "SPY", SOURCE, lambda: "KEY", fetch=fetch)
+    assert made == len(count) == 21
+    saved = copy.deepcopy(archive.refs)
+    _, made = c.capture(
+        archive,
+        "SPY",
+        SOURCE,
+        lambda: pytest.fail("No secret needed"),
+        verify_only=True,
+        fetch=lambda *_: pytest.fail("No request allowed"),
+    )
+    assert made == 0 and archive.refs == saved
+
+
+def test_full_pool_capture_and_two_independent_replays_fit_archive_call_budget():
+    archive = FakeGitHub(c.m.DESTINATION)
+    c.capture(
+        c.r.CachedArchive(archive),
+        "SPY",
+        SOURCE,
+        lambda: "KEY",
+        fetch=lambda product, _: (200, c.m.canonical(market(product))),
+    )
+    capture_calls = len(archive.events)
+    capture_writes = sum(method == "POST" for method, _ in archive.events)
+    archive.events.clear()
+    c.capture(
+        c.r.CachedArchive(archive), "SPY", SOURCE, lambda: pytest.fail("No key"), verify_only=True
+    )
+    verify_calls = len(archive.events)
+    # Four retained legacy products cost at most 48 reads per target; the two
+    # interrupted legacy targets add 32. Allow 150 calls for issuer/calendar/
+    # result metadata and all remaining one-off private writes and readbacks.
+    total = 12 * (capture_calls + 2 * verify_calls) + 2 * (12 * 48 + 32) + 150
+    assert total < 5000, (capture_calls, verify_calls, total)
+    assert 12 * capture_writes + 60 < 500
+    assert len(c.groups("SPY")) == 1
+
+
+def test_an_unknown_group_outcome_is_not_retried():
+    archive = FakeGitHub(c.m.DESTINATION)
+    archive.refs[c.group_ref("SPY", 0, True)] = "e" * 40
+    with pytest.raises(ValueError, match="UNKNOWN_GROUP_OUTCOME_RETAINED"):
+        c.capture(
+            archive,
+            "SPY",
+            SOURCE,
+            lambda: pytest.fail("No credential lookup"),
+            fetch=lambda *_: pytest.fail("No retry"),
+        )
+
+
+def test_failed_source_response_is_retained_privately_and_not_admitted():
+    archive = FakeGitHub(c.m.DESTINATION)
+    with pytest.raises(ValueError, match="CAPTURE_RECEIPT_INVALID"):
+        c.capture(
+            archive,
+            "SPY",
+            SOURCE,
+            lambda: "KEY",
+            fetch=lambda *_: (403, b'{"private":"invented denied response"}'),
+        )
+    assert archive.ref(c.group_ref("SPY", 0)) is not None
+    assert any(b"invented denied response" in body for body in archive.blobs.values())
+
+
+def test_mutated_response_bytes_cannot_be_replayed():
+    archive = FakeGitHub(c.m.DESTINATION)
+    c.capture(
+        archive,
+        "SPY",
+        SOURCE,
+        lambda: "KEY",
+        fetch=lambda product, _: (200, c.m.canonical(market(product))),
+    )
+    target = next(k for k, value in archive.blobs.items() if b'"results"' in value)
+    archive.blobs[target] += b" "
+    with pytest.raises((c.m.Stopped, migration.Stopped, ValueError)):
+        c.read_group(archive, "SPY", 0)
+
+
+def test_complete_source_bundle_runs_canonical_engine_and_checks_dividend_cash(normalized_sources):
+    docs, _, _ = normalized_sources
+    inputs, body = u.build_inputs(lambda: None, SOURCE, docs)
+    assert inputs.fingerprint
+    assert len(inputs.bars) == 48 * 13 * 12
+    assert json.loads(body)["origin"] == "retained_market_data"
+    result = u.replay(replace(inputs, origin="invented_fixture"))
+    assert result["summary"]["status"] == "RETROSPECTIVE_ENGINE_LEDGER_PASS"
+    assert result["summary"]["fills"] > 0
+    assert result["summary"]["dividend_accruals"] > 0
+    assert result["summary"]["modeled_credits"] == result["summary"]["dividend_accruals"]
+    assert result["engine"]["warmup_sessions"] == 253
+    assert result["summary"]["performance_admission"] is False
+    funded = result["funded_spy"]
+    assert funded["summary"]["status"] == "RETROSPECTIVE_ENGINE_LEDGER_PASS"
+    assert funded["summary"]["fills"] > 0
+    assert funded["summary"]["dividend_accruals"] == funded["summary"]["modeled_credits"] == 1
+    assert funded["engine"]["input_fingerprint"] == result["engine"]["input_fingerprint"]
+    assert funded["engine"]["assumptions"] == result["engine"]["assumptions"]
+    assert result["summary"]["strategy_minus_funded_spy_percentage_points"] == (
+        result["summary"]["return_pct"] - funded["summary"]["return_pct"]
+    )
+    assert result["summary"]["benchmark_exposure_matched"] is False
+
+
+def test_issuer_xlsx_decimal_precision_uses_existing_amount_tolerance(normalized_sources):
+    docs, _, _ = normalized_sources
+    name = c.p.DOCUMENTS[1]["id"]
+    rows = c.p.workbook(docs[name]["body"])["2025 ICI Primary"]
+    for row in rows[13:]:
+        row.update(dict.fromkeys(("J", "M", "N", "Q", "R", "U"), "0.9999999999999999"))
+    docs[name]["body"] = workbook("2025 ICI Primary", rows)
+    inputs, _ = u.build_inputs(lambda: None, SOURCE, docs)
+    assert all(event.cash_amount == Decimal(1) for event in inputs.distributions)
+    report = u.replay(replace(inputs, origin="invented_fixture"))
+    assert report["summary"]["status"] == "RETROSPECTIVE_ENGINE_LEDGER_PASS"
+
+
+@pytest.mark.parametrize("value", ["1.00000002", "0.99999998"])
+def test_issuer_amount_difference_above_existing_tolerance_rejects(normalized_sources, value):
+    docs, _, _ = normalized_sources
+    name = c.p.DOCUMENTS[1]["id"]
+    rows = c.p.workbook(docs[name]["body"])["2025 ICI Primary"]
+    rows[13].update(dict.fromkeys(("J", "M", "N", "Q", "R", "U"), value))
+    docs[name]["body"] = workbook("2025 ICI Primary", rows)
+    with pytest.raises(ValueError, match="TAX_COMPONENT_CONFLICT"):
+        u.build_inputs(lambda: None, SOURCE, docs)
+
+
+def test_small_nonzero_special_distribution_is_never_rounded_to_zero(normalized_sources):
+    docs, _, _ = normalized_sources
+    name = c.p.DOCUMENTS[1]["id"]
+    rows = c.p.workbook(docs[name]["body"])["2025 ICI Primary"]
+    rows[13]["V"] = "0.000000000001"
+    docs[name]["body"] = workbook("2025 ICI Primary", rows)
+    with pytest.raises(ValueError, match="NONORDINARY_DISTRIBUTION_UNSUPPORTED"):
+        u.build_inputs(lambda: None, SOURCE, docs)
+
+
+@pytest.mark.parametrize("column,value", [("D", "R"), ("E", "C"), ("F", "R"), ("F", "X")])
+def test_report_flags_must_match_their_specific_ici_columns(normalized_sources, column, value):
+    docs, _, _ = normalized_sources
+    name = c.p.DOCUMENTS[1]["id"]
+    rows = c.p.workbook(docs[name]["body"])["2025 ICI Primary"]
+    rows[13][column] = value
+    docs[name]["body"] = workbook("2025 ICI Primary", rows)
+    with pytest.raises(ValueError, match="ISSUER_REPORT_STATUS_UNSUPPORTED"):
+        u.build_inputs(lambda: None, SOURCE, docs)
+
+
+@pytest.mark.parametrize("gap", ["minute", "daily", "special-tax", "estimated-tax"])
+def test_incomplete_or_conflicting_sources_reject_before_any_engine_call(
+    normalized_sources, gap, monkeypatch
+):
+    docs, old, new = normalized_sources
+    if gap in {"minute", "daily"}:
+        kind = "daily" if gap == "daily" else "minute"
+        product = next(p for p in c.products("SPY") if p["kind"] == kind)
+        value = json.loads(new["SPY"][product["id"]]["body"])
+        value["results"].pop(0)
+        value["resultsCount"] -= 1
+        new["SPY"][product["id"]]["body"] = c.m.canonical(value)
+    else:
+        name = c.p.DOCUMENTS[1]["id"]
+        rows = c.p.workbook(docs[name]["body"])["2025 ICI Primary"]
+        rows[13]["V" if gap == "special-tax" else "D"] = "1" if gap == "special-tax" else "E"
+        docs[name]["body"] = workbook("2025 ICI Primary", rows)
+    monkeypatch.setattr(
+        u, "retrospective_rotation_engine", lambda *_: pytest.fail("Engine must not be built")
+    )
+    with pytest.raises(ValueError):
+        u.build_inputs(lambda: None, SOURCE, docs)
+
+
+def test_operator_retains_distinct_closing_observations_and_reports_unreconciled_pairs(
+    normalized_sources,
+):
+    docs, _, new = normalized_sources
+    product = [p for p in c.products("SPY") if p["kind"] == "minute"][-1]
+    value = json.loads(new["SPY"][product["id"]]["body"])
+    row = value["results"][-1]
+    for key in ("o", "h", "l", "c"):
+        row[key] += 0.01
+    new["SPY"][product["id"]]["body"] = c.m.canonical(value)
+    inputs, body = u.build_inputs(lambda: None, SOURCE, docs)
+    assert json.loads(body)["schema"] == "rotation_retrospective_inputs_v2"
+    assert inputs.close_policy == u.SEPARATE_CLOSES
+    assert inputs.close_comparison["mismatches"] == 1
+    assert inputs.close_comparison["pairs"] == 48 * 12
+    daily = next(x.close for x in inputs.closes if x.asset == "SPY" and x.session == c.LAST)
+    minute = next(
+        x.close
+        for x in inputs.bars
+        if x.asset == "SPY" and x.end == c.CAL.session(c.LAST).market_close
+    )
+    assert minute != daily
+    report = u.replay(replace(inputs, origin="invented_fixture"))
+    assert report["summary"]["daily_minute_close_mismatches"] == 1
+    assert report["summary"]["daily_minute_close_reconciled"] is False
+    assert report["summary"]["status"] == "RETROSPECTIVE_ENGINE_LEDGER_PASS"
+
+
+def test_calendar_reference_does_not_call_the_production_settlement_function(monkeypatch):
+    monkeypatch.setattr(
+        "quant_constraints.calendar.settlement_date", lambda *_: pytest.fail("Not independent")
+    )
+    days = u.settlement_sessions()
+    assert c.a.day("2025-10-13") not in days
+    assert next(d for d in days if d > c.a.day("2025-10-10")) == c.a.day("2025-10-14")
+
+
+def test_private_report_readback_and_independent_fresh_engine_run_match(normalized_sources):
+    docs, _, _ = normalized_sources
+    archive = FakeGitHub(c.m.DESTINATION)
+    first = u.execute(lambda: archive, SOURCE, load_documents=lambda _: docs)
+    before = dict(archive.refs)
+    second = u.execute(lambda: archive, SOURCE, verify_only=True, load_documents=lambda _: docs)
+    assert first == second and archive.refs == before
+    assert all(len(body) <= c.m.FILE_LIMIT for body in archive.blobs.values())
+    assert first["price_source_diagnostics"]["pairs"] == 576
+    assert first["price_source_diagnostics"]["economic_cause_verified"] is False
+    names = {
+        u.REPORT_PREFIX + name
+        for name in ("inputs.json.gz", "result.json.gz", "price-audit.json.gz", "manifest.json")
+    }
+    saved, _ = c.b.read(archive, u.REPORT_REF, names)
+    diagnostic = json.loads(gzip.decompress(saved[u.REPORT_PREFIX + "price-audit.json.gz"]))
+    manifest = json.loads(saved[u.REPORT_PREFIX + "manifest.json"])
+    assert len(diagnostic["pairs"]) == 576
+    assert diagnostic["summary"] == first["price_source_diagnostics"]
+    assert manifest["diagnostic_module_sha256"] == c.m.sha256(
+        Path(u.pa.__file__).read_bytes().replace(b"\r\n", b"\n")
+    )
+    assert manifest["schema"] == "rotation_research_report_manifest_v4"
+
+
+def test_failed_source_diagnostic_prevents_archiving_success(normalized_sources, monkeypatch):
+    docs, _, _ = normalized_sources
+    archive = FakeGitHub(c.m.DESTINATION)
+
+    def failure(*_args):
+        raise ValueError("PRICE_AUDIT_NAV_RECOMPUTE")
+
+    monkeypatch.setattr(u.pa.ClosePriceAudit, "finish", failure)
+    with pytest.raises(ValueError, match="PRICE_AUDIT_NAV_RECOMPUTE"):
+        u.execute(lambda: archive, SOURCE, load_documents=lambda _: docs)
+    assert archive.ref(u.REPORT_REF) is None
+
+
+def test_failed_funded_reference_prevents_a_successful_combined_archive(
+    normalized_sources, monkeypatch
+):
+    docs, _, _ = normalized_sources
+    archive = FakeGitHub(c.m.DESTINATION)
+
+    class FailedReference:
+        def run(self):
+            raise ValueError("invented benchmark ledger failure")
+
+    monkeypatch.setattr(u, "retrospective_spy_benchmark", lambda *_: FailedReference())
+    with pytest.raises(ValueError, match="invented benchmark ledger failure"):
+        u.execute(lambda: archive, SOURCE, load_documents=lambda _: docs)
+    assert archive.ref(u.REPORT_REF) is None
+
+
+@pytest.mark.parametrize(
+    "field", ["GITHUB_REF", "GITHUB_ACTOR", "RUNNER_ENVIRONMENT", "ACTIONS_STEP_DEBUG"]
+)
+def test_credentials_are_not_usable_outside_bound_owner_hosted_context(field, monkeypatch):
+    env = {
+        "GITHUB_REPOSITORY": c.m.CODE,
+        "GITHUB_ACTOR": "dczhhh",
+        "GITHUB_EVENT_NAME": "push",
+        "GITHUB_REF": "refs/heads/" + c.OPERATION_BRANCH,
+        "RUNNER_ENVIRONMENT": "github-hosted",
+        "RUNNER_OS": "Linux",
+        "GITHUB_WORKFLOW_REF": c.m.CODE + "/" + c.OPERATION_WORKFLOW + "@refs/heads/main",
+    }
+    with (
+        patch.dict("os.environ", env, clear=True),
+        patch.object(c.subprocess, "check_output", return_value=SOURCE + "\n"),
+    ):
+        c.guarded(SOURCE)
+        monkeypatch.setenv(field, "true" if field == "ACTIONS_STEP_DEBUG" else "untrusted")
+        with pytest.raises(ValueError, match="CONTEXT"):
+            c.guarded(SOURCE)
+
+
+def test_operation_template_limits_credentials_to_the_bound_private_pipeline():
+    document = yaml.safe_load(Path("docs/examples/rotation-research-operation.yml").read_text())
+    trigger = document.get("on", document.get(True))
+    assert trigger == {"push": {"branches": [c.OPERATION_BRANCH], "paths": [c.OPERATION_WORKFLOW]}}
+    assert document["permissions"] == {"contents": "read"}
+    assert document["env"]["SOURCE_SHA"] == "__REVIEWED_SOURCE_SHA__"
+    jobs = document["jobs"]
+    assert "ARCHIVE_WRITE_TOKEN" not in json.dumps(jobs["preflight"])
+    assert "MASSIVE" not in json.dumps(jobs["capture_reference"])
+    assert "MASSIVE" not in json.dumps(jobs["replay"]) + json.dumps(jobs["verify"])
+    assert jobs["capture"]["strategy"]["max-parallel"] == 2
+    assert jobs["verify"]["needs"] == "replay"
+    for job in jobs.values():
+        checkout = job["steps"][0]
+        assert checkout["with"]["ref"] == "${{ env.SOURCE_SHA }}"
+        assert checkout["with"]["persist-credentials"] is False
+
+
+def test_failure_after_engine_invocation_reports_the_actual_phase(monkeypatch, capsys):
+    def failure(*_args, progress, **_kwargs):
+        progress["engine_invoked"] = True
+        raise ValueError("invented internal failure")
+
+    monkeypatch.setattr(u.sys, "argv", ["replay", "run", SOURCE])
+    monkeypatch.setattr(c, "guarded", lambda _: None)
+    monkeypatch.setattr(u, "execute", failure)
+    assert u.main() == 1
+    assert json.loads(capsys.readouterr().out)["engine_invoked"] is True
+
+
+def test_retained_replay_template_never_receives_a_provider_secret_or_recaptures():
+    body = Path("docs/examples/rotation-research-retained-replay.yml").read_text()
+    document = yaml.safe_load(body)
+    jobs = document["jobs"]
+    assert set(jobs) == {"preflight", "replay", "verify"}
+    assert jobs["replay"]["needs"] == "preflight"
+    assert jobs["verify"]["needs"] == "replay"
+    assert "MASSIVE" not in body
+    assert "rotation_research_capture.py capture" not in body
+    assert "rotation_research_replay.py verify" in body
+    assert document.get("on", document.get(True)) == {
+        "push": {"branches": [c.OPERATION_BRANCH], "paths": [c.OPERATION_WORKFLOW]}
+    }
+
+
+def test_missing_credential_does_not_leave_a_false_unknown_reservation():
+    archive = FakeGitHub(c.m.DESTINATION)
+    with pytest.raises(ValueError, match="CREDENTIAL_UNAVAILABLE"):
+        c.capture(archive, "SPY", SOURCE, lambda: "")
+    assert not archive.refs
+
+
+def test_content_pacing_preserves_the_original_private_writer(monkeypatch):
+    clock, sleeps, calls = [0.0], [], []
+
+    def sleep(delay):
+        sleeps.append(delay)
+        clock[0] += delay
+
+    def guarded_write(_self, suffix, payload):
+        calls.append((suffix, payload))
+        return {"sha": "a" * 40}
+
+    monkeypatch.setattr(c.monotonic_time, "monotonic", lambda: clock[0])
+    monkeypatch.setattr(c.monotonic_time, "sleep", sleep)
+    monkeypatch.setattr(c.m.GitHub, "write", guarded_write)
+    writer = c.PacedGitHub(c.m.DESTINATION, "INVENTED_KEY", writable=True)
+    for _ in range(3):
+        writer.write("/git/blobs", {"encoding": "base64", "content": "aW52ZW50ZWQ="})
+    assert sleeps == [2.0, 2.0] and len(calls) == 3

@@ -37,8 +37,10 @@ from quant_constraints.research.data.pit_supply import (
 )
 from quant_constraints.research.data.provenance import ResearchMode
 from quant_constraints.research.data.verification import (
+    LEGACY_IMPLEMENTATION_BASE,
     REVIEWED_IMPLEMENTATION_BASE,
     ROLE_DEPENDENCIES,
+    TAX_RUNTIME_SOURCE_SHA256,
     verify_dataset,
 )
 from quant_constraints.research.data.verification_contracts import (
@@ -479,6 +481,202 @@ def test_every_declared_software_version_is_checked(field):
         )
     )
     rejected(report, "VERSION_MISMATCH", "versions")
+
+
+def test_tax_runtime_overlay_preserves_legacy_pins_and_rejects_old_code_identity():
+    from quant_constraints.research.data.verification import (
+        BASE_SOURCE_SHA256,
+        ENTRY_RUNTIME_SOURCE_SHA256,
+        TAX_RUNTIME_SOURCE_REVISION,
+        _versions,
+    )
+
+    req, records = fixture()
+    proof = _versions(freeze(req, records))
+    assert proof["checked_versions"]["code_revision"] == REVIEWED_IMPLEMENTATION_BASE
+    assert proof["legacy_source_revision"] == LEGACY_IMPLEMENTATION_BASE
+    assert BASE_SOURCE_SHA256["quant_constraints.corporate_actions.events"] == (
+        "ea1cdddd7e599bf8e192e741c970bd623f226817d369c1036d82d18c2cb96ae4"
+    )
+    assert proof["tax_runtime_source_sha256"] == TAX_RUNTIME_SOURCE_SHA256
+    assert proof["entry_runtime_source_sha256"] == ENTRY_RUNTIME_SOURCE_SHA256
+    assert proof["tax_runtime_source_revision"] == TAX_RUNTIME_SOURCE_REVISION
+    previous = freeze(req, records, pipeline=versions(code_revision=TAX_RUNTIME_SOURCE_REVISION))
+    rejected(run(previous), "VERSION_MISMATCH", "versions")
+    old = freeze(req, records, pipeline=versions(code_revision=LEGACY_IMPLEMENTATION_BASE))
+    rejected(run(old), "VERSION_MISMATCH", "versions")
+
+
+def test_research_overlay_preserves_previous_scope_pins_and_refuses_v5_snapshot():
+    from quant_constraints.research.data.verification import (
+        RESEARCH_RUNTIME_SOURCE_REVISION,
+        RESEARCH_RUNTIME_SOURCE_SHA256,
+        SECURITY_ENTRY_SOURCE_REVISION,
+        _versions,
+    )
+
+    req, records = fixture()
+    proof = _versions(freeze(req, records))
+    assert proof["research_runtime_source_revision"] == RESEARCH_RUNTIME_SOURCE_REVISION
+    assert proof["research_runtime_source_sha256"] == RESEARCH_RUNTIME_SOURCE_SHA256
+    assert proof["entry_runtime_source_revision"] == SECURITY_ENTRY_SOURCE_REVISION
+    old = freeze(req, records, pipeline=versions(code_revision=SECURITY_ENTRY_SOURCE_REVISION))
+    rejected(run(old), "VERSION_MISMATCH", "versions")
+
+
+def test_replay_integrity_overlay_preserves_v6_pins_and_rejects_its_old_snapshot():
+    from quant_constraints.research.data.verification import (
+        RESEARCH_INTEGRITY_SOURCE_REVISION,
+        RESEARCH_INTEGRITY_SOURCE_SHA256,
+        RESEARCH_RUNTIME_SOURCE_REVISION,
+        RESEARCH_RUNTIME_SOURCE_SHA256,
+        _versions,
+    )
+
+    req, records = fixture()
+    proof = _versions(freeze(req, records))
+    assert proof["research_integrity_source_revision"] == RESEARCH_INTEGRITY_SOURCE_REVISION
+    assert proof["research_integrity_source_sha256"] == RESEARCH_INTEGRITY_SOURCE_SHA256
+    assert proof["research_runtime_source_sha256"] == RESEARCH_RUNTIME_SOURCE_SHA256
+    assert set(RESEARCH_INTEGRITY_SOURCE_SHA256) <= set(proof["reviewed_source_sha256"])
+    old = freeze(req, records, pipeline=versions(code_revision=RESEARCH_RUNTIME_SOURCE_REVISION))
+    rejected(run(old), "VERSION_MISMATCH", "versions")
+
+
+def test_close_policy_overlay_preserves_v7_evidence_and_refuses_its_old_snapshot():
+    from quant_constraints.research.data.verification import (
+        RESEARCH_CLOSE_POLICY_SOURCE_REVISION,
+        RESEARCH_CLOSE_POLICY_SOURCE_SHA256,
+        RESEARCH_INTEGRITY_SOURCE_REVISION,
+        RESEARCH_INTEGRITY_SOURCE_SHA256,
+        _versions,
+    )
+
+    req, records = fixture()
+    proof = _versions(freeze(req, records))
+    assert proof["research_close_policy_source_revision"] == RESEARCH_CLOSE_POLICY_SOURCE_REVISION
+    assert proof["research_close_policy_source_sha256"] == RESEARCH_CLOSE_POLICY_SOURCE_SHA256
+    assert proof["research_integrity_source_sha256"] == RESEARCH_INTEGRITY_SOURCE_SHA256
+    assert set(RESEARCH_CLOSE_POLICY_SOURCE_SHA256) <= set(proof["reviewed_source_sha256"])
+    old = freeze(req, records, pipeline=versions(code_revision=RESEARCH_INTEGRITY_SOURCE_REVISION))
+    rejected(run(old), "VERSION_MISMATCH", "versions")
+
+
+def test_completed_close_overlay_preserves_v8_pins_and_rejects_its_old_snapshot():
+    from quant_constraints.research.data.verification import (
+        RESEARCH_ASSUMPTION_SOURCE_SHA256,
+        RESEARCH_CLOSE_POLICY_SOURCE_REVISION,
+        RESEARCH_CLOSE_POLICY_SOURCE_SHA256,
+        RESEARCH_EXECUTION_SOURCE_REVISION,
+        RESEARCH_EXECUTION_SOURCE_SHA256,
+        _versions,
+    )
+
+    req, records = fixture()
+    proof = _versions(freeze(req, records))
+    assert proof["research_execution_source_revision"] == RESEARCH_EXECUTION_SOURCE_REVISION
+    assert proof["research_execution_source_sha256"] == RESEARCH_EXECUTION_SOURCE_SHA256
+    assert proof["research_close_policy_source_sha256"] == RESEARCH_CLOSE_POLICY_SOURCE_SHA256
+    assert all(
+        proof["reviewed_source_sha256"][name] == RESEARCH_ASSUMPTION_SOURCE_SHA256.get(name, sha)
+        for name, sha in RESEARCH_EXECUTION_SOURCE_SHA256.items()
+    )
+    old = freeze(
+        req, records, pipeline=versions(code_revision=RESEARCH_CLOSE_POLICY_SOURCE_REVISION)
+    )
+    rejected(run(old), "VERSION_MISMATCH", "versions")
+
+
+def test_funded_benchmark_overlay_preserves_v9_sources_and_refuses_old_snapshot():
+    from quant_constraints.research.data.verification import (
+        RESEARCH_BENCHMARK_SOURCE_REVISION,
+        RESEARCH_BENCHMARK_SOURCE_SHA256,
+        RESEARCH_EXECUTION_SOURCE_REVISION,
+        RESEARCH_EXECUTION_SOURCE_SHA256,
+        _versions,
+    )
+
+    req, records = fixture()
+    proof = _versions(freeze(req, records))
+    assert proof["research_benchmark_source_revision"] == RESEARCH_BENCHMARK_SOURCE_REVISION
+    assert proof["research_benchmark_source_sha256"] == RESEARCH_BENCHMARK_SOURCE_SHA256
+    assert proof["research_execution_source_sha256"] == RESEARCH_EXECUTION_SOURCE_SHA256
+    assert all(
+        proof["reviewed_source_sha256"][name] == sha
+        for name, sha in RESEARCH_BENCHMARK_SOURCE_SHA256.items()
+    )
+    old = freeze(req, records, pipeline=versions(code_revision=RESEARCH_EXECUTION_SOURCE_REVISION))
+    rejected(run(old), "VERSION_MISMATCH", "versions")
+
+
+def test_assumed_distribution_overlay_retains_v10_pins_and_rejects_old_snapshot():
+    from quant_constraints.research.data.verification import (
+        RESEARCH_ASSUMPTION_SOURCE_REVISION,
+        RESEARCH_ASSUMPTION_SOURCE_SHA256,
+        RESEARCH_BENCHMARK_SOURCE_REVISION,
+        RESEARCH_BENCHMARK_SOURCE_SHA256,
+        _versions,
+    )
+
+    req, records = fixture()
+    proof = _versions(freeze(req, records))
+    assert proof["research_assumption_source_revision"] == RESEARCH_ASSUMPTION_SOURCE_REVISION
+    assert proof["research_benchmark_source_sha256"] == RESEARCH_BENCHMARK_SOURCE_SHA256
+    assert proof["research_assumption_source_sha256"] == RESEARCH_ASSUMPTION_SOURCE_SHA256
+    assert all(
+        proof["reviewed_source_sha256"][name] == sha
+        for name, sha in RESEARCH_ASSUMPTION_SOURCE_SHA256.items()
+    )
+    old = freeze(req, records, pipeline=versions(code_revision=RESEARCH_BENCHMARK_SOURCE_REVISION))
+    rejected(run(old), "VERSION_MISMATCH", "versions")
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "ml4t.backtest.accounting.cash",
+        "quant_constraints.adapter",
+        "ml4t.backtest.strategies.sector_rotation.research",
+        "ml4t.backtest.strategies.sector_rotation.research_inputs",
+        "ml4t.backtest.strategies.sector_rotation.research_ledger",
+        "ml4t.backtest.strategies.sector_rotation.research_benchmark",
+    ],
+)
+def test_research_modules_are_bound_before_any_legacy_domain_replay(name, monkeypatch):
+    from quant_constraints.research.data import verification
+
+    original = verification._source_digest
+    monkeypatch.setattr(
+        verification,
+        "_source_digest",
+        lambda module: "0" * 64 if module == name else original(module),
+    )
+    req, records = fixture()
+    rejected(run(freeze(req, records)), "IMPLEMENTATION_MISMATCH", "versions")
+
+
+@pytest.mark.parametrize(
+    "name",
+    tuple(TAX_RUNTIME_SOURCE_SHA256)
+    + (
+        "quant_constraints.models",
+        "quant_constraints.controller",
+        "quant_constraints.security_policy",
+        "ml4t.backtest.strategies.sector_rotation.config",
+        "ml4t.backtest.strategies.sector_rotation.adapter",
+    ),
+)
+def test_every_pinned_tax_runtime_module_is_checked_before_domain_replay(name, monkeypatch):
+    from quant_constraints.research.data import verification
+
+    original = verification._source_digest
+    monkeypatch.setattr(
+        verification,
+        "_source_digest",
+        lambda module: "0" * 64 if module == name else original(module),
+    )
+    req, records = fixture()
+    rejected(run(freeze(req, records)), "IMPLEMENTATION_MISMATCH", "versions")
 
 
 @pytest.mark.parametrize(
