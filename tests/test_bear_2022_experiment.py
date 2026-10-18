@@ -212,7 +212,8 @@ def test_runner_requires_no_market_key_and_seals_strategy_and_existing_tests(mon
         monkeypatch.delenv(key, raising=False)
     changes = ["M\t" + path for path in e.MODIFIED_RESEARCH]
     monkeypatch.setattr(
-        e.subprocess, "check_output",
+        e.subprocess,
+        "check_output",
         lambda args, **_: source if args[1] == "rev-parse" else "\n".join(changes),
     )
     e.guarded(source)

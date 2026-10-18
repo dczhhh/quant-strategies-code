@@ -53,6 +53,9 @@ def invented_sources(monkeypatch):
         added[ticker] = {}
         for p in x.m.products(ticker):
             body = market(p)
+            if p["kind"] == "minute":
+                for row in body["results"]:
+                    row.update(dict.fromkeys(("o", "h", "l", "c"), 100))
             if p["kind"] == "dividends":
                 body["results"] = selected
                 body["resultsCount"] = len(selected)
