@@ -128,8 +128,20 @@ class FrequencyOracle(AblationOracle):
     def _attach(self):
         self.monitor_expected = {}
         self.monitor_orders = []
+        self.calendar_gate_observations = []
         super()._attach()
         self._wrap(self.engine.broker.controller, "risk_requests", self._monitor)
+        self._wrap(self.engine.broker.controller.rebalance, "scheduled", self._scheduled)
+
+    def _scheduled(self, original):
+        def wrapped(state, stamp):
+            expected = stamp.astimezone(NY).date() in self.execution_days
+            observed = original(state, stamp)
+            require(observed is expected, "EXECUTION_CALENDAR")
+            self.calendar_gate_observations.append({"timestamp": stamp, "allowed": observed})
+            return observed
+
+        return wrapped
 
     def _monitor(self, original):
         def wrapped(state, context):
@@ -195,6 +207,7 @@ class FrequencyOracle(AblationOracle):
         first = engine.research_inputs.bars[0].end.astimezone(NY).date()
         last = engine.research_inputs.bars[-1].end.astimezone(NY).date()
         initial, self.rotation_days = reference_dates(first, last, case)
+        self.execution_days = frozenset(CAL.shift(day, 1) for day in self.rotation_days)
 
         def recovery_day(day):
             if day < initial or not case.endswith("_SR"):
@@ -236,7 +249,7 @@ class FrequencyOracle(AblationOracle):
         )
         regimes = sorted({row["regime"] for row in self.signal_rows.values()})
         return {
-            "schema": "rotation_frequency_decision_oracle_v1",
+            "schema": "rotation_frequency_decision_oracle_v2",
             "status": "CONDITIONAL_DECISION_AND_SUBMITTED_INTENT_ORACLE_PASS",
             "conditioned_on_verified_past_engine_ledger": True,
             "independent_fill_simulator": False,
@@ -247,6 +260,7 @@ class FrequencyOracle(AblationOracle):
             "risk_calls": len(self.risk_calls),
             "settlement_blocks": len(self.cash_blocks),
             "controller_drift_order_intents": len(self.monitor_orders),
+            "execution_calendar_checks": len(self.calendar_gate_observations),
             "observed_regimes": regimes,
             "signals": list(self.signal_rows.values()),
             "decisions": list(self.monthly.values()),

@@ -27,8 +27,8 @@ from tools.rotation_frequency_oracle import FrequencyOracle  # noqa: E402
 from tools.rotation_frequency_schedule import CASES, frequency_engine  # noqa: E402
 
 f, u, c, a = v.f, v.u, v.c, v.a
-PREFIX = "research/verification/rotation_frequency_v1/"
-REPORT_REF = "research-data/rotation-frequency-v1-engine-report"
+PREFIX = "research/verification/rotation_frequency_v2/"
+REPORT_REF = "research-data/rotation-frequency-v2-engine-report"
 WORKFLOW = ".github/workflows/rotation-frequency.yml"
 BASE = "e627b042505a26173cdd97855c684446782829dc"
 PIN = "c256fefb92587e2f81c00b2c861268e0fb6ed9f47347993a444baf2f4269fbc8"
@@ -129,6 +129,7 @@ def run_cell(inputs, assumption, case, settings=None):
                 "risk_calls",
                 "settlement_blocks",
                 "controller_drift_order_intents",
+                "execution_calendar_checks",
             )
         }
     metrics["phases"] = [
@@ -214,7 +215,7 @@ def pack(logical, source):
     }
     payload[PREFIX + "manifest.json"] = u.canonical(
         {
-            "schema": "rotation_frequency_manifest_v1",
+            "schema": "rotation_frequency_manifest_v2",
             "source_commit": source,
             "prior_bundle_sha256": PIN,
             "operators": hashes,
@@ -293,7 +294,7 @@ def build(factory, source):
                 }
             )
     summary = {
-        "schema": "rotation_frequency_v1",
+        "schema": "rotation_frequency_v2",
         "source_commit": source,
         "primary_window": ["2024-12-02", "2025-06-30"],
         "secondary_window": ["2025-08-29", "2025-11-05"],

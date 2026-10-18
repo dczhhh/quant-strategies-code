@@ -8,6 +8,7 @@ from decimal import Decimal
 import pytest
 
 from ml4t.backtest.strategies.sector_rotation.research_fractional import ResearchAssumptions
+from quant_constraints.gates import RebalanceGate
 from tests.strategies.test_rotation_research import ASSUMPTIONS, inputs, settings
 from tests.test_private_archive_migration import FakeGitHub
 from tools import rotation_decision_oracle as o
@@ -251,4 +252,56 @@ def test_controller_drift_corruption_cannot_pass(corruption):
     engine.broker.controller.risk_requests = broken
     FrequencyOracle(engine, "C15_S")
     with pytest.raises(o.DecisionOracleMismatch, match="MONITOR_(QUANTITY|REQUESTS)"):
+        engine.run()
+
+
+@pytest.mark.parametrize("case", ["C15_S", "C15_SR", "T15_S", "T15_SR"])
+@pytest.mark.parametrize("step", ["1", "0.1"])
+def test_extra_rotation_dates_create_real_plans_and_fills(case, step):
+    source = inputs()
+
+    def price(day, asset, value):
+        return value * Decimal(".7") if asset == "XLY" and day >= date(2025, 10, 13) else value
+
+    source = replace(
+        source,
+        closes=tuple(
+            replace(row, close=price(row.session, row.asset, row.close)) for row in source.closes
+        ),
+        bars=tuple(
+            replace(
+                row,
+                **dict.fromkeys(
+                    ("open", "high", "low", "close"),
+                    price(row.end.astimezone(o.NY).date(), row.asset, row.close),
+                ),
+            )
+            for row in source.bars
+        ),
+    )
+    engine = frequency_engine(source, w.assumptions(step, primary=False), settings(), case)
+    oracle = FrequencyOracle(engine, case)
+    engine.run()
+    report = oracle.finish()
+    extra = {day for day in oracle.execution_days if o.CAL.shift(day, -1).month == day.month}
+    created = {
+        event["plan_id"]
+        for event in engine.strategy.events
+        if event["code"] == "monthly_plan_created"
+        and event["timestamp"].astimezone(o.NY).date() in extra
+    }
+    assert created
+    identifiers = {
+        order.order_id for order in engine.broker.orders if order.rebalance_id in created
+    }
+    assert any(fill.order_id in identifiers for fill in engine.broker.fills)
+    assert report["execution_calendar_checks"] > 0
+
+
+def test_independent_oracle_rejects_the_old_monthly_execution_gate():
+    engine = frequency_engine(inputs(), w.assumptions("0.1", primary=False), settings(), "C15_S")
+    controller = engine.broker.controller
+    controller.rebalance = RebalanceGate(controller.config, controller.calendar)
+    FrequencyOracle(engine, "C15_S")
+    with pytest.raises(o.DecisionOracleMismatch, match="EXECUTION_CALENDAR"):
         engine.run()
