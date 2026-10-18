@@ -173,3 +173,82 @@ def test_unknown_retained_order_side_is_rejected():
         w.retained_benchmark(
             {"trace": [], "fills": [{"timestamp": "2025-01-02T16:00:00+00:00", "side": "unknown"}]}
         )
+
+
+def overweight_inputs():
+    source = inputs()
+
+    def price(day, asset, value):
+        return value * Decimal("1.4") if asset == "XLY" and day >= date(2025, 10, 7) else value
+
+    return replace(
+        source,
+        closes=tuple(
+            replace(row, close=price(row.session, row.asset, row.close)) for row in source.closes
+        ),
+        bars=tuple(
+            replace(
+                row,
+                **dict.fromkeys(
+                    ("open", "high", "low", "close"),
+                    price(row.end.astimezone(o.NY).date(), row.asset, row.close),
+                ),
+            )
+            for row in source.bars
+        ),
+    )
+
+
+@pytest.mark.parametrize("step", ["1", "0.1"])
+def test_controller_drift_is_independently_sized_and_original_economics_unchanged(step):
+    source, assumption = overweight_inputs(), w.assumptions(step, primary=False)
+    control = frequency_engine(source, assumption, settings(), "C15_S")
+    expected = w.u.engine_result(control)
+    engine = frequency_engine(source, assumption, settings(), "C15_S")
+    oracle = FrequencyOracle(engine, "C15_S")
+    observed = w.u.engine_result(engine)
+    report = oracle.finish()
+    assert report["controller_drift_order_intents"] > 0
+    assert all(row["requested"] < 0 for row in oracle.monitor_orders)
+    assert w.u.canonical(observed) == w.u.canonical(expected)
+    drift_ids = {row["order_id"] for row in oracle.monitor_orders}
+    drift_fills = [fill for fill in engine.broker.fills if fill.order_id in drift_ids]
+    assert drift_fills
+    assert all(
+        fill.timestamp.astimezone(o.NY).hour == 9
+        and 35 <= fill.timestamp.astimezone(o.NY).minute < 45
+        for fill in drift_fills
+    )
+
+
+@pytest.mark.parametrize("corruption", ["quantity", "reason", "missing", "extra"])
+def test_controller_drift_corruption_cannot_pass(corruption):
+    engine = frequency_engine(
+        overweight_inputs(), w.assumptions("0.1", primary=False), settings(), "C15_S"
+    )
+    original = engine.broker.controller.risk_requests
+
+    def broken(state, context):
+        rows = original(state, context)
+        if not rows:
+            return rows
+        if corruption == "missing":
+            return ()
+        if corruption == "extra":
+            return (*rows, rows[0])
+        return (
+            replace(
+                rows[0],
+                **(
+                    {"quantity": rows[0].quantity * 2}
+                    if corruption == "quantity"
+                    else {"reason": "unknown"}
+                ),
+            ),
+            *rows[1:],
+        )
+
+    engine.broker.controller.risk_requests = broken
+    FrequencyOracle(engine, "C15_S")
+    with pytest.raises(o.DecisionOracleMismatch, match="MONITOR_(QUANTITY|REQUESTS)"):
+        engine.run()

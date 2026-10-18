@@ -128,6 +128,7 @@ def run_cell(inputs, assumption, case, settings=None):
                 "submitted_order_intents",
                 "risk_calls",
                 "settlement_blocks",
+                "controller_drift_order_intents",
             )
         }
     metrics["phases"] = [

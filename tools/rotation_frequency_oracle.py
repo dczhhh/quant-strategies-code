@@ -125,6 +125,71 @@ def reference_signals(inputs, settings, recovery_day, *, close_overrides=None):
 
 
 class FrequencyOracle(AblationOracle):
+    def _attach(self):
+        self.monitor_expected = {}
+        self.monitor_orders = []
+        super()._attach()
+        self._wrap(self.engine.broker.controller, "risk_requests", self._monitor)
+
+    def _monitor(self, original):
+        def wrapped(state, context):
+            require(not self.monitor_expected, "MONITOR_SUBMISSION_COMPLETENESS")
+            config = self.engine.broker.controller.config
+            require(
+                config.drift_reduction == "next_session" and not config.market_gates,
+                "MONITOR_PROFILE",
+            )
+            expected = {}
+            for asset, holding in state.holdings.items():
+                require(holding.instrument == "plain_sector_etf", "MONITOR_INSTRUMENT")
+                value = D(holding.quantity) * D(holding.price)
+                excess = value - D(config.max_weight) * D(state.equity)
+                if not state.missing_marks and excess > D("1E-10"):
+                    expected[asset] = excess / D(holding.price)
+            observed = original(state, context)
+            require(
+                len(observed) == len(expected)
+                and all(r.reason == "overweight_predefined_reduction" for r in observed),
+                "MONITOR_REQUESTS",
+            )
+            o.equal_mapping({r.asset: r.quantity for r in observed}, expected, "MONITOR_QUANTITY")
+            self.monitor_expected = expected
+            return observed
+
+        return wrapped
+
+    def _order(self, original):
+        ordinary = super()._order(original)
+
+        def wrapped(asset, quantity, *args, **kwargs):
+            broker = self.engine.broker
+            if not broker.risk_monitor_submission:
+                return ordinary(asset, quantity, *args, **kwargs)
+            options = kwargs.get("_options")
+            require(
+                asset in self.monitor_expected
+                and getattr(options, "risk_exit_reason", None) == "overweight_predefined_reduction"
+                and getattr(options, "eligible_in_next_bar_mode", False)
+                and getattr(options, "rebalance_id", None) is None,
+                "MONITOR_ORDER_IDENTITY",
+            )
+            o.equal(quantity, -self.monitor_expected[asset], "MONITOR_ORDER_QUANTITY")
+            del self.monitor_expected[asset]
+            result = original(asset, quantity, *args, **kwargs)
+            row = {
+                "timestamp": broker.rotation_time,
+                "asset": asset,
+                "requested": D(quantity),
+                "scope": "controller_overweight_drift",
+                "order_id": result.order_id if result else None,
+                "status": result.status.value if result else None,
+            }
+            self.orders.append(row)
+            self.monitor_orders.append(row)
+            return result
+
+        return wrapped
+
     def __init__(self, engine, case):
         super().__init__(engine, sector_rotation=True, risk_tiers=True)
         first = engine.research_inputs.bars[0].end.astimezone(NY).date()
@@ -154,6 +219,7 @@ class FrequencyOracle(AblationOracle):
         return wrapped
 
     def finish(self):
+        require(not self.monitor_expected, "MONITOR_SUBMISSION_COMPLETENESS")
         stamps = sorted({b.end for b in self.engine.research_inputs.bars})
         require(sorted(self.signal_rows) == stamps, "OBSERVATION_COVERAGE")
         first = CAL.shift(stamps[0].astimezone(NY).date(), -1)
@@ -180,6 +246,7 @@ class FrequencyOracle(AblationOracle):
             "submitted_order_intents": len(self.orders),
             "risk_calls": len(self.risk_calls),
             "settlement_blocks": len(self.cash_blocks),
+            "controller_drift_order_intents": len(self.monitor_orders),
             "observed_regimes": regimes,
             "signals": list(self.signal_rows.values()),
             "decisions": list(self.monthly.values()),
