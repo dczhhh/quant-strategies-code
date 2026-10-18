@@ -12,6 +12,7 @@ from dataclasses import asdict
 from datetime import date, datetime
 from decimal import Decimal
 from pathlib import Path
+from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -232,7 +233,7 @@ def retained_benchmark(result):
         for row in result[name]:
             stamp = datetime.fromisoformat(row["timestamp"])
             require(stamp.utcoffset() is not None, "ANCHOR_TIMESTAMP")
-            restored = dict(row, timestamp=stamp)
+            restored: dict[str, Any] = dict(row, timestamp=stamp)
             if name == "fills":
                 require(row["side"] in sides, "ANCHOR_SIDE")
                 restored["side"] = sides[row["side"]]
