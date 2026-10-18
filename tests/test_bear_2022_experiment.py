@@ -194,3 +194,36 @@ def test_failure_never_prints_provider_or_private_values(monkeypatch, capsys):
     report = capsys.readouterr().out
     assert "PRIVATE_VALUES_MUST_NOT_LEAK" not in report
     assert json.loads(report)["performance_admission"] is False
+
+
+def test_runner_requires_no_market_key_and_seals_strategy_and_existing_tests(monkeypatch):
+    source = "b" * 40
+    for key, value in {
+        "GITHUB_REPOSITORY": e.c.m.CODE,
+        "GITHUB_ACTOR": "dczhhh",
+        "GITHUB_EVENT_NAME": "push",
+        "GITHUB_REF": "refs/heads/main",
+        "GITHUB_WORKFLOW_REF": e.c.m.CODE + "/" + e.WORKFLOW + "@refs/heads/main",
+        "RUNNER_ENVIRONMENT": "github-hosted",
+        "RUNNER_OS": "Linux",
+    }.items():
+        monkeypatch.setenv(key, value)
+    for key in ("MASSIVE_API_KEY", "ACTIONS_STEP_DEBUG", "ACTIONS_RUNNER_DEBUG"):
+        monkeypatch.delenv(key, raising=False)
+    changes = ["M\t" + path for path in e.MODIFIED_RESEARCH]
+    monkeypatch.setattr(
+        e.subprocess, "check_output",
+        lambda args, **_: source if args[1] == "rev-parse" else "\n".join(changes),
+    )
+    e.guarded(source)
+    changes.append("M\tsrc/ml4t/backtest/strategies/sector_rotation/strategy.py")
+    with pytest.raises(ValueError, match="SEALED_STRATEGY_OR_TEST_CHANGED"):
+        e.guarded(source)
+    changes.pop()
+    changes.append("M\ttests/strategies/test_rotation_assumed_distribution.py")
+    with pytest.raises(ValueError, match="SEALED_STRATEGY_OR_TEST_CHANGED"):
+        e.guarded(source)
+    changes.pop()
+    monkeypatch.setenv("MASSIVE_API_KEY", "INVENTED")
+    with pytest.raises(ValueError, match="RUNNER_CONTEXT"):
+        e.guarded(source)

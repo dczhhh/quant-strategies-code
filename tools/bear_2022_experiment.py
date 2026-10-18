@@ -29,8 +29,8 @@ WORKFLOW = ".github/workflows/bear-2022-experiment.yml"
 LOGICAL = {"comparison.json", "results.json", "inputs.json"}
 MAX_RAW, MAX_PARTS = 96 * 1024 * 1024, 24
 MODIFIED_RESEARCH = {
-    "src/ml4t/backtest/strategies/sector_rotation/research.py",
-    "src/ml4t/backtest/strategies/sector_rotation/research_fractional.py",
+    "src/ml4t/backtest/strategies/sector_rotation/research.py": "a56d06bd62cdab62ada78538be2db5caf843098fddc8abc34e83e9eca5e894be",
+    "src/ml4t/backtest/strategies/sector_rotation/research_fractional.py": "596fed581b5a211afa51b8003989cbb43cab5f91851fa848855b44c79d507ade",
 }
 
 
@@ -196,8 +196,15 @@ def guarded(source):
     ).splitlines()
     modified = {row[2:] for row in changes if row.startswith("M\t")}
     s.need(
-        modified == MODIFIED_RESEARCH
-        and all(row.startswith("A\t") or row[2:] in MODIFIED_RESEARCH for row in changes),
+        modified == set(MODIFIED_RESEARCH)
+        and all(
+            row.startswith("A\t") or (row.startswith("M\t") and row[2:] in MODIFIED_RESEARCH)
+            for row in changes
+        )
+        and all(
+            s.digest((x.ROOT / path).read_bytes()) == expected
+            for path, expected in MODIFIED_RESEARCH.items()
+        ),
         "EXPERIMENT_SEALED_STRATEGY_OR_TEST_CHANGED",
     )
 
