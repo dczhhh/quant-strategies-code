@@ -3,7 +3,7 @@
 import copy
 import json
 import unittest
-from datetime import UTC, date, datetime, timedelta
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 
 from tools import bear_2022_sources as s
@@ -18,8 +18,9 @@ def sessions(first, last):
 
 
 def stamp(day, hour=9):
-    return int(datetime(day.year, day.month, day.day, hour, 30 if hour else 0,
-                        tzinfo=s.NY).timestamp())
+    return int(
+        datetime(day.year, day.month, day.day, hour, 30 if hour else 0, tzinfo=s.NY).timestamp()
+    )
 
 
 def fixture(ticker="SPY"):
@@ -27,33 +28,94 @@ def fixture(ticker="SPY"):
     prices = {day: Decimal(100) + Decimal(i) / 10000 for i, day in enumerate(days)}
     split_day, tail_day = date(2022, 8, 8), date(2025, 3, 3)
     dividend_day = date(2021, 6, 1)
-    core = {"chart": {"error": None, "result": [{
-        "meta": {"symbol": ticker, "currency": "USD", "exchangeTimezoneName": "America/New_York"},
-        "timestamp": [stamp(day) for day in days],
-        "indicators": {"quote": [{"close": [
-            str(prices[day] / (4 if day < split_day else 2)) for day in days
-        ]}], "adjclose": [{"adjclose": ["PRIVATE_DIAGNOSTIC_NOT_USED"] * len(days)}]},
-        "events": {
-            "splits": {str(stamp(split_day)): {"date": stamp(split_day), "numerator": 2,
-                                                "denominator": 1, "splitRatio": "2:1"}},
-            "dividends": {str(stamp(dividend_day)): {"date": stamp(dividend_day), "amount": "0.25"}},
-        },
-    }]}}
-    tail = {"chart": {"error": None, "result": [{
-        "meta": {"symbol": ticker, "currency": "USD", "exchangeTimezoneName": "America/New_York"},
-        "indicators": {"quote": [{"close": ["FUTURE_PRICE_NEVER_READ"]}]},
-        "events": {"splits": {str(stamp(tail_day)): {
-            "date": stamp(tail_day), "numerator": 2, "denominator": 1, "splitRatio": "2:1"}}},
-    }]}}
-    massive = {"status": "OK", "ticker": ticker, "adjusted": False,
-               "results": [{"t": stamp(day, 0) * 1000, "c": str(prices[day])}
-                           for day in sessions(s.OVERLAP, s.LAST)]}
-    splits = {"status": "OK", "results": [
-        {"ticker": ticker, "execution_date": str(day), "split_to": 2, "split_from": 1}
-        for day in (split_day, tail_day)
-    ]}
-    return {"yahoo_daily": core, "yahoo_tail_splits": tail,
-            "massive_daily": massive, "massive_splits": splits}
+    core = {
+        "chart": {
+            "error": None,
+            "result": [
+                {
+                    "meta": {
+                        "symbol": ticker,
+                        "currency": "USD",
+                        "exchangeTimezoneName": "America/New_York",
+                    },
+                    "timestamp": [stamp(day) for day in days],
+                    "indicators": {
+                        "quote": [
+                            {
+                                "close": [
+                                    str(prices[day] / (4 if day < split_day else 2)) for day in days
+                                ]
+                            }
+                        ],
+                        "adjclose": [{"adjclose": ["PRIVATE_DIAGNOSTIC_NOT_USED"] * len(days)}],
+                    },
+                    "events": {
+                        "splits": {
+                            str(stamp(split_day)): {
+                                "date": stamp(split_day),
+                                "numerator": 2,
+                                "denominator": 1,
+                                "splitRatio": "2:1",
+                            }
+                        },
+                        "dividends": {
+                            str(stamp(dividend_day)): {
+                                "date": stamp(dividend_day),
+                                "amount": "0.25",
+                            }
+                        },
+                    },
+                }
+            ],
+        }
+    }
+    tail = {
+        "chart": {
+            "error": None,
+            "result": [
+                {
+                    "meta": {
+                        "symbol": ticker,
+                        "currency": "USD",
+                        "exchangeTimezoneName": "America/New_York",
+                    },
+                    "indicators": {"quote": [{"close": ["FUTURE_PRICE_NEVER_READ"]}]},
+                    "events": {
+                        "splits": {
+                            str(stamp(tail_day)): {
+                                "date": stamp(tail_day),
+                                "numerator": 2,
+                                "denominator": 1,
+                                "splitRatio": "2:1",
+                            }
+                        }
+                    },
+                }
+            ],
+        }
+    }
+    massive = {
+        "status": "OK",
+        "ticker": ticker,
+        "adjusted": False,
+        "results": [
+            {"t": stamp(day, 0) * 1000, "c": str(prices[day])}
+            for day in sessions(s.OVERLAP, s.LAST)
+        ],
+    }
+    splits = {
+        "status": "OK",
+        "results": [
+            {"ticker": ticker, "execution_date": str(day), "split_to": 2, "split_from": 1}
+            for day in (split_day, tail_day)
+        ],
+    }
+    return {
+        "yahoo_daily": core,
+        "yahoo_tail_splits": tail,
+        "massive_daily": massive,
+        "massive_splits": splits,
+    }
 
 
 def encoded(value):
@@ -91,7 +153,9 @@ class SourceQualificationTests(unittest.TestCase):
     def test_every_universe_asset_has_same_parser(self):
         for ticker in s.TICKERS:
             with self.subTest(ticker=ticker):
-                self.assertEqual(s.qualify(ticker, encoded(fixture(ticker)), sessions)["ticker"], ticker)
+                self.assertEqual(
+                    s.qualify(ticker, encoded(fixture(ticker)), sessions)["ticker"], ticker
+                )
 
     def test_adjusted_close_and_future_tail_prices_cannot_affect_input(self):
         before = s.canonical(self.check())
@@ -100,8 +164,10 @@ class SourceQualificationTests(unittest.TestCase):
         self.value["yahoo_tail_splits"]["chart"]["result"][0]["indicators"] = None
         after = self.check()
         first = json.loads(before)
-        self.assertEqual(first["derivation_not_source_replacement"],
-                         json.loads(s.canonical(after))["derivation_not_source_replacement"])
+        self.assertEqual(
+            first["derivation_not_source_replacement"],
+            json.loads(s.canonical(after))["derivation_not_source_replacement"],
+        )
 
     def test_small_price_differences_stay_visible_not_fitted(self):
         raw = self.value["massive_daily"]["results"][0]
@@ -162,7 +228,9 @@ class SourceQualificationTests(unittest.TestCase):
         for bad in (None, True, "NaN", "Infinity", "0", "-1"):
             with self.subTest(bad=bad):
                 self.value = fixture()
-                self.value["yahoo_daily"]["chart"]["result"][0]["indicators"]["quote"][0]["close"][0] = bad
+                self.value["yahoo_daily"]["chart"]["result"][0]["indicators"]["quote"][0]["close"][
+                    0
+                ] = bad
                 with self.assertRaises(ValueError):
                     self.check()
 
@@ -191,8 +259,9 @@ class SourceQualificationTests(unittest.TestCase):
         self.assertEqual(before, self.value)
 
     def test_numeric_literals_are_parsed_as_decimal(self):
-        self.assertEqual(s.decode(b'{"n":0.123456789123456789}')["n"],
-                         Decimal("0.123456789123456789"))
+        self.assertEqual(
+            s.decode(b'{"n":0.123456789123456789}')["n"], Decimal("0.123456789123456789")
+        )
 
 
 if __name__ == "__main__":

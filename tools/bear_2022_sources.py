@@ -15,6 +15,7 @@ OVERLAP, CUTOFF = date(2021, 10, 19), date(2026, 10, 17)
 NY = ZoneInfo("America/New_York")
 PRICE_DIFFERENCE = Decimal("0.0002")
 UNIT_SANITY_BPS = Decimal("100")
+MAX_RESPONSE_BYTES = 524288
 POLICY = {
     "schema": "bear_2022_source_qualification_v1",
     "universe": list(TICKERS),
@@ -25,7 +26,7 @@ POLICY = {
     "split_metadata_cutoff": str(CUTOFF),
     "maximum_source_requests": 48,
     "requests_per_asset": 4,
-    "maximum_response_bytes": 524288,
+    "maximum_response_bytes": MAX_RESPONSE_BYTES,
     "maximum_archive_parts_per_asset": 4,
     "minimum_presample_closes": 253,
     "overlap_difference_threshold_usd": str(PRICE_DIFFERENCE),
@@ -65,7 +66,7 @@ def pairs(items):
 
 
 def decode(body):
-    need(type(body) is bytes and 0 < len(body) <= POLICY["maximum_response_bytes"], "BODY_SIZE")
+    need(type(body) is bytes and 0 < len(body) <= MAX_RESPONSE_BYTES, "BODY_SIZE")
     return json.loads(body, parse_float=Decimal, object_pairs_hook=pairs)
 
 
@@ -152,8 +153,10 @@ def yahoo(body, ticker, kind):
         "YAHOO_IDENTITY",
     )
     events = row.get("events", {})
-    need(type(events) is dict and not set(events) - {"splits", "dividends", "capitalGains"},
-         "YAHOO_EVENT_KIND")
+    need(
+        type(events) is dict and not set(events) - {"splits", "dividends", "capitalGains"},
+        "YAHOO_EVENT_KIND",
+    )
     need(not events.get("capitalGains"), "YAHOO_CAPITAL_GAIN_EVENT_UNSUPPORTED")
     first, last = (WARMUP, LAST) if kind == "yahoo_daily" else (date(2023, 1, 1), CUTOFF)
     splits, dividends = {}, {}
@@ -164,11 +167,16 @@ def yahoo(body, ticker, kind):
             day = datetime.fromtimestamp(stamp, UTC).astimezone(NY).date()
             need(first <= day <= last and day not in target, "YAHOO_EVENT_DATE")
             if event_kind == "splits":
-                numerator, denominator = number(event.get("numerator")), number(event.get("denominator"))
+                numerator, denominator = (
+                    number(event.get("numerator")),
+                    number(event.get("denominator")),
+                )
                 ratio = event.get("splitRatio")
                 need(type(ratio) is str and ratio.count(":") == 1, "YAHOO_SPLIT_RATIO")
                 left, right = ratio.split(":")
-                need(number(left) / number(right) == numerator / denominator, "YAHOO_SPLIT_CONFLICT")
+                need(
+                    number(left) / number(right) == numerator / denominator, "YAHOO_SPLIT_CONFLICT"
+                )
                 target[day] = numerator / denominator
             else:
                 target[day] = number(event.get("amount"))
@@ -229,7 +237,10 @@ def qualify(ticker, bodies, sessions):
     splits = dict(sorted((splits | tail).items()))
     reference = massive(bodies["massive_daily"], ticker, "daily")
     reference_splits = massive(bodies["massive_splits"], ticker, "splits")
-    need({d: r for d, r in splits.items() if d >= OVERLAP} == reference_splits, "SPLIT_SOURCE_CONFLICT")
+    need(
+        {d: r for d, r in splits.items() if d >= OVERLAP} == reference_splits,
+        "SPLIT_SOURCE_CONFLICT",
+    )
     expected = tuple(sessions(WARMUP, LAST))
     need(tuple(closes) == expected, "YAHOO_SESSION_COVERAGE")
     need(tuple(reference) == tuple(sessions(OVERLAP, LAST)), "MASSIVE_SESSION_COVERAGE")
@@ -277,7 +288,9 @@ def qualify(ticker, bodies, sessions):
             "split_events": len(splits),
             "subsequent_split_events": sum(day > LAST for day in splits),
             "dividend_events": len(dividends),
-            "source_prices_exactly_equivalent": all(row["difference_usd"] == 0 for row in differences),
+            "source_prices_exactly_equivalent": all(
+                row["difference_usd"] == 0 for row in differences
+            ),
             "same_year_2022_distribution_classification_verified": False,
             "settlement_reference_coverage_verified": False,
             "economic_replay_ready": False,

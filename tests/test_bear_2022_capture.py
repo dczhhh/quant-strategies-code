@@ -21,8 +21,14 @@ def test_capture_then_read_only_verification_does_not_request_or_write():
     assert len(first) == made == 4
     before = dict(archive.refs)
     archive.events.clear()
-    second, made = a.capture(archive, "SPY", SOURCE, lambda: pytest.fail("key forbidden"),
-                             verify_only=True, get=lambda *_: pytest.fail("network forbidden"))
+    second, made = a.capture(
+        archive,
+        "SPY",
+        SOURCE,
+        lambda: pytest.fail("key forbidden"),
+        verify_only=True,
+        get=lambda *_: pytest.fail("network forbidden"),
+    )
     assert first == second and made == 0 and archive.refs == before
     assert all(method == "GET" for method, _ in archive.events)
     assert all(len(body) <= a.c.m.FILE_LIMIT for body in archive.blobs.values())
