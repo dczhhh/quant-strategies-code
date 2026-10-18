@@ -71,3 +71,12 @@ def test_missing_read_only_and_nonowner_context_fail_closed(monkeypatch):
     monkeypatch.setenv("GITHUB_ACTOR", "untrusted")
     with pytest.raises(ValueError, match="DOCUMENT_RUNNER_CONTEXT"):
         d.guarded(SOURCE)
+
+
+def test_secret_pattern_across_part_boundary_is_still_rejected():
+    archive = FakeGitHub(d.c.m.DESTINATION)
+    body = b"A" * (d.c.m.FILE_LIMIT - 3) + b"api_key=INVENTED"
+    with pytest.raises(ValueError, match="DOCUMENT_SECRET_REJECTED"):
+        d.capture(archive, "spy-fy2023", SOURCE, get=lambda _: (200, body))
+    assert archive.ref(d.ref("spy-fy2023", True)) is not None
+    assert archive.ref(d.ref("spy-fy2023")) is None

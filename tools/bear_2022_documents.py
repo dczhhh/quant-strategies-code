@@ -55,6 +55,17 @@ def fetch(product):
             return error.code, error.read(d.DOCUMENT_LIMIT + 1)
 
 
+def check_document(body, token):
+    d.need(type(body) is bytes and len(body) <= d.DOCUMENT_LIMIT + 1, "DOCUMENT_SIZE")
+    # Check across part boundaries too, then keep the original per-blob guard.
+    d.need(
+        not c.b.CREDENTIAL_PATTERN.search(body) and (not token or token.encode() not in body),
+        "DOCUMENT_SECRET_REJECTED",
+    )
+    for offset in range(0, len(body), c.m.FILE_LIMIT):
+        c.b.secret_free(body[offset : offset + c.m.FILE_LIMIT], (token,))
+
+
 def read(archive, identifier):
     prefix = PREFIX + identifier + "/"
     held, parent = c.b.read(archive, ref(identifier, True), {prefix + "reservation.json"})
@@ -103,7 +114,7 @@ def read(archive, identifier):
         and start <= end,
         "DOCUMENT_RECEIPT",
     )
-    c.b.secret_free(body, (archive.token,))
+    check_document(body, archive.token)
     d.need(receipt["unknown_outcome"] is False, "DOCUMENT_UNKNOWN_OUTCOME_NO_RETRY")
     status = receipt["http_status"]
     d.need(type(status) is int and 100 <= status <= 599, "DOCUMENT_HTTP_STATUS")
@@ -130,7 +141,7 @@ def capture(archive, identifier, source, *, verify_only=False, get=fetch):
             made = 1
         except (TimeoutError, URLError, c.m.Stopped):
             unknown = True
-        c.b.secret_free(body, (archive.token,))
+        check_document(body, archive.token)
         truncated = len(body) > d.DOCUMENT_LIMIT
         body = body[: d.DOCUMENT_LIMIT]
         parts = [body[i : i + c.m.FILE_LIMIT] for i in range(0, len(body), c.m.FILE_LIMIT)]
