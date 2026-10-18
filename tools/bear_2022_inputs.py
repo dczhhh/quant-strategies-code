@@ -11,10 +11,6 @@ from decimal import Decimal
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from tools import bear_2022_calendar as calendar  # noqa: E402
-from tools import bear_2022_market as m  # noqa: E402
-from tools import rotation_research_replay as u  # noqa: E402
-
 from ml4t.backtest.strategies.sector_rotation.research_inputs import (  # noqa: E402
     SEPARATE_CLOSES,
     RawClose,
@@ -26,6 +22,9 @@ from ml4t.backtest.strategies.sector_rotation.research_inputs import (  # noqa: 
     ResearchSplit,
 )
 from quant_constraints.calendar import settlement_date  # noqa: E402
+from tools import bear_2022_calendar as calendar  # noqa: E402
+from tools import bear_2022_market as m  # noqa: E402
+from tools import rotation_research_replay as u  # noqa: E402
 
 a, s, c = m.a, m.s, m.c
 ROOT = Path(__file__).resolve().parents[1]
@@ -64,9 +63,7 @@ def daily_items(archive, ticker):
     }
     prefix = a.PREFIX + ticker.lower() + "/"
     manifest = c.b.decode(files[prefix + "manifest.json"])
-    packed = b"".join(
-        files[prefix + f"part-{i:02}.bin"] for i in range(manifest["part_count"])
-    )
+    packed = b"".join(files[prefix + f"part-{i:02}.bin"] for i in range(manifest["part_count"]))
     rows = c.b.decode(a.g.bounded_gunzip(packed, 4 * (c.m.FILE_LIMIT * 2 + 8192)))["rows"]
     result = {}
     for row in rows:
@@ -85,8 +82,7 @@ def check_events(ticker, events, history, yahoo_dividends):
     dates = [
         c.p.issuer_day(row.get("D"))
         for row in rows[1:]
-        if row.get("B") == ticker
-        and s.WARMUP <= c.p.issuer_day(row.get("D")) <= s.LAST
+        if row.get("B") == ticker and s.WARMUP <= c.p.issuer_day(row.get("D")) <= s.LAST
     ]
     actual = [event["ex"] for event in events]
     s.need(
@@ -118,7 +114,9 @@ def build_inputs(factory, source, *, docs=None, published_at=None):
     policy, policy_body = contract()
     if published_at is None:
         published_at = datetime.fromisoformat(
-            subprocess.check_output(["git", "show", "-s", "--format=%cI", source], text=True).strip()
+            subprocess.check_output(
+                ["git", "show", "-s", "--format=%cI", source], text=True
+            ).strip()
         )
     sources, bodies = {}, {}
     closes, bars, distributions, splits, securities, checks = [], [], [], [], [], []
@@ -130,7 +128,9 @@ def build_inputs(factory, source, *, docs=None, published_at=None):
 
     def local(identifier, body, path):
         sources[identifier] = ResearchSource(
-            identifier, s.digest(body), published_at,
+            identifier,
+            s.digest(body),
+            published_at,
             f"https://github.com/{c.m.CODE}/blob/{source}/{path}",
         )
         bodies[identifier] = body
@@ -161,10 +161,13 @@ def build_inputs(factory, source, *, docs=None, published_at=None):
         audit_ref = archive.ref(a.ref(ticker, "audit"))
         audit_id = ticker + ":derived-original-closes"
         sources[audit_id] = ResearchSource(
-            audit_id, s.digest(audit_body),
+            audit_id,
+            s.digest(audit_body),
             max(sources[identifier].observed_at for identifier in raw_ids.values()),
             f"https://github.com/{c.m.DESTINATION}/blob/{audit_ref}/"
-            + a.AUDIT_PREFIX + ticker.lower() + "/source-audit.json",
+            + a.AUDIT_PREFIX
+            + ticker.lower()
+            + "/source-audit.json",
         )
         bodies[audit_id] = audit_body
         derivation = qualification["derivation_not_source_replacement"]
@@ -175,8 +178,11 @@ def build_inputs(factory, source, *, docs=None, published_at=None):
             identifier = raw_ids["massive_daily"] if day >= s.OVERLAP else audit_id
             closes.append(RawClose(ticker, day, original, identifier))
         added, made = m.capture(
-            archive, ticker, "7609dfd2afc68f4c84b547a9da83ac90359ceea3",
-            lambda: s.need(False, "INPUT_NEW_MARKET_REQUEST_FORBIDDEN"), verify_only=True,
+            archive,
+            ticker,
+            "7609dfd2afc68f4c84b547a9da83ac90359ceea3",
+            lambda: s.need(False, "INPUT_NEW_MARKET_REQUEST_FORBIDDEN"),
+            verify_only=True,
         )
         s.need(made == 0, "INPUT_NEW_MARKET_REQUEST_FORBIDDEN")
         events, event_sources, effective_splits = [], {}, {}
@@ -185,17 +191,31 @@ def build_inputs(factory, source, *, docs=None, published_at=None):
             identifier = bind(ticker + ":market:" + key, item, product)
             if product["kind"] == "minute":
                 for stamp, values, volume in u.bars(product, item["body"]):
-                    bars.append(ResearchBar(
-                        ticker, stamp, values["o"], values["h"], values["l"],
-                        values["c"], volume, identifier,
-                    ))
+                    bars.append(
+                        ResearchBar(
+                            ticker,
+                            stamp,
+                            values["o"],
+                            values["h"],
+                            values["l"],
+                            values["c"],
+                            volume,
+                            identifier,
+                        )
+                    )
             else:
                 for event in u.actions(product, item["body"]):
                     if product["kind"] == "splits":
                         effective_splits[event["date"]] = event["ratio"]
-                        splits.append(ResearchSplit(
-                            ticker, event["id"], event["date"], event["ratio"], identifier,
-                        ))
+                        splits.append(
+                            ResearchSplit(
+                                ticker,
+                                event["id"],
+                                event["date"],
+                                event["ratio"],
+                                identifier,
+                            )
+                        )
                     else:
                         s.need(event["id"] not in event_sources, "INPUT_ACTION_DUPLICATE")
                         events.append(event)
@@ -204,42 +224,77 @@ def build_inputs(factory, source, *, docs=None, published_at=None):
         for day, ratio in native_splits.items():
             if day <= s.LAST:
                 effective_splits[day] = ratio
-                splits.append(ResearchSplit(
-                    ticker, "retained-split:" + str(day), day, ratio, raw_ids["massive_splits"],
-                ))
+                splits.append(
+                    ResearchSplit(
+                        ticker,
+                        "retained-split:" + str(day),
+                        day,
+                        ratio,
+                        raw_ids["massive_splits"],
+                    )
+                )
         s.need(
-            effective_splits == {
-                row["session"]: row["new_per_old"] for row in derivation["splits"]
+            effective_splits
+            == {
+                row["session"]: row["new_per_old"]
+                for row in derivation["splits"]
                 if row["session"] <= s.LAST
-            }, "INPUT_SPLIT_COVERAGE_CONFLICT",
+            },
+            "INPUT_SPLIT_COVERAGE_CONFLICT",
         )
         yahoo_cash = {row["ex_date"]: row["original_share_cash"] for row in derivation["dividends"]}
         cusip, evidence = check_events(ticker, events, history, yahoo_cash)
         for event in sorted(events, key=lambda e: (e["ex"], e["id"])):
             execution = event["ex"] >= s.FIRST
-            distributions.append(ResearchDistribution(
-                ticker, event["id"], event["ex"], event["record"], event["pay"], event["amount"],
-                "assumed_ordinary_fund" if execution else "unclassified_signal_only",
-                event_sources[event["id"]], sid if execution else None,
-            ))
-        securities.append(ResearchSecurity(
-            ticker, "CUSIP:" + cusip, "US", "US", "ETF", False, history_doc["id"],
-        ))
-        checks.append({
-            "ticker": ticker, "events": len(events),
-            "execution_events_assumed_ordinary": sum(e["ex"] >= s.FIRST for e in events),
-            "issuer_field_match_count": len(evidence["rows"]),
-            "three_source_ex_date_coverage_exact": True,
-            "issuer_original_cash_tolerance_usd": "1E-8",
-            "native_daily_closes": len(native),
-            "derived_pre_overlap_closes": sum(row["session"] < s.OVERLAP for row in derivation["closes"]),
-        })
+            distributions.append(
+                ResearchDistribution(
+                    ticker,
+                    event["id"],
+                    event["ex"],
+                    event["record"],
+                    event["pay"],
+                    event["amount"],
+                    "assumed_ordinary_fund" if execution else "unclassified_signal_only",
+                    event_sources[event["id"]],
+                    sid if execution else None,
+                )
+            )
+        securities.append(
+            ResearchSecurity(
+                ticker,
+                "CUSIP:" + cusip,
+                "US",
+                "US",
+                "ETF",
+                False,
+                history_doc["id"],
+            )
+        )
+        checks.append(
+            {
+                "ticker": ticker,
+                "events": len(events),
+                "execution_events_assumed_ordinary": sum(e["ex"] >= s.FIRST for e in events),
+                "issuer_field_match_count": len(evidence["rows"]),
+                "three_source_ex_date_coverage_exact": True,
+                "issuer_original_cash_tolerance_usd": "1E-8",
+                "native_daily_closes": len(native),
+                "derived_pre_overlap_closes": sum(
+                    row["session"] < s.OVERLAP for row in derivation["closes"]
+                ),
+            }
+        )
     inputs = ResearchInputs(
         tuple(sources[k] for k in sorted(sources)),
         tuple(sorted(closes, key=lambda r: (r.session, r.asset))),
         tuple(sorted(bars, key=lambda r: (r.end, r.asset))),
-        tuple(distributions), tuple(splits), tuple(securities), settlement, calendar_id,
-        origin="retained_prices_with_assumed_distribution", close_policy=SEPARATE_CLOSES,
+        tuple(distributions),
+        tuple(splits),
+        tuple(securities),
+        settlement,
+        calendar_id,
+        origin="retained_prices_with_assumed_distribution",
+        close_policy=SEPARATE_CLOSES,
     )
     normalized = u.canonical({"schema": inputs.bundle_schema, **asdict(inputs)})
     verified = ResearchInputs.from_bundle(normalized, s.digest(normalized), bodies)
@@ -247,8 +302,15 @@ def build_inputs(factory, source, *, docs=None, published_at=None):
         len(verified.closes) == 545 * 12 and len(verified.bars) == 251 * 13 * 12,
         "INPUT_FIXED_WINDOW_COVERAGE",
     )
-    return verified, normalized, {
-        "assumption": policy, "assumption_sha256": s.digest(policy_body),
-        "event_checks": checks, "historical_T_plus_2_all_251_dates_checked": True,
-        "new_provider_requests": 0, "PIT_verified": False,
-    }
+    return (
+        verified,
+        normalized,
+        {
+            "assumption": policy,
+            "assumption_sha256": s.digest(policy_body),
+            "event_checks": checks,
+            "historical_T_plus_2_all_251_dates_checked": True,
+            "new_provider_requests": 0,
+            "PIT_verified": False,
+        },
+    )

@@ -54,9 +54,7 @@ class ResearchAssumptions:
             raise ValueError("Unsupported fractional fee research policy")
         years = tuple(self.assumed_ordinary_years)
         if years not in ((), (2022,), (2024,)) or any(type(year) is not int for year in years):
-            raise ValueError(
-                "Only separate 2022 or 2024 ordinary-fund assumptions are supported"
-            )
+            raise ValueError("Only separate 2022 or 2024 ordinary-fund assumptions are supported")
         object.__setattr__(self, "assumed_ordinary_years", years)
         for field in (
             "initial_cash",

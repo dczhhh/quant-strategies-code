@@ -8,20 +8,19 @@ import os
 import re
 import subprocess
 import sys
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from decimal import Decimal
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from tools import bear_2022_inputs as x  # noqa: E402
-from tools import rotation_frequency_experiment as w  # noqa: E402
-
 from ml4t.backtest.strategies.sector_rotation.research_ablation import (  # noqa: E402
     bind_uniform_parent_fees,
 )
 from ml4t.backtest.strategies.sector_rotation.research_fractional import (  # noqa: E402
     ResearchAssumptions,
 )
+from tools import bear_2022_inputs as x  # noqa: E402
+from tools import rotation_frequency_experiment as w  # noqa: E402
 
 s, c, u = x.s, x.c, x.u
 PREFIX = "research/verification/bear_2022_frequency_v1/"
@@ -36,11 +35,15 @@ MODIFIED_RESEARCH = {
 
 
 def assumptions(step):
+    base = replace(
+        u.ASSUMPTIONS,
+        name="owner 10-percent tax plus EXPLICITLY ASSUMED 2022 ordinary classification",
+        assumed_ordinary_years=(2022,),
+    )
     return ResearchAssumptions(
-        **{**asdict(u.ASSUMPTIONS),
-           "name": "owner 10-percent tax plus EXPLICITLY ASSUMED 2022 ordinary classification",
-           "assumed_ordinary_years": (2022,)},
-        share_step=Decimal(step), fractional_fee_policy="parent_order_tiered",
+        **asdict(base),
+        share_step=Decimal(step),
+        fractional_fee_policy="parent_order_tiered",
     )
 
 
@@ -52,12 +55,15 @@ def quarters(daily, initial_cash):
         if not rows:
             continue
         end = rows[-1]["NAV"]
-        result.append({
-            "quarter": f"2022Q{quarter}", "sessions": len(rows),
-            "return_pct": (end / before - 1) * 100,
-            "end_NAV_usd": end,
-            "average_exposure_pct": 100 * sum(row["exposure"] for row in rows) / len(rows),
-        })
+        result.append(
+            {
+                "quarter": f"2022Q{quarter}",
+                "sessions": len(rows),
+                "return_pct": (end / before - 1) * 100,
+                "end_NAV_usd": end,
+                "average_exposure_pct": 100 * sum(row["exposure"] for row in rows) / len(rows),
+            }
+        )
         before = end
     return result
 
@@ -90,10 +96,15 @@ def matrix(inputs, *, settings=None):
             case: {
                 "net_return_delta_percentage_points": summaries[f"P{step}_{case}"]["return_pct"]
                 - summaries[f"P{step}_M"]["return_pct"],
-                "drawdown_delta_percentage_points": summaries[f"P{step}_{case}"]["maximum_daily_close_drawdown_pct"]
+                "drawdown_delta_percentage_points": summaries[f"P{step}_{case}"][
+                    "maximum_daily_close_drawdown_pct"
+                ]
                 - summaries[f"P{step}_M"]["maximum_daily_close_drawdown_pct"],
-            } for case in w.CASES if case != "M"
-        } for step in ("1", "0.1")
+            }
+            for case in w.CASES
+            if case != "M"
+        }
+        for step in ("1", "0.1")
     }
     return {"cells": summaries, "comparisons": comparisons, "funded_SPY": benchmarks}, raw
 
@@ -107,18 +118,23 @@ def pack(logical, source):
         parts = []
         for i in range(0, len(packed), c.m.FILE_LIMIT):
             path = PREFIX + name + f".gz.part-{i // c.m.FILE_LIMIT:02}.bin"
-            payload[path] = packed[i:i + c.m.FILE_LIMIT]
+            payload[path] = packed[i : i + c.m.FILE_LIMIT]
             parts.append(path)
         s.need(0 < len(parts) <= MAX_PARTS, "EXPERIMENT_PART_BUDGET")
         index[name] = {
-            "parts": parts, "compressed_sha256": s.digest(packed),
-            "uncompressed_sha256": s.digest(body), "uncompressed_bytes": len(body),
+            "parts": parts,
+            "compressed_sha256": s.digest(packed),
+            "uncompressed_sha256": s.digest(body),
+            "uncompressed_bytes": len(body),
         }
-    payload[PREFIX + "manifest.json"] = s.canonical({
-        "schema": "bear_2022_frequency_manifest_v1", "source_commit": source,
-        "logical_files": index,
-        "files": {key: s.digest(body) for key, body in sorted(payload.items())},
-    })
+    payload[PREFIX + "manifest.json"] = s.canonical(
+        {
+            "schema": "bear_2022_frequency_manifest_v1",
+            "source_commit": source,
+            "logical_files": index,
+            "files": {key: s.digest(body) for key, body in sorted(payload.items())},
+        }
+    )
     return payload
 
 
@@ -126,20 +142,34 @@ def build(factory, source):
     inputs, normalized, provenance = x.build_inputs(factory, source)
     results, raw = matrix(inputs)
     summary = {
-        "schema": "bear_2022_frequency_assumed_ordinary_v1", "source_commit": source,
-        "window": [str(s.FIRST), str(s.LAST)], "presample_closes_per_asset": 294,
-        "execution_sessions": 251, "initial_cash_per_cell_usd": 100000,
-        "results": results, "provenance": provenance,
+        "schema": "bear_2022_frequency_assumed_ordinary_v1",
+        "source_commit": source,
+        "window": [str(s.FIRST), str(s.LAST)],
+        "presample_closes_per_asset": 294,
+        "execution_sessions": 251,
+        "initial_cash_per_cell_usd": 100000,
+        "results": results,
+        "provenance": provenance,
         "dividend_classification": "ASSUMED_ORDINARY_NOT_FINAL_ISSUER_TAX_EVIDENCE",
-        "dividend_tax_rate": "0.10", "fee_history_mode": "current_snapshot_backcast",
-        "historical_settlement": "T+2", "market_api_requests": 0, "broker_api_requests": 0,
-        "thresholds_optimized": False, "strategy_defaults_changed": False,
-        "is_blind_holdout": False, "PIT_verified": False, "performance_admission": False,
+        "dividend_tax_rate": "0.10",
+        "fee_history_mode": "current_snapshot_backcast",
+        "historical_settlement": "T+2",
+        "market_api_requests": 0,
+        "broker_api_requests": 0,
+        "thresholds_optimized": False,
+        "strategy_defaults_changed": False,
+        "is_blind_holdout": False,
+        "PIT_verified": False,
+        "performance_admission": False,
     }
-    return summary, pack({
-        "comparison.json": u.canonical(summary), "results.json": u.canonical(raw),
-        "inputs.json": normalized,
-    }, source)
+    return summary, pack(
+        {
+            "comparison.json": u.canonical(summary),
+            "results.json": u.canonical(raw),
+            "inputs.json": normalized,
+        },
+        source,
+    )
 
 
 def guarded(source):
@@ -153,7 +183,10 @@ def guarded(source):
         and os.environ.get("RUNNER_ENVIRONMENT") == "github-hosted"
         and os.environ.get("RUNNER_OS") == "Linux"
         and not os.environ.get("MASSIVE_API_KEY")
-        and all(os.environ.get(k, "").lower() != "true" for k in ("ACTIONS_STEP_DEBUG", "ACTIONS_RUNNER_DEBUG"))
+        and all(
+            os.environ.get(k, "").lower() != "true"
+            for k in ("ACTIONS_STEP_DEBUG", "ACTIONS_RUNNER_DEBUG")
+        )
         and subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip() == source,
         "EXPERIMENT_RUNNER_CONTEXT",
     )
@@ -173,7 +206,10 @@ def retain(archive, payload, *, verify_only):
     archive.visibility(True)
     s.need(
         0 < len(payload) <= 3 * MAX_PARTS + 1
-        and all(path.startswith(PREFIX) and len(body) <= c.m.FILE_LIMIT for path, body in payload.items()),
+        and all(
+            path.startswith(PREFIX) and len(body) <= c.m.FILE_LIMIT
+            for path, body in payload.items()
+        ),
         "EXPERIMENT_PRIVATE_PAYLOAD_BUDGET",
     )
     if archive.ref(REPORT_REF) is None:
@@ -201,27 +237,59 @@ def main():
         summary, payload = build(factory, source)
         digest = retain(factory(mode == "run"), payload, verify_only=mode == "verify")
         safe = {
-            name: {key: row[key] for key in (
-                "return_pct", "end_NAV_usd", "maximum_daily_close_drawdown_pct",
-                "average_exposure_pct", "fees_usd", "fills", "signal_oracle", "independent_ledger",
-            )} for name, row in summary["results"]["cells"].items()
+            name: {
+                key: row[key]
+                for key in (
+                    "return_pct",
+                    "end_NAV_usd",
+                    "maximum_daily_close_drawdown_pct",
+                    "average_exposure_pct",
+                    "fees_usd",
+                    "fills",
+                    "signal_oracle",
+                    "independent_ledger",
+                )
+            }
+            for name, row in summary["results"]["cells"].items()
         }
-        print(json.dumps({
-            "status": "BEAR2022_CONDITIONAL_RESEARCH_REPLAYED", "mode": mode,
-            "bundle_sha256": digest, "cells": safe,
-            "comparisons": summary["results"]["comparisons"],
-            "funded_SPY": {step: {k: row[k] for k in ("return_pct", "maximum_daily_close_drawdown_pct", "fees_usd")} for step, row in summary["results"]["funded_SPY"].items()},
-            "PIT_verified": False, "performance_admission": False,
-        }, sort_keys=True, default=str))
+        print(
+            json.dumps(
+                {
+                    "status": "BEAR2022_CONDITIONAL_RESEARCH_REPLAYED",
+                    "mode": mode,
+                    "bundle_sha256": digest,
+                    "cells": safe,
+                    "comparisons": summary["results"]["comparisons"],
+                    "funded_SPY": {
+                        step: {
+                            k: row[k]
+                            for k in ("return_pct", "maximum_daily_close_drawdown_pct", "fees_usd")
+                        }
+                        for step, row in summary["results"]["funded_SPY"].items()
+                    },
+                    "PIT_verified": False,
+                    "performance_admission": False,
+                },
+                sort_keys=True,
+                default=str,
+            )
+        )
         return 0
     except Exception as error:
         reason = str(error)
         if re.fullmatch(r"BEAR2022_[A-Z_0-9]+", reason) is None:
             reason = w.failure_reason(error)
-        print(json.dumps({
-            "status": "BEAR2022_EXPERIMENT_BLOCKED", "reason": reason,
-            **u.safe_failure_location(error), "PIT_verified": False, "performance_admission": False,
-        }))
+        print(
+            json.dumps(
+                {
+                    "status": "BEAR2022_EXPERIMENT_BLOCKED",
+                    "reason": reason,
+                    **u.safe_failure_location(error),
+                    "PIT_verified": False,
+                    "performance_admission": False,
+                }
+            )
+        )
         return 1
 
 

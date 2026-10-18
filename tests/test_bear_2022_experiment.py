@@ -29,18 +29,27 @@ def assumed_inputs():
         return current.market_open + (stamp - original.market_open)
 
     source = ResearchSource(
-        "assumption:2022", SOURCE.sha256, SOURCE.observed_at,
+        "assumption:2022",
+        SOURCE.sha256,
+        SOURCE.observed_at,
         "https://example.invalid/explicit-invented-2022-assumption",
     )
     return replace(
-        old, sources=(*old.sources, source),
+        old,
+        sources=(*old.sources, source),
         closes=tuple(replace(r, session=mapped[r.session]) for r in old.closes),
         bars=tuple(replace(b, end=clock(b.end)) for b in old.bars),
-        distributions=tuple(replace(
-            event, ex_date=mapped[event.ex_date], record_date=mapped[event.record_date],
-            pay_date=mapped[event.pay_date], classification="assumed_ordinary_fund",
-            classification_source_id=source.identifier,
-        ) for event in old.distributions),
+        distributions=tuple(
+            replace(
+                event,
+                ex_date=mapped[event.ex_date],
+                record_date=mapped[event.record_date],
+                pay_date=mapped[event.pay_date],
+                classification="assumed_ordinary_fund",
+                classification_source_id=source.identifier,
+            )
+            for event in old.distributions
+        ),
         splits=tuple(replace(event, session=mapped[event.session]) for event in old.splits),
         settlement_sessions=e.x.calendar.sessions((e.x.ROOT / e.x.CALENDAR_PATH).read_bytes()),
     )
@@ -54,7 +63,9 @@ def test_all_ten_cells_use_real_engine_and_independent_oracles_with_invented_202
     oracle = FrequencyOracle(engine, case)
     engine.run()
     assert oracle.finish()["status"] == "CONDITIONAL_DECISION_AND_SUBMITTED_INTENT_ORACLE_PASS"
-    assert engine.research_report["independent_ledger"]["status"] == "RETROSPECTIVE_ENGINE_LEDGER_PASS"
+    assert (
+        engine.research_report["independent_ledger"]["status"] == "RETROSPECTIVE_ENGINE_LEDGER_PASS"
+    )
     assert engine.broker.fills
     assert engine.research_report["PIT_verified"] is False
     assert engine.research_report["performance_admission"] is False
@@ -65,26 +76,42 @@ def test_whole_share_research_also_requires_explicit_2022_enablement():
     with pytest.raises(ValueError, match="explicit year-bound"):
         retrospective_rotation_engine(bundle, ASSUMPTIONS, settings())
     engine = retrospective_rotation_engine(
-        bundle, replace(ASSUMPTIONS, assumed_ordinary_years=(2022,)), settings(),
+        bundle,
+        replace(ASSUMPTIONS, assumed_ordinary_years=(2022,)),
+        settings(),
     )
     engine.run()
-    assert engine.research_report["independent_ledger"]["status"] == "RETROSPECTIVE_ENGINE_LEDGER_PASS"
+    assert (
+        engine.research_report["independent_ledger"]["status"] == "RETROSPECTIVE_ENGINE_LEDGER_PASS"
+    )
 
 
 @pytest.mark.parametrize("years", [(), (2024,)])
 def test_missing_or_wrong_year_scenario_cannot_admit_assumed_2022(years):
     with pytest.raises(ValueError, match="explicit year-bound"):
-        frequency_engine(assumed_inputs(), replace(e.assumptions("0.1"), assumed_ordinary_years=years), settings(), "M")
+        frequency_engine(
+            assumed_inputs(),
+            replace(e.assumptions("0.1"), assumed_ordinary_years=years),
+            settings(),
+            "M",
+        )
 
 
 def test_assumption_source_cannot_impersonate_2024_or_a_real_issuer():
     bundle = assumed_inputs()
     for identifier in ("fixture", "assumption:2024"):
-        extra = ResearchSource(identifier, SOURCE.sha256, SOURCE.observed_at, "https://example.invalid/wrong-year")
+        extra = ResearchSource(
+            identifier, SOURCE.sha256, SOURCE.observed_at, "https://example.invalid/wrong-year"
+        )
         sources = bundle.sources if identifier == "fixture" else (*bundle.sources, extra)
-        changed = replace(bundle, sources=sources, distributions=tuple(
-            replace(event, classification_source_id=identifier) for event in bundle.distributions
-        ))
+        changed = replace(
+            bundle,
+            sources=sources,
+            distributions=tuple(
+                replace(event, classification_source_id=identifier)
+                for event in bundle.distributions
+            ),
+        )
         with pytest.raises(ValueError, match="explicit year-bound"):
             frequency_engine(changed, e.assumptions("0.1"), settings(), "M")
 
@@ -140,7 +167,7 @@ def test_2022_report_does_not_leak_old_2025_rebound_labels():
 
 
 def test_report_fresh_bytes_are_exact_and_cannot_overwrite_existing_results():
-    payload = e.pack({name: b'{"invented":true}' for name in e.LOGICAL}, "b" * 40)
+    payload = e.pack(dict.fromkeys(e.LOGICAL, b'{"invented":true}'), "b" * 40)
     archive = FakeGitHub(e.c.m.DESTINATION)
     first = e.retain(archive, payload, verify_only=False)
     before = dict(archive.refs)
