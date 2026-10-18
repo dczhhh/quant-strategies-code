@@ -1,5 +1,6 @@
 """Engine-level frequency tests with invented sources and independent negative checks."""
 
+import json
 from dataclasses import asdict, replace
 from datetime import date
 from decimal import Decimal
@@ -135,3 +136,37 @@ def test_private_frequency_report_is_immutable():
     changed[next(iter(changed))] += b"x"
     with pytest.raises(ValueError, match="PRIVATE_REPORT_BYTES"):
         w.retain(archive, changed, verify_only=False)
+
+
+def test_verified_anchor_roundtrip_and_wrong_root_are_checked(monkeypatch):
+    archive = FakeGitHub(w.c.m.DESTINATION)
+    logical = {name: w.u.canonical({"invented": name}) for name in v.LOGICAL}
+    payload = v.pack(logical, w.BASE)
+    digest = v.retain(archive, payload, verify_only=False)
+    monkeypatch.setattr(w, "PIN", digest)
+    assert w.load_anchor(archive) == logical
+    monkeypatch.setattr(w, "PIN", "0" * 64)
+    with pytest.raises(ValueError, match="ANCHOR_BUNDLE"):
+        w.load_anchor(archive)
+
+
+def test_retained_timestamp_roundtrip_preserves_full_economics_and_analytics():
+    source = inputs(bear=True)
+    assumption = w.assumptions("0.1", primary=False)
+    _, raw = w.run_cell(source, assumption, "M", settings())
+    serialized = json.loads(w.u.canonical(raw["result"]))
+    restored = w.retained_benchmark(serialized)
+    assert w.u.canonical(restored) == w.u.canonical(raw["result"])
+    assert isinstance(serialized["trace"][0]["timestamp"], str)
+    original = w.a.describe(
+        source, assumption, raw["result"], raw["result"], raw["signal_oracle"]
+    )
+    observed = w.a.describe(
+        source, assumption, raw["result"], restored, raw["signal_oracle"]
+    )
+    assert w.u.canonical(original) == w.u.canonical(observed)
+
+
+def test_retained_naive_clock_is_rejected():
+    with pytest.raises(ValueError, match="ANCHOR_TIMESTAMP"):
+        w.retained_benchmark({"trace": [{"timestamp": "2025-01-02T16:00:00"}], "fills": []})

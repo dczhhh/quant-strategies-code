@@ -9,7 +9,7 @@ import re
 import subprocess
 import sys
 from dataclasses import asdict
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from pathlib import Path
 
@@ -46,7 +46,7 @@ def load_anchor(archive):
     tree = archive.request("GET", "/git/trees/" + c.m.sha(commit["tree"]["sha"]) + "?recursive=1")
     require(tree.get("truncated") is False, "ANCHOR_TREE")
     paths = {row["path"] for row in tree["tree"] if row["type"] != "tree"}
-    require(0 < len(paths) <= 161 and all(p.startswith(v.PREFIX) for p in paths), "ANCHOR_PATHS")
+    require(0 < len(paths) <= 81 and all(p.startswith(v.PREFIX) for p in paths), "ANCHOR_PATHS")
     saved, parent = c.b.read(archive, v.REPORT_REF, paths)
     require(parent == c.m.BOOTSTRAP, "ANCHOR_PARENT")
     require(
@@ -57,14 +57,14 @@ def load_anchor(archive):
     require(manifest["source_commit"] == BASE, "ANCHOR_SOURCE")
     require(
         manifest["files"]
-        == {k: c.m.sha256(v) for k, v in saved.items() if k != v.PREFIX + "manifest.json"},
+        == {k: c.m.sha256(body) for k, body in saved.items() if k != v.PREFIX + "manifest.json"},
         "ANCHOR_HASHES",
     )
     result = {}
     for name, item in manifest["logical_files"].items():
         parts = item["parts"]
         require(
-            0 < len(parts) <= 8
+            0 < len(parts) <= 16
             and parts == [v.PREFIX + name + f".gz.part-{i:02}.bin" for i in range(len(parts))],
             "ANCHOR_PARTS",
         )
@@ -222,6 +222,19 @@ def pack(logical, source):
     return payload
 
 
+def retained_benchmark(result):
+    """Restore only serialized execution clocks; preserve pinned economic values."""
+    value = dict(result)
+    for name in ("trace", "fills"):
+        rows = []
+        for row in result[name]:
+            stamp = datetime.fromisoformat(row["timestamp"])
+            require(stamp.utcoffset() is not None, "ANCHOR_TIMESTAMP")
+            rows.append(dict(row, timestamp=stamp))
+        value[name] = rows
+    return value
+
+
 def build(factory, source):
     anchor = load_anchor(factory())
     inputs, normalized, provenance = f.x.build_inputs(
@@ -254,7 +267,7 @@ def build(factory, source):
                 source_inputs,
                 assumptions(step, primary=window == "primary"),
                 entry["result"],
-                previous[f"P{step}_SPY_passive"]["result"],
+                retained_benchmark(previous[f"P{step}_SPY_passive"]["result"]),
                 entry["signal_oracle"],
             )
             entry["analytics"] = analytics
