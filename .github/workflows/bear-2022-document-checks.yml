@@ -20,7 +20,10 @@ jobs:
           persist-credentials: false
       - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4
       - run: uv sync --dev --locked --python 3.12
-      - run: uv run ruff format --check tools/bear_2022_document*.py tests/test_bear_2022_document*.py
-      - run: uv run ruff check --no-fix tools/bear_2022_document*.py tests/test_bear_2022_document*.py
-      - run: uv run ty check tools/bear_2022_document*.py
-      - run: uv run pytest tests/test_bear_2022_document_plan.py tests/test_bear_2022_documents.py -q --no-cov
+      - run: uv run ruff format --diff tools/bear_2022_document*.py tests/test_bear_2022_document*.py
+      - if: always()
+        run: uv run ruff check --no-fix tools/bear_2022_document*.py tests/test_bear_2022_document*.py
+      - if: always()
+        run: uv run ty check tools/bear_2022_document*.py
+      - if: always()
+        run: uv run pytest tests/test_bear_2022_document_plan.py tests/test_bear_2022_documents.py -q --no-cov

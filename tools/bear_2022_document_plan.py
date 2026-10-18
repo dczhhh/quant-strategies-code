@@ -7,6 +7,7 @@ from typing import TypedDict
 
 from tools.bear_2022_sources import canonical, digest, need
 
+
 class Document(TypedDict):
     id: str
     url: str
