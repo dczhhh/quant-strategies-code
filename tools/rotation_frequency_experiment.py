@@ -20,6 +20,7 @@ from ml4t.backtest.strategies.sector_rotation.research_ablation import (
     bind_uniform_parent_fees,  # noqa: E402
 )
 from ml4t.backtest.strategies.sector_rotation.strategy import SectorRotationStrategy  # noqa: E402
+from ml4t.backtest.types import OrderSide  # noqa: E402
 from tools import rotation_v_reversal_experiment as v  # noqa: E402
 from tools.rotation_frequency_oracle import FrequencyOracle  # noqa: E402
 from tools.rotation_frequency_schedule import CASES, frequency_engine  # noqa: E402
@@ -225,12 +226,17 @@ def pack(logical, source):
 def retained_benchmark(result):
     """Restore only serialized execution clocks; preserve pinned economic values."""
     value = dict(result)
+    sides = {str(side): side for side in OrderSide}
     for name in ("trace", "fills"):
         rows = []
         for row in result[name]:
             stamp = datetime.fromisoformat(row["timestamp"])
             require(stamp.utcoffset() is not None, "ANCHOR_TIMESTAMP")
-            rows.append(dict(row, timestamp=stamp))
+            restored = dict(row, timestamp=stamp)
+            if name == "fills":
+                require(row["side"] in sides, "ANCHOR_SIDE")
+                restored["side"] = sides[row["side"]]
+            rows.append(restored)
         value[name] = rows
     return value
 

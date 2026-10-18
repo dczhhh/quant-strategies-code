@@ -158,15 +158,18 @@ def test_retained_timestamp_roundtrip_preserves_full_economics_and_analytics():
     restored = w.retained_benchmark(serialized)
     assert w.u.canonical(restored) == w.u.canonical(raw["result"])
     assert isinstance(serialized["trace"][0]["timestamp"], str)
-    original = w.a.describe(
-        source, assumption, raw["result"], raw["result"], raw["signal_oracle"]
-    )
-    observed = w.a.describe(
-        source, assumption, raw["result"], restored, raw["signal_oracle"]
-    )
+    original = w.a.describe(source, assumption, raw["result"], raw["result"], raw["signal_oracle"])
+    observed = w.a.describe(source, assumption, raw["result"], restored, raw["signal_oracle"])
     assert w.u.canonical(original) == w.u.canonical(observed)
 
 
 def test_retained_naive_clock_is_rejected():
     with pytest.raises(ValueError, match="ANCHOR_TIMESTAMP"):
         w.retained_benchmark({"trace": [{"timestamp": "2025-01-02T16:00:00"}], "fills": []})
+
+
+def test_unknown_retained_order_side_is_rejected():
+    with pytest.raises(ValueError, match="ANCHOR_SIDE"):
+        w.retained_benchmark(
+            {"trace": [], "fills": [{"timestamp": "2025-01-02T16:00:00+00:00", "side": "unknown"}]}
+        )
