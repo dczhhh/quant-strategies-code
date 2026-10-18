@@ -296,6 +296,7 @@ def test_extra_rotation_dates_create_real_plans_and_fills(case, step):
     }
     assert any(fill.order_id in identifiers for fill in engine.broker.fills)
     assert report["execution_calendar_checks"] > 0
+    assert w.execution_audit(engine)["fills_from_non_month_first_plans"] > 0
 
 
 def test_independent_oracle_rejects_the_old_monthly_execution_gate():

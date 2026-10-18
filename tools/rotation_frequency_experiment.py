@@ -24,7 +24,7 @@ from ml4t.backtest.strategies.sector_rotation.strategy import SectorRotationStra
 from ml4t.backtest.types import OrderSide  # noqa: E402
 from tools import rotation_v_reversal_experiment as v  # noqa: E402
 from tools.rotation_frequency_oracle import FrequencyOracle  # noqa: E402
-from tools.rotation_frequency_schedule import CASES, frequency_engine  # noqa: E402
+from tools.rotation_frequency_schedule import CASES, NY, frequency_engine  # noqa: E402
 
 f, u, c, a = v.f, v.u, v.c, v.a
 PREFIX = "research/verification/rotation_frequency_v2/"
@@ -84,6 +84,31 @@ period = v.period
 fixed_fill_diagnostic = v.fixed_fill_diagnostic
 
 
+def execution_audit(engine):
+    created = {
+        event["plan_id"]: event["timestamp"].astimezone(NY).date()
+        for event in engine.strategy.events
+        if event["code"] == "monthly_plan_created"
+    }
+    extra = {
+        identifier for identifier, day in created.items() if c.CAL.shift(day, -1).month == day.month
+    }
+    orders = {order.order_id: order.rebalance_id for order in engine.broker.orders}
+    return {
+        "plan_creation_dates": sorted(str(day) for day in created.values()),
+        "non_month_first_plan_creation_dates": sorted(str(created[key]) for key in extra),
+        "fills_from_non_month_first_plans": sum(
+            orders[fill.order_id] in extra for fill in engine.broker.fills
+        ),
+        "plan_rejected_events": sum(
+            event["code"] == "monthly_plan_rejected" for event in engine.strategy.events
+        ),
+        "execution_allocation_infeasible_events": sum(
+            event["code"] == "execution_allocation_infeasible" for event in engine.strategy.events
+        ),
+    }
+
+
 def run_cell(inputs, assumption, case, settings=None):
     settings = settings or SectorRotationConfig()
     engine = frequency_engine(inputs, assumption, settings, case)
@@ -117,6 +142,7 @@ def run_cell(inputs, assumption, case, settings=None):
         mean_cash_pct=sum(row["cash"] / row["NAV"] for row in daily) / len(daily) * 100,
         dividend_accruals=result["summary"]["dividend_accruals"],
         modeled_credits=result["summary"]["modeled_credits"],
+        rotation_execution_audit=execution_audit(engine),
     )
     if signal_report:
         metrics["signal_oracle"] = {
