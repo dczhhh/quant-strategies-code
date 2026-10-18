@@ -263,6 +263,37 @@ class SourceQualificationTests(unittest.TestCase):
             s.decode(b'{"n":0.123456789123456789}')["n"], Decimal("0.123456789123456789")
         )
 
+    def test_event_dictionary_indexes_are_not_effective_timestamps(self):
+        original = self.check()["derivation_not_source_replacement"]
+        for name in ("yahoo_daily", "yahoo_tail_splits"):
+            events = self.value[name]["chart"]["result"][0]["events"]
+            for kind in events:
+                events[kind] = {"publisher-record-index": next(iter(events[kind].values()))}
+        report = self.check()
+        self.assertEqual(report["derivation_not_source_replacement"], original)
+        self.assertEqual(report["reader_audit_version"], 2)
+        self.assertEqual(
+            report["summary"]["event_dictionary_indexes_differing_from_effective_timestamp"], 3
+        )
+        self.assertTrue(
+            all(
+                row["original_dictionary_index"] == "publisher-record-index"
+                for row in report["event_dictionary_index_audit"]
+            )
+        )
+
+    def test_effective_event_timestamp_type_is_still_strict(self):
+        events = self.value["yahoo_daily"]["chart"]["result"][0]["events"]["splits"]
+        next(iter(events.values()))["date"] = True
+        with self.assertRaisesRegex(ValueError, "YAHOO_EVENT_TIMESTAMP_TYPE"):
+            self.check()
+
+    def test_explicit_event_date_still_matches_independent_split_source(self):
+        events = self.value["yahoo_daily"]["chart"]["result"][0]["events"]["splits"]
+        next(iter(events.values()))["date"] += 86400
+        with self.assertRaisesRegex(ValueError, "SPLIT_SOURCE_CONFLICT"):
+            self.check()
+
 
 if __name__ == "__main__":
     unittest.main()

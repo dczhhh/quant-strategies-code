@@ -33,3 +33,11 @@ Yahoo adjusted-close从不作为原始价格。历史close和分红的原始股�
 正式回放仍要求十组独立Decimal信号/目标/提交委托与现金/费用/结算/公司行动/NAV账本通过，另一runner不同hashseed重算全部报告字节一致。输出净收益、最大收盘回撤、月度仓位、成交、换手、费用及恢复路径。不把事后选择的2022熊市称作盲样本，也不修改既有2024/2025结果。
 
 参考：[Massive历史深度](https://massive.com/pricing?product=stocks)、[Yahoo复权收盘定义](https://help.yahoo.com/kb/SLN28256.html)、[SEC结算周期说明](https://www.sec.gov/newsroom/press-releases/2024-62)。
+
+## 来源reader v2：保留原件，不重采
+
+源码a5ef9da0的运行39138776371通过311项入口检查，SPY四产品来源核验通过（545个日线、294个预热、303个重叠交易日），但XLB在事件时间戳读取处阻断，其余10个采集作业取消，无Engine调用。SPY和XLB的四个原始响应均已完整私有留存；失败版本和SPY旧审计不删除。
+
+v1把Yahoo事件字典的外层索引强行要求为内部date字段的字符串。上游[yfinance解析器](https://api.github.com/repos/ranaroussi/yfinance/git/blobs/999069041e83b465c1608eb48b8adac30cbf53e6)读取事件values并以明确date字段作为时间，没有这个索引相等要求。v2将外层键保留为来源索引，不用它决定生效日；仍严格核验明确时间戳类型、交易日/区间、唯一性，以及独立Massive拆股日期与比率，不改价格、现金或容差。新增非时间戳索引正例、错误date类型和独立日期冲突负例。
+
+48产品计划hash保持18dcd53440da6d54c5eb06c6f1ae693b329f7311bafcdd7c58fd6610715ec074；原raw/reservation引用及原始字节不变，已有SPY/XLB不发起新请求。新审计只写独立research-data/bear-2022-source-audit-v2-{ticker}引用和v2目录，旧SPY审计留存。取消作业的未知预约仍不得重置。只有新源码和启动器全部检查后才能继续；本修改不引入2022收益结论。

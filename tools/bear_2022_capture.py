@@ -20,6 +20,7 @@ from tools import rotation_stress_capture as g  # noqa: E402
 
 c = g.c
 PREFIX = "research/data/bear_2022_source_v1/"
+AUDIT_PREFIX = "research/verification/bear_2022_source_audit_v2/"
 WORKFLOW = ".github/workflows/bear-2022-source.yml"
 BASE = "453dd0dec04daf38b17baeb43eb650a585203b3b"
 MAX_PARTS = 4
@@ -27,6 +28,8 @@ MAX_PARTS = 4
 
 def ref(ticker, kind):
     s.need(ticker in s.TICKERS and kind in {"raw", "reservation", "audit"}, "ARCHIVE_SCOPE")
+    if kind == "audit":
+        return "research-data/bear-2022-source-audit-v2-" + ticker.lower()
     prefix = "research-reservations/" if kind == "reservation" else "research-data/"
     return prefix + "bear-2022-source-v1-" + ticker.lower() + "-" + kind
 
@@ -200,7 +203,7 @@ def capture(archive, ticker, source, key_factory, *, verify_only=False, get=fetc
 def audit(archive, ticker, bodies, source, *, verify_only):
     result = s.qualify(ticker, bodies, c.sessions)
     payload = {
-        PREFIX + ticker.lower() + "/source-audit.json": s.canonical(
+        AUDIT_PREFIX + ticker.lower() + "/source-audit.json": s.canonical(
             {"source_commit": source, "audit": result}
         )
     }

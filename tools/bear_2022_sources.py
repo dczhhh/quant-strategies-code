@@ -16,6 +16,7 @@ NY = ZoneInfo("America/New_York")
 PRICE_DIFFERENCE = Decimal("0.0002")
 UNIT_SANITY_BPS = Decimal("100")
 MAX_RESPONSE_BYTES = 524288
+READER_AUDIT_VERSION = 2
 POLICY = {
     "schema": "bear_2022_source_qualification_v1",
     "universe": list(TICKERS),
@@ -163,7 +164,11 @@ def yahoo(body, ticker, kind):
     for event_kind, target in (("splits", splits), ("dividends", dividends)):
         for key, event in events.get(event_kind, {}).items():
             stamp = event.get("date")
-            need(type(stamp) is int and str(stamp) == key, "YAHOO_EVENT_TIMESTAMP")
+            # Dictionary indexes are not the effective-date field. The upstream
+            # yfinance parser also reads values() and indexes the explicit date.
+            # Preserve the received index for audit; never use it as a trade date.
+            need(type(key) is str and 0 < len(key) <= 128, "YAHOO_EVENT_INDEX")
+            need(type(stamp) is int, "YAHOO_EVENT_TIMESTAMP_TYPE")
             day = datetime.fromtimestamp(stamp, UTC).astimezone(NY).date()
             need(first <= day <= last and day not in target, "YAHOO_EVENT_DATE")
             if event_kind == "splits":
@@ -270,8 +275,21 @@ def qualify(ticker, bodies, sessions):
     ]
     maximum = max(row["absolute_difference_bps"] for row in differences)
     need(maximum <= UNIT_SANITY_BPS, "SOURCE_UNIT_SANITY_FAILED")
+    event_index_audit = [
+        {
+            "product": name,
+            "event_kind": kind,
+            "original_dictionary_index": key,
+            "effective_date_timestamp": event["date"],
+            "index_equals_effective_timestamp": key == str(event["date"]),
+        }
+        for name in ("yahoo_daily", "yahoo_tail_splits")
+        for kind, events in decode(bodies[name])["chart"]["result"][0].get("events", {}).items()
+        for key, event in events.items()
+    ]
     return {
         "schema": POLICY["schema"],
+        "reader_audit_version": READER_AUDIT_VERSION,
         "ticker": ticker,
         "plan_sha256": PLAN_HASH,
         "source_hashes": {key: digest(value) for key, value in sorted(bodies.items())},
@@ -288,6 +306,9 @@ def qualify(ticker, bodies, sessions):
             "split_events": len(splits),
             "subsequent_split_events": sum(day > LAST for day in splits),
             "dividend_events": len(dividends),
+            "event_dictionary_indexes_differing_from_effective_timestamp": sum(
+                not row["index_equals_effective_timestamp"] for row in event_index_audit
+            ),
             "source_prices_exactly_equivalent": all(
                 row["difference_usd"] == 0 for row in differences
             ),
@@ -298,6 +319,7 @@ def qualify(ticker, bodies, sessions):
             "PIT_verified": False,
             "performance_admission": False,
         },
+        "event_dictionary_index_audit": event_index_audit,
         "derivation_not_source_replacement": {
             "closes": [{"session": day, "close": price} for day, price in original.items()],
             "dividends": [

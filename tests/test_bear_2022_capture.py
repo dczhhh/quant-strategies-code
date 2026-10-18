@@ -115,3 +115,10 @@ def test_all_12_assets_fit_unchanged_per_process_api_budget():
         _, made = a.capture(archive, ticker, SOURCE, lambda: "INVENTED_KEY", get=response)
         assert made == 4
         assert len(archive.events) < a.c.m.CALL_LIMIT
+
+
+def test_v2_audit_keeps_original_raw_and_reservation_names():
+    assert a.ref("SPY", "raw") == "research-data/bear-2022-source-v1-spy-raw"
+    assert a.ref("SPY", "reservation") == "research-reservations/bear-2022-source-v1-spy-reservation"
+    assert a.ref("SPY", "audit") == "research-data/bear-2022-source-audit-v2-spy"
+    assert a.AUDIT_PREFIX != a.PREFIX
