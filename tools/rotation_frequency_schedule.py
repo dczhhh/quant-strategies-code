@@ -4,12 +4,12 @@ from __future__ import annotations
 
 from datetime import timedelta
 
-from quant_constraints.calendar import NY, SessionCalendar
-
 from ml4t.backtest.strategies.sector_rotation.research_ablation import (
     experimental_rotation_engine,
 )
 from ml4t.backtest.strategies.sector_rotation.signals import SignalBook
+from ml4t.backtest.strategies.sector_rotation.strategy import SectorRotationStrategy
+from quant_constraints.calendar import NY, SessionCalendar
 
 CASES = ("M", "C15_S", "C15_SR", "T15_S", "T15_SR")
 
@@ -39,9 +39,7 @@ def schedule(first, last, case):
             if day <= limit:
                 executions.append(day)
             target = (
-                target + timedelta(days=15)
-                if case.startswith("C")
-                else calendar.shift(target, 15)
+                target + timedelta(days=15) if case.startswith("C") else calendar.shift(target, 15)
             )
     signals = frozenset(calendar.shift(day, -1) for day in executions)
     return start, anchor, signals
@@ -64,9 +62,7 @@ class FrequencyBook(SignalBook):
             self._risk_update = False
 
     def is_month_end(self, day):
-        if day < self.first_signal or (
-            self._risk_update and not self.case.endswith("_SR")
-        ):
+        if day < self.first_signal or (self._risk_update and not self.case.endswith("_SR")):
             return super().is_month_end(day)
         return day in self.rotation_days
 
@@ -77,6 +73,7 @@ def frequency_engine(inputs, assumptions, settings, case):
     engine = experimental_rotation_engine(
         inputs, assumptions, settings, sector_rotation=True, risk_tiers=True
     )
+    assert isinstance(engine.strategy, SectorRotationStrategy)
     if case != "M":
         first = inputs.bars[0].end.astimezone(NY).date()
         last = inputs.bars[-1].end.astimezone(NY).date()

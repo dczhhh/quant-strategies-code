@@ -77,7 +77,6 @@ def load_anchor(archive):
     return result
 
 
-
 assumptions = v.assumptions
 period = v.period
 fixed_fill_diagnostic = v.fixed_fill_diagnostic
@@ -151,8 +150,8 @@ def run_cell(inputs, assumption, case, settings=None):
     metrics["gross_traded_notional_usd"] = sum(
         abs(fill["quantity"] * fill["price"]) for fill in result["fills"]
     )
-    metrics["gross_turnover_initial_capital"] = (
-        metrics["gross_traded_notional_usd"] / float(assumption.initial_cash)
+    metrics["gross_turnover_initial_capital"] = metrics["gross_traded_notional_usd"] / float(
+        assumption.initial_cash
     )
     metrics["schedule"] = {
         "case": case,
@@ -160,7 +159,6 @@ def run_cell(inputs, assumption, case, settings=None):
         "recovery_rule": "rotation_dates" if case.endswith("_SR") else "original_month_ends",
     }
     return metrics, raw
-
 
 
 def matrix(inputs, *, primary, settings=None):
@@ -176,12 +174,13 @@ def matrix(inputs, *, primary, settings=None):
         baseline = summaries[f"P{step}_M"]
         comparisons[step] = {
             case: {
-                "net_return_delta_percentage_points":
-                    summaries[f"P{step}_{case}"]["return_pct"] - baseline["return_pct"],
-                "end_NAV_delta_usd":
-                    summaries[f"P{step}_{case}"]["end_NAV_usd"] - baseline["end_NAV_usd"],
+                "net_return_delta_percentage_points": summaries[f"P{step}_{case}"]["return_pct"]
+                - baseline["return_pct"],
+                "end_NAV_delta_usd": summaries[f"P{step}_{case}"]["end_NAV_usd"]
+                - baseline["end_NAV_usd"],
             }
-            for case in CASES if case != "M"
+            for case in CASES
+            if case != "M"
         }
     return {"cells": summaries, "comparisons": comparisons}, raw
 
@@ -223,7 +222,6 @@ def pack(logical, source):
     return payload
 
 
-
 def build(factory, source):
     anchor = load_anchor(factory())
     inputs, normalized, provenance = f.x.build_inputs(
@@ -253,18 +251,26 @@ def build(factory, source):
         for name, entry in raw.items():
             step = name.split("_")[0][1:]
             analytics = a.describe(
-                source_inputs, assumptions(step, primary=window == "primary"),
-                entry["result"], previous[f"P{step}_SPY_passive"]["result"],
+                source_inputs,
+                assumptions(step, primary=window == "primary"),
+                entry["result"],
+                previous[f"P{step}_SPY_passive"]["result"],
                 entry["signal_oracle"],
             )
             entry["analytics"] = analytics
-            summaries["cells"][name].update({
-                key: analytics[key] for key in (
-                    "regression", "up_capture", "down_capture",
-                    "risk_signal_transitions", "risk_signal_delays",
-                    "ex_post_SPY_peak_trough_phases",
-                )
-            })
+            summaries["cells"][name].update(
+                {
+                    key: analytics[key]
+                    for key in (
+                        "regression",
+                        "up_capture",
+                        "down_capture",
+                        "risk_signal_transitions",
+                        "risk_signal_delays",
+                        "ex_post_SPY_peak_trough_phases",
+                    )
+                }
+            )
     summary = {
         "schema": "rotation_frequency_v1",
         "source_commit": source,

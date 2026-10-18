@@ -20,7 +20,8 @@ from tools.rotation_frequency_schedule import CASES, frequency_engine, schedule
 @pytest.mark.parametrize("case", CASES)
 def test_frequency_real_engine_signals_targets_fees_and_ledger(step, case):
     assumption = ResearchAssumptions(
-        **asdict(ASSUMPTIONS), share_step=Decimal(step),
+        **asdict(ASSUMPTIONS),
+        share_step=Decimal(step),
         fractional_fee_policy="parent_order_tiered",
     )
     engine = frequency_engine(inputs(bear=True), assumption, settings(), case)
@@ -28,7 +29,9 @@ def test_frequency_real_engine_signals_targets_fees_and_ledger(step, case):
     engine.run()
     report = oracle.finish()
     assert report["status"] == "CONDITIONAL_DECISION_AND_SUBMITTED_INTENT_ORACLE_PASS"
-    assert engine.research_report["independent_ledger"]["status"] == "RETROSPECTIVE_ENGINE_LEDGER_PASS"
+    assert (
+        engine.research_report["independent_ledger"]["status"] == "RETROSPECTIVE_ENGINE_LEDGER_PASS"
+    )
     assert engine.broker.fills
     first = engine.strategy.decisions[0]
     assert all(fill.timestamp.date() >= first.execute_session for fill in engine.broker.fills)
@@ -65,15 +68,27 @@ def test_monthly_full_engine_results_reproduce_original(step):
 
 def recovery_inputs():
     source = inputs(bear=True)
+
     def price(day, asset, value):
-        return Decimal(110) + Decimal((day - date(2025, 10, 13)).days) / 100 if (
-            asset == "SPY" and day >= date(2025, 10, 13)
-        ) else value
-    closes = tuple(replace(row, close=price(row.session, row.asset, row.close)) for row in source.closes)
-    bars = tuple(replace(row, **dict.fromkeys(
-        ("open", "high", "low", "close"),
-        price(row.end.astimezone(o.NY).date(), row.asset, row.close),
-    )) for row in source.bars)
+        return (
+            Decimal(110) + Decimal((day - date(2025, 10, 13)).days) * 2
+            if (asset == "SPY" and day >= date(2025, 10, 13))
+            else value
+        )
+
+    closes = tuple(
+        replace(row, close=price(row.session, row.asset, row.close)) for row in source.closes
+    )
+    bars = tuple(
+        replace(
+            row,
+            **dict.fromkeys(
+                ("open", "high", "low", "close"),
+                price(row.end.astimezone(o.NY).date(), row.asset, row.close),
+            ),
+        )
+        for row in source.bars
+    )
     return replace(source, closes=closes, bars=bars)
 
 
@@ -86,7 +101,8 @@ def test_recovery_frequency_changes_only_the_registered_call_site():
         engine.run()
         oracle.finish()
         recovered[case] = [
-            day for day, row in oracle.reference.items()
+            day
+            for day, row in oracle.reference.items()
             if row["recovered"] and day >= date(2025, 10, 1)
         ]
     assert recovered["C15_S"] == recovered["M"] == [date(2025, 10, 31)]

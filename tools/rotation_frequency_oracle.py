@@ -124,7 +124,6 @@ def reference_signals(inputs, settings, recovery_day, *, close_overrides=None):
         return references
 
 
-
 class FrequencyOracle(AblationOracle):
     def __init__(self, engine, case):
         super().__init__(engine, sector_rotation=True, risk_tiers=True)
@@ -162,10 +161,7 @@ class FrequencyOracle(AblationOracle):
         expected = {
             day
             for day, row in self.reference.items()
-            if first <= day <= last
-            and day in self.rotation_days
-            and row["ready"]
-            and row["scores"]
+            if first <= day <= last and day in self.rotation_days and row["ready"] and row["scores"]
         }
         require(set(self.monthly) == expected, "FREQUENCY_COVERAGE")
         require(
