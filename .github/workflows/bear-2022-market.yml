@@ -1,0 +1,135 @@
+name: Frozen bear 2022 minute and action capture
+
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/bear-2022-market.yml]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: real-action-capture-v1
+  cancel-in-progress: false
+
+env:
+  MARKET_SOURCE_SHA: '7609dfd2afc68f4c84b547a9da83ac90359ceea3'
+  SOURCE_QUALIFICATION_RUN: '39142189697'
+  ACTIONS_STEP_DEBUG: ${{ secrets.ACTIONS_STEP_DEBUG }}
+  ACTIONS_RUNNER_DEBUG: ${{ secrets.ACTIONS_RUNNER_DEBUG }}
+
+jobs:
+  preflight:
+    permissions:
+      contents: read
+      actions: read
+    if: >-
+      github.repository == 'dczhhh/quant-strategies-code' &&
+      github.actor == 'dczhhh' && github.event_name == 'push' &&
+      github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ env.MARKET_SOURCE_SHA }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4
+      - run: uv sync --dev --locked --python 3.12
+      - name: Require exact source qualification and all 12 fresh source audits
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh api "repos/dczhhh/quant-strategies-code/actions/runs?head_sha=$MARKET_SOURCE_SHA&event=pull_request&per_page=100" > "$RUNNER_TEMP/bear2022-market-checks.json"
+          jq --exit-status --arg sha "$MARKET_SOURCE_SHA" '
+            [.workflow_runs[] | select(.head_sha == $sha)] |
+            group_by(.name) | map(sort_by(.run_started_at) | last) |
+            [.[] | select(.status == "completed" and .conclusion == "success") | .name] |
+            index("CI") != null and index("Ecosystem qualification") != null and index("Bear 2022 market checks") != null
+          ' "$RUNNER_TEMP/bear2022-market-checks.json"
+          gh api "repos/dczhhh/quant-strategies-code/actions/runs/$SOURCE_QUALIFICATION_RUN" > "$RUNNER_TEMP/bear2022-source-run.json"
+          jq --exit-status '
+            .head_sha == "9533d94a75f6b16b9f01936ec53947230869312d" and
+            .name == "Frozen bear 2022 source qualification" and
+            .status == "completed" and .conclusion == "success"
+          ' "$RUNNER_TEMP/bear2022-source-run.json"
+          gh api "repos/dczhhh/quant-strategies-code/actions/runs/$SOURCE_QUALIFICATION_RUN/jobs?filter=latest&per_page=100" > "$RUNNER_TEMP/bear2022-source-jobs.json"
+          jq --exit-status '.jobs | length == 25 and all(.status == "completed" and .conclusion == "success")' "$RUNNER_TEMP/bear2022-source-jobs.json"
+      - run: uv run ruff format --check tools/bear_2022_market.py tests/test_bear_2022_market.py
+      - run: uv run ruff check --no-fix tools/bear_2022_market.py tests/test_bear_2022_market.py
+      - run: uv run ty check tools/bear_2022_market.py
+      - run: uv run pytest tests/test_bear_2022_market.py -q --no-cov
+
+  canary:
+    needs: preflight
+    environment: private-archive
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ env.MARKET_SOURCE_SHA }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4
+      - run: uv sync --dev --locked --python 3.12
+      - name: SPY only, bounded 86 products, any failure stops remaining symbols
+        env:
+          RUNNER_ENVIRONMENT: ${{ runner.environment }}
+          ARCHIVE_WRITE_TOKEN: ${{ secrets.ARCHIVE_WRITE_TOKEN }}
+          MASSIVE_API_KEY: ${{ secrets.massive }}
+          PYTHONHASHSEED: '1'
+        run: uv run python tools/bear_2022_market.py capture SPY "$MARKET_SOURCE_SHA"
+
+  capture:
+    needs: canary
+    environment: private-archive
+    strategy:
+      fail-fast: true
+      max-parallel: 2
+      matrix:
+        ticker: [XLB, XLC, XLE, XLF, XLI, XLK, XLP, XLRE, XLU, XLV, XLY]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ env.MARKET_SOURCE_SHA }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4
+      - run: uv sync --dev --locked --python 3.12
+      - name: Immutable finite raw minute and action inputs, no Engine
+        env:
+          RUNNER_ENVIRONMENT: ${{ runner.environment }}
+          ARCHIVE_WRITE_TOKEN: ${{ secrets.ARCHIVE_WRITE_TOKEN }}
+          MASSIVE_API_KEY: ${{ secrets.massive }}
+          PYTHONHASHSEED: '1'
+        run: uv run python tools/bear_2022_market.py capture "${{ matrix.ticker }}" "$MARKET_SOURCE_SHA"
+
+  fresh_verify:
+    needs: [canary, capture]
+    environment: private-archive
+    strategy:
+      fail-fast: true
+      max-parallel: 2
+      matrix:
+        ticker: [SPY, XLB, XLC, XLE, XLF, XLI, XLK, XLP, XLRE, XLU, XLV, XLY]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ env.MARKET_SOURCE_SHA }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4
+      - run: uv sync --dev --locked --python 3.12
+      - name: Fresh retained-byte verification without market key or archive writes
+        env:
+          RUNNER_ENVIRONMENT: ${{ runner.environment }}
+          ARCHIVE_WRITE_TOKEN: ${{ secrets.ARCHIVE_WRITE_TOKEN }}
+          PYTHONHASHSEED: '33'
+        run: uv run python tools/bear_2022_market.py verify "${{ matrix.ticker }}" "$MARKET_SOURCE_SHA"
