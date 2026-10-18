@@ -40,6 +40,28 @@ def require(ok, code):
         raise ValueError("FREQUENCY_" + code)
 
 
+def failure_reason(error):
+    message = str(error)
+    checks = {
+        "next_completed_minute_close_plus_slippage",
+        "slippage",
+        "snapshot_tiered_fee",
+        "committed_fee_record",
+        "cash",
+        "settled_cash",
+        "receivables",
+        "NAV",
+    }
+    for field in checks:
+        if message == "Independent research ledger mismatch: " + field:
+            return "INDEPENDENT_LEDGER_" + field.upper()
+    return (
+        message
+        if re.fullmatch(r"(?:DECISION_ORACLE|FREQUENCY)_[A-Z_0-9]+", message)
+        else "UNVERIFIED_RUNTIME_FAILURE"
+    )
+
+
 def load_anchor(archive):
     archive.visibility(True)
     revision = archive.ref(v.REPORT_REF)
@@ -440,9 +462,7 @@ def main():
             json.dumps(
                 dict(
                     status="FREQUENCY_EXPERIMENT_BLOCKED",
-                    reason=str(error)
-                    if re.fullmatch(r"(?:DECISION_ORACLE|FREQUENCY)_[A-Z_0-9]+", str(error))
-                    else "UNVERIFIED_RUNTIME_FAILURE",
+                    reason=failure_reason(error),
                     **u.safe_failure_location(error),
                     PIT_verified=False,
                     performance_admission=False,

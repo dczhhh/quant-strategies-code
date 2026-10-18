@@ -306,3 +306,17 @@ def test_independent_oracle_rejects_the_old_monthly_execution_gate():
     FrequencyOracle(engine, "C15_S")
     with pytest.raises(o.DecisionOracleMismatch, match="EXECUTION_CALENDAR"):
         engine.run()
+
+
+@pytest.mark.parametrize("field", ["snapshot_tiered_fee", "cash", "NAV"])
+def test_ledger_failure_reports_only_a_registered_check_name(field):
+    assert w.failure_reason(ValueError("Independent research ledger mismatch: " + field)) == (
+        "INDEPENDENT_LEDGER_" + field.upper()
+    )
+
+
+@pytest.mark.parametrize(
+    "message", ["private input value", "Independent research ledger mismatch: secret=123"]
+)
+def test_arbitrary_failure_details_are_never_published(message):
+    assert w.failure_reason(ValueError(message)) == "UNVERIFIED_RUNTIME_FAILURE"
