@@ -11,9 +11,7 @@ BODY = b"<p>SPDR S&amp;P 500 ETF Trust: tax character. Ordinary income: 123.</p>
 
 def test_capture_and_fresh_read_without_requests_or_writes():
     archive = FakeGitHub(d.c.m.DESTINATION)
-    body, receipt, made = d.capture(
-        archive, "spy-fy2023", SOURCE, get=lambda _: (200, BODY)
-    )
+    body, receipt, made = d.capture(archive, "spy-fy2023", SOURCE, get=lambda _: (200, BODY))
     assert body == BODY and made == 1
     before = dict(archive.refs)
     archive.events.clear()
@@ -59,9 +57,7 @@ def test_unknown_outcome_is_retained_and_never_retried():
 def test_large_document_uses_existing_blob_limit_not_larger_blobs():
     archive = FakeGitHub(d.c.m.DESTINATION)
     body = b"A" * (d.c.m.FILE_LIMIT + 1)
-    saved, receipt, made = d.capture(
-        archive, "spy-fy2023", SOURCE, get=lambda _: (200, body)
-    )
+    saved, receipt, made = d.capture(archive, "spy-fy2023", SOURCE, get=lambda _: (200, body))
     assert saved == body and receipt["part_count"] == 2 and made == 1
     assert all(len(value) <= d.c.m.FILE_LIMIT for value in archive.blobs.values())
     assert len(archive.events) < d.c.m.CALL_LIMIT

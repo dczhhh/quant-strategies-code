@@ -3,10 +3,18 @@
 from __future__ import annotations
 
 from html.parser import HTMLParser
+from typing import TypedDict
 
 from tools.bear_2022_sources import canonical, digest, need
 
-DOCUMENTS = (
+class Document(TypedDict):
+    id: str
+    url: str
+    issuer: str
+    candidate_tax_years: list[int]
+
+
+DOCUMENTS: tuple[Document, ...] = (
     {
         "id": "spy-fy2023",
         "url": "https://www.sec.gov/Archives/edgar/data/884394/000119312523285083/d505786dn30d.htm",

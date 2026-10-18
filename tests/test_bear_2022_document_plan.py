@@ -36,9 +36,11 @@ class DocumentPlanTests(unittest.TestCase):
             (b"<p>SPDR S&amp;P 500 ETF Trust</p>", "DOCUMENT_TAX_SECTION_COUNT"),
             (b"", "DOCUMENT_SIZE"),
         ):
-            with self.subTest(reason=reason):
-                with self.assertRaisesRegex(ValueError, "BEAR2022_" + reason):
-                    d.evidence("spy-fy2023", body)
+            with (
+                self.subTest(reason=reason),
+                self.assertRaisesRegex(ValueError, "BEAR2022_" + reason),
+            ):
+                d.evidence("spy-fy2023", body)
 
 
 if __name__ == "__main__":
