@@ -67,3 +67,32 @@ def test_secondary_cash_diagnostic_cannot_excuse_missing_dividend(source_inputs)
     held["body"] = x.s.canonical(body)
     with pytest.raises(ValueError, match="INPUT_EVENT_COVERAGE_CONFLICT"):
         build(source_inputs)
+
+
+def test_warmup_uses_issuer_original_cash_with_original_vendor_difference_retained(source_inputs):
+    _, _, added, _ = source_inputs
+    held = added["SPY"]["dividends"]
+    body = x.c.decode_market(held["body"])
+    body["results"][0]["cash_amount"] = "1.000043"
+    held["body"] = x.u.canonical(body)
+    inputs, _, provenance = build(source_inputs)
+    warmup = next(e for e in inputs.distributions if e.asset == "SPY" and e.ex_date.year == 2021)
+    assert warmup.cash_amount == 1
+    assert warmup.source_id == x.c.p.DOCUMENTS[0]["id"]
+    audit = next(row for row in provenance["event_checks"] if row["ticker"] == "SPY")
+    row = audit["native_warmup_cash_comparison"][0]
+    assert row["native_cash"] == Decimal("1.000043")
+    assert row["issuer_signal_cash"] == 1
+    assert row["difference_usd"] == Decimal("0.000043")
+    assert row["native_cash_used_for_signal_or_credit"] is False
+
+
+def test_warmup_cash_authority_cannot_excuse_a_wrong_native_payment_date(source_inputs):
+    _, _, added, _ = source_inputs
+    held = added["SPY"]["dividends"]
+    body = x.c.decode_market(held["body"])
+    body["results"][0]["cash_amount"] = "1.000043"
+    body["results"][0]["pay_date"] = "2021-06-10"
+    held["body"] = x.u.canonical(body)
+    with pytest.raises(ValueError, match="INPUT_EVENT_FIELDS_CONFLICT"):
+        build(source_inputs)

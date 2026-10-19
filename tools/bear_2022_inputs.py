@@ -46,7 +46,9 @@ def contract():
         and value["ex_record_pay_dates_and_original_cash_are_assumed"] is False
         and value["SEC_403_retry_authorized"] is False
         and value["dividend_cash_source_policy"]
-        == "native_Massive_original_cash_with_issuer_1E-8_match_Yahoo_diagnostic_only"
+        == "execution_native_Massive_original_cash_with_issuer_1E-8_match_Yahoo_diagnostic_only"
+        and value["warmup_dividend_cash_source_policy"]
+        == "issuer_history_original_cash_native_dates_exact_vendor_cash_diagnostic_only"
         and value["yahoo_cash_comparison_threshold_usd"] == "0.0002",
         "ASSUMPTION_CONTRACT",
     )
@@ -95,12 +97,53 @@ def check_events(ticker, events, history, yahoo_dividends):
         and set(actual) == set(dates) == set(yahoo_dividends),
         "INPUT_EVENT_COVERAGE_CONFLICT",
     )
-    evidence = c.p.history_match(history, ticker, events)
+    native_evidence = c.p.history_match(history, ticker, events)
+    # Pre-sample cash supplies signal income only. Its primary source is the
+    # issuer's original-share history, not rounded vendor amounts. All native
+    # dates/identity still have to match; execution-period cash retains the
+    # original native/issuer 1E-8 gate without any substitution or tolerance change.
+    native_rows = {row["ex"]: row for row in native_evidence["rows"]}
+    s.need(
+        native_evidence["status"] == "ISSUER_HISTORY_FIELD_MATCH"
+        or (
+            native_evidence["reason"] == "ISSUER_DIVIDEND_FIELD_OR_SHARE_BASIS_CONFLICT"
+            and len(native_rows) == len(events)
+            and all(
+                event["ex"] < s.FIRST
+                or Decimal(native_rows[str(event["ex"])]["dividend_field_difference"])
+                <= Decimal("1E-8")
+                for event in events
+            )
+        ),
+        "INPUT_EVENT_FIELDS_CONFLICT",
+    )
+    canonical_events = [
+        {
+            **event,
+            "amount": Decimal(native_rows[str(event["ex"])]["issuer_cells"]["G"])
+            if event["ex"] < s.FIRST
+            else event["amount"],
+        }
+        for event in events
+    ]
+    evidence = c.p.history_match(history, ticker, canonical_events)
     s.need(evidence["status"] == "ISSUER_HISTORY_FIELD_MATCH", "INPUT_EVENT_FIELDS_CONFLICT")
+    evidence["native_warmup_cash_comparison"] = [
+        {
+            "ex_date": event["ex"],
+            "native_cash": event["amount"],
+            "issuer_signal_cash": Decimal(native_rows[str(event["ex"])]["issuer_cells"]["G"]),
+            "native_cash_used_for_signal_or_credit": False,
+            "difference_usd": event["amount"]
+            - Decimal(native_rows[str(event["ex"])]["issuer_cells"]["G"]),
+        }
+        for event in sorted(events, key=lambda event: event["ex"])
+        if event["ex"] < s.FIRST
+    ]
     cusips = {row["issuer_cells"]["C"] for row in evidence["rows"]}
     s.need(len(cusips) == 1, "INPUT_ETF_IDENTITY_CHANGED")
-    # The issuer and native original-cash event must agree at the existing
-    # 1E-8 threshold before considering this secondary diagnostic. Yahoo's
+    # Execution-period native cash must match the issuer at the existing
+    # 1E-8 threshold; pre-sample cash comes directly from the issuer. Yahoo's
     # historical cash values can disagree beyond rounding; they never supply
     # signal income, receivables or credits. Preserve every discrepancy rather
     # than increasing the old comparison threshold or replacing source bytes.
@@ -115,7 +158,7 @@ def check_events(ticker, events, history, yahoo_dividends):
             )
             > Decimal("0.0002"),
         }
-        for event in sorted(events, key=lambda event: event["ex"])
+        for event in sorted(canonical_events, key=lambda event: event["ex"])
     ]
     evidence["yahoo_cash_comparison"] = {
         "role": "non_authoritative_diagnostic_only",
@@ -126,7 +169,7 @@ def check_events(ticker, events, history, yahoo_dividends):
         ),
         "rows": comparison,
     }
-    return next(iter(cusips)), evidence
+    return next(iter(cusips)), evidence, canonical_events
 
 
 def build_inputs(factory, source, *, docs=None, published_at=None):
@@ -267,7 +310,7 @@ def build_inputs(factory, source, *, docs=None, published_at=None):
             "INPUT_SPLIT_COVERAGE_CONFLICT",
         )
         yahoo_cash = {row["ex_date"]: row["original_share_cash"] for row in derivation["dividends"]}
-        cusip, evidence = check_events(ticker, events, history, yahoo_cash)
+        cusip, evidence, events = check_events(ticker, events, history, yahoo_cash)
         for event in sorted(events, key=lambda e: (e["ex"], e["id"])):
             execution = event["ex"] >= s.FIRST
             distributions.append(
@@ -279,7 +322,7 @@ def build_inputs(factory, source, *, docs=None, published_at=None):
                     event["pay"],
                     event["amount"],
                     "assumed_ordinary_fund" if execution else "unclassified_signal_only",
-                    event_sources[event["id"]],
+                    event_sources[event["id"]] if execution else history_doc["id"],
                     sid if execution else None,
                 )
             )
@@ -303,6 +346,8 @@ def build_inputs(factory, source, *, docs=None, published_at=None):
                 "three_source_ex_date_coverage_exact": True,
                 "issuer_original_cash_tolerance_usd": "1E-8",
                 "yahoo_cash_comparison": evidence["yahoo_cash_comparison"],
+                "native_warmup_cash_comparison": evidence["native_warmup_cash_comparison"],
+                "warmup_dividend_cash_source": "issuer_history_original_cash",
                 "native_daily_closes": len(native),
                 "derived_pre_overlap_closes": sum(
                     row["session"] < s.OVERLAP for row in derivation["closes"]
