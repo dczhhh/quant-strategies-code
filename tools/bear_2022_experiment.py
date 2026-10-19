@@ -29,21 +29,20 @@ WORKFLOW = ".github/workflows/bear-2022-experiment.yml"
 LOGICAL = {"comparison.json", "results.json", "inputs.json"}
 MAX_RAW, MAX_PARTS = 96 * 1024 * 1024, 24
 MODIFIED_RESEARCH = {
-    "src/ml4t/backtest/strategies/sector_rotation/research.py": "a56d06bd62cdab62ada78538be2db5caf843098fddc8abc34e83e9eca5e894be",
     "src/ml4t/backtest/strategies/sector_rotation/research_fractional.py": "596fed581b5a211afa51b8003989cbb43cab5f91851fa848855b44c79d507ade",
 }
 
 
 def assumptions(step):
-    base = replace(
-        u.ASSUMPTIONS,
-        name="owner 10-percent tax plus EXPLICITLY ASSUMED 2022 ordinary classification",
-        assumed_ordinary_years=(2022,),
-    )
-    return ResearchAssumptions(
-        **asdict(base),
+    base = ResearchAssumptions(
+        **asdict(u.ASSUMPTIONS),
         share_step=Decimal(step),
         fractional_fee_policy="parent_order_tiered",
+    )
+    return replace(
+        base,
+        name="owner 10-percent tax plus EXPLICITLY ASSUMED 2022 ordinary classification",
+        assumed_ordinary_years=(2022,),
     )
 
 

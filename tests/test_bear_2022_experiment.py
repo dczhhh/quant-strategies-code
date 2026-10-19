@@ -71,19 +71,12 @@ def test_all_ten_cells_use_real_engine_and_independent_oracles_with_invented_202
     assert engine.research_report["performance_admission"] is False
 
 
-def test_whole_share_research_also_requires_explicit_2022_enablement():
+def test_legacy_research_path_remains_sealed_and_cannot_enable_2022():
     bundle = assumed_inputs()
     with pytest.raises(ValueError, match="explicit year-bound"):
         retrospective_rotation_engine(bundle, ASSUMPTIONS, settings())
-    engine = retrospective_rotation_engine(
-        bundle,
-        replace(ASSUMPTIONS, assumed_ordinary_years=(2022,)),
-        settings(),
-    )
-    engine.run()
-    assert (
-        engine.research_report["independent_ledger"]["status"] == "RETROSPECTIVE_ENGINE_LEDGER_PASS"
-    )
+    with pytest.raises(ValueError, match="2024 ordinary"):
+        replace(ASSUMPTIONS, assumed_ordinary_years=(2022,))
 
 
 @pytest.mark.parametrize("years", [(), (2024,)])

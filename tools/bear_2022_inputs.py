@@ -24,6 +24,7 @@ from ml4t.backtest.strategies.sector_rotation.research_inputs import (  # noqa: 
 from quant_constraints.calendar import settlement_date  # noqa: E402
 from tools import bear_2022_calendar as calendar  # noqa: E402
 from tools import bear_2022_market as m  # noqa: E402
+from tools import bear_2022_recovery as r  # noqa: E402
 from tools import rotation_research_replay as u  # noqa: E402
 
 a, s, c = m.a, m.s, m.c
@@ -177,7 +178,7 @@ def build_inputs(factory, source, *, docs=None, published_at=None):
             original = native[day] if day >= s.OVERLAP else row["close"]
             identifier = raw_ids["massive_daily"] if day >= s.OVERLAP else audit_id
             closes.append(RawClose(ticker, day, original, identifier))
-        added, made = m.capture(
+        added, made = r.capture(
             archive,
             ticker,
             "7609dfd2afc68f4c84b547a9da83ac90359ceea3",

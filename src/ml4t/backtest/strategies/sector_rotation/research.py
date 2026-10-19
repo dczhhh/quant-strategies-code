@@ -43,8 +43,10 @@ class ResearchAssumptions:
         if not self.name.strip():
             raise ValueError("A named research scenario is required")
         years = tuple(self.assumed_ordinary_years)
-        if years not in ((), (2022,), (2024,)) or any(type(year) is not int for year in years):
-            raise ValueError("Only separate 2022 or 2024 ordinary-fund assumptions are supported")
+        if years not in ((), (2024,)) or any(type(year) is not int for year in years):
+            raise ValueError(
+                "Only the separately disclosed 2024 ordinary-fund assumption is supported"
+            )
         object.__setattr__(self, "assumed_ordinary_years", years)
         for field in (
             "initial_cash",
@@ -78,10 +80,6 @@ class _ResearchProvider:
                 event.ex_date.year not in assumptions.assumed_ordinary_years
                 or not event.classification_source_id
                 or not event.classification_source_id.startswith("assumption:")
-                or (
-                    event.ex_date.year == 2022
-                    and event.classification_source_id != "assumption:2022"
-                )
             )
             for event in inputs.distributions
         ):

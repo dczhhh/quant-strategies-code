@@ -69,7 +69,7 @@ def invented_sources(monkeypatch):
             key()
         return added[ticker], 0
 
-    monkeypatch.setattr(x.m, "capture", capture)
+    monkeypatch.setattr(x.r, "capture", capture)
 
     class Archive:
         def visibility(self, private):
