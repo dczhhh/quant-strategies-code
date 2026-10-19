@@ -13,7 +13,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  EXPERIMENT_SOURCE_SHA: 'e90f5f59f578c3835ca6af6a97654eb14b2f6aa3'
+  EXPERIMENT_SOURCE_SHA: 'e60b0d98d9747f11ca4c6af7ff84e74536895cb9'
   RECOVERY_CAPTURE_RUN: '39188392569'
   ACTIONS_STEP_DEBUG: ${{ secrets.ACTIONS_STEP_DEBUG }}
   ACTIONS_RUNNER_DEBUG: ${{ secrets.ACTIONS_RUNNER_DEBUG }}
@@ -64,7 +64,7 @@ jobs:
       - run: uv run ruff format --check tools/bear_2022_inputs.py tools/bear_2022_experiment.py tools/bear_2022_calendar.py tests/test_bear_2022_inputs.py tests/test_bear_2022_experiment.py tests/test_bear_2022_calendar.py
       - run: uv run ruff check --no-fix tools/bear_2022_inputs.py tools/bear_2022_experiment.py tools/bear_2022_calendar.py tests/test_bear_2022_inputs.py tests/test_bear_2022_experiment.py tests/test_bear_2022_calendar.py
       - run: uv run ty check tools/bear_2022_inputs.py tools/bear_2022_experiment.py tools/bear_2022_calendar.py
-      - run: uv run pytest tests/test_bear_2022_inputs.py tests/test_bear_2022_experiment.py tests/test_bear_2022_calendar.py tests/strategies/test_rotation_assumed_distribution.py tests/test_rotation_frequency.py -q --no-cov
+      - run: uv run pytest tests/test_bear_2022_inputs.py tests/test_bear_2022_cash_authority.py tests/test_bear_2022_experiment.py tests/test_bear_2022_calendar.py tests/strategies/test_rotation_assumed_distribution.py tests/test_rotation_frequency.py -q --no-cov
 
   replay:
     needs: preflight
