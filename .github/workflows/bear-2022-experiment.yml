@@ -13,8 +13,8 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  EXPERIMENT_SOURCE_SHA: 'eea58b35f12456a62b154449aacb62da301fb415'
-  MARKET_CAPTURE_RUN: '39172883298'
+  EXPERIMENT_SOURCE_SHA: 'e90f5f59f578c3835ca6af6a97654eb14b2f6aa3'
+  RECOVERY_CAPTURE_RUN: '39188392569'
   ACTIONS_STEP_DEBUG: ${{ secrets.ACTIONS_STEP_DEBUG }}
   ACTIONS_RUNNER_DEBUG: ${{ secrets.ACTIONS_RUNNER_DEBUG }}
 
@@ -50,16 +50,17 @@ jobs:
             index("CI") != null and index("Ecosystem qualification") != null and
             index("Bear 2022 experiment checks") != null and
             index("Frequency research checks") != null and
+            index("Bear 2022 recovery checks") != null and
             index("Bear 2022 source checks") != null and index("Bear 2022 market checks") != null
           ' "$RUNNER_TEMP/bear2022-experiment-checks.json"
-          gh api "repos/dczhhh/quant-strategies-code/actions/runs/$MARKET_CAPTURE_RUN" > "$RUNNER_TEMP/bear2022-market-run.json"
+          gh api "repos/dczhhh/quant-strategies-code/actions/runs/$RECOVERY_CAPTURE_RUN" > "$RUNNER_TEMP/bear2022-market-run.json"
           jq --exit-status '
-            .head_sha == "5562e76f3137f1060976ab554e21b1ae4933e8af" and
-            .name == "Frozen bear 2022 minute and action capture" and
+            .head_sha == "43b65d807832efaac8ed6a52baf47e167a031db8" and
+            .name == "Frozen bear 2022 approved input recovery" and
             .status == "completed" and .conclusion == "success"
           ' "$RUNNER_TEMP/bear2022-market-run.json"
-          gh api "repos/dczhhh/quant-strategies-code/actions/runs/$MARKET_CAPTURE_RUN/jobs?filter=latest&per_page=100" > "$RUNNER_TEMP/bear2022-market-jobs.json"
-          jq --exit-status '.jobs | length == 25 and all(.status == "completed" and .conclusion == "success")' "$RUNNER_TEMP/bear2022-market-jobs.json"
+          gh api "repos/dczhhh/quant-strategies-code/actions/runs/$RECOVERY_CAPTURE_RUN/jobs?filter=latest&per_page=100" > "$RUNNER_TEMP/bear2022-market-jobs.json"
+          jq --exit-status '.jobs | length == 20 and all(.status == "completed" and .conclusion == "success")' "$RUNNER_TEMP/bear2022-market-jobs.json"
       - run: uv run ruff format --check tools/bear_2022_inputs.py tools/bear_2022_experiment.py tools/bear_2022_calendar.py tests/test_bear_2022_inputs.py tests/test_bear_2022_experiment.py tests/test_bear_2022_calendar.py
       - run: uv run ruff check --no-fix tools/bear_2022_inputs.py tools/bear_2022_experiment.py tools/bear_2022_calendar.py tests/test_bear_2022_inputs.py tests/test_bear_2022_experiment.py tests/test_bear_2022_calendar.py
       - run: uv run ty check tools/bear_2022_inputs.py tools/bear_2022_experiment.py tools/bear_2022_calendar.py
