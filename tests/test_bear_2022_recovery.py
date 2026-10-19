@@ -43,15 +43,26 @@ def test_frozen_scope_reuses_577_and_only_needs_455_products():
 
 
 @pytest.mark.parametrize("completed,expected", [(4, 2), (3, 23)])
-def test_recovery_preserves_orphan_and_completed_refs_and_fresh_read_is_exact(monkeypatch, completed, expected):
+def test_recovery_preserves_orphan_and_completed_refs_and_fresh_read_is_exact(
+    monkeypatch, completed, expected
+):
     archive, body = invented(monkeypatch, completed=completed)
     before = copy.deepcopy(archive.refs)
-    first, made = r.capture(archive, "XLI", "c" * 40, lambda: "INVENTED", get=lambda *_: (200, body))
+    first, made = r.capture(
+        archive, "XLI", "c" * 40, lambda: "INVENTED", get=lambda *_: (200, body)
+    )
     assert made == expected and len(first) == 86
     assert all(archive.ref(name) == sha for name, sha in before.items())
     after = copy.deepcopy(archive.refs)
     archive.events.clear()
-    second, made = r.capture(archive, "XLI", "c" * 40, lambda: pytest.fail("key forbidden"), verify_only=True, get=lambda *_: pytest.fail("network forbidden"))
+    second, made = r.capture(
+        archive,
+        "XLI",
+        "c" * 40,
+        lambda: pytest.fail("key forbidden"),
+        verify_only=True,
+        get=lambda *_: pytest.fail("network forbidden"),
+    )
     assert made == 0 and first == second and archive.refs == after
     assert all(method == "GET" for method, _ in archive.events)
 
@@ -78,7 +89,7 @@ def test_new_denial_retained_once_and_cannot_be_retried(monkeypatch):
 
     def denied(product, _):
         called.append(product)
-        return 403, b'{"message":"INVENTED_DENIAL"}'
+        return 403, b'{"message":"PRIVATE_DENIAL"}'
 
     for _ in range(2):
         with pytest.raises(ValueError, match="HTTP_403_RETAINED_NO_RETRY"):
@@ -87,6 +98,7 @@ def test_new_denial_retained_once_and_cannot_be_retried(monkeypatch):
 
 
 def test_safe_failure_reports_archive_code_not_error_body(monkeypatch, capsys):
+    monkeypatch.setenv("ARCHIVE_WRITE_TOKEN", "INVENTED_KEY")
     monkeypatch.setattr(r.sys, "argv", ["recovery", "capture", "XLI", "b" * 40])
     monkeypatch.setattr(r, "guarded", lambda _: None)
 
@@ -95,5 +107,8 @@ def test_safe_failure_reports_archive_code_not_error_body(monkeypatch, capsys):
 
     monkeypatch.setattr(r, "capture", fail)
     assert r.main() == 1
-    assert json.loads(capsys.readouterr().out)["reason"] == "BEAR2022_RECOVERY_GITHUB_PRIMARY_RATE_LIMIT"
+    assert (
+        json.loads(capsys.readouterr().out)["reason"]
+        == "BEAR2022_RECOVERY_GITHUB_PRIMARY_RATE_LIMIT"
+    )
     assert r.reason(ValueError("PRIVATE_PROVIDER_BODY")) == "BEAR2022_RECOVERY_UNVERIFIED"

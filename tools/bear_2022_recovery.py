@@ -85,7 +85,7 @@ class RecoveryArchive:
             original = payload["ref"].removeprefix("refs/heads/")
             target = self.targets.get(original)
             s.need(target is not None and target != original, "RECOVERY_ORIGINAL_WRITE_FORBIDDEN")
-            payload = {**payload, "ref": "refs/heads/" + target}
+            payload = {**payload, "ref": "refs/heads/" + str(target)}
         return self.archive.write(suffix, payload)
 
 
@@ -105,8 +105,12 @@ def capture(archive, ticker, source, key_factory, *, verify_only=False, get=m.fe
     bodies = m.a.read_raw(archive, ticker)
     m.a.audit(archive, ticker, bodies, m.SOURCE_READER, verify_only=True)
     result, made = m.capture(
-        RecoveryArchive(archive, ticker), ticker, source, key_factory,
-        verify_only=verify_only, get=get,
+        RecoveryArchive(archive, ticker),
+        ticker,
+        source,
+        key_factory,
+        verify_only=verify_only,
+        get=get,
     )
     check_inventory(archive, ticker)
     s.need(len(result) == 86 and made <= len(missing_products(ticker)), "RECOVERY_PRODUCT_BUDGET")
@@ -135,12 +139,19 @@ def guarded(source):
 def reason(error):
     code = getattr(error, "code", "")
     if code in {
-        "CHECK_FAILED", "GITHUB_PRIMARY_RATE_LIMIT", "GITHUB_HTTP_401", "GITHUB_HTTP_403",
-        "GITHUB_HTTP_404", "GITHUB_HTTP_429", "GITHUB_HTTP_FAILED",
+        "CHECK_FAILED",
+        "GITHUB_PRIMARY_RATE_LIMIT",
+        "GITHUB_HTTP_401",
+        "GITHUB_HTTP_403",
+        "GITHUB_HTTP_404",
+        "GITHUB_HTTP_429",
+        "GITHUB_HTTP_FAILED",
     }:
         return "BEAR2022_RECOVERY_" + code
     message = str(error)
-    return message if re.fullmatch(r"BEAR2022_[A-Z_0-9]+", message) else "BEAR2022_RECOVERY_UNVERIFIED"
+    return (
+        message if re.fullmatch(r"BEAR2022_[A-Z_0-9]+", message) else "BEAR2022_RECOVERY_UNVERIFIED"
+    )
 
 
 def main():
@@ -148,9 +159,11 @@ def main():
         s.need(len(sys.argv) == 4 and sys.argv[1] in {"capture", "verify"}, "RECOVERY_ARGUMENTS")
         mode, ticker, source = sys.argv[1:]
         guarded(source)
-        archive = c.r.CachedArchive(c.PacedGitHub(
-            c.m.DESTINATION, os.environ.get("ARCHIVE_WRITE_TOKEN", ""), writable=mode == "capture",
-        ))
+        archive = c.r.CachedArchive(
+            c.PacedGitHub(
+                c.m.DESTINATION,
+                os.environ.get("ARCHIVE_WRITE_TOKEN", ""),
+                writable=mode == "capture",
         _, made = capture(
             archive, ticker, source, lambda: os.environ.get("MASSIVE_API_KEY", ""),
             verify_only=mode == "verify",
