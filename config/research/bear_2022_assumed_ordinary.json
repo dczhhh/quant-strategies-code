@@ -17,6 +17,8 @@
   "adjusted_close_used": false,
   "fit_price_rescaling_factor": false,
   "price_difference_threshold_usd": "0.0002",
+  "dividend_cash_source_policy": "native_Massive_original_cash_with_issuer_1E-8_match_Yahoo_diagnostic_only",
+  "yahoo_cash_comparison_threshold_usd": "0.0002",
   "settlement_cycle": "historical_T+2",
   "fee_history_mode": "current_snapshot_backcast",
   "cases": ["M", "C15_S", "C15_SR", "T15_S", "T15_SR"],

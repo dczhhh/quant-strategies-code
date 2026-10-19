@@ -44,7 +44,10 @@ def contract():
         and value["dividend_tax_rate"] == "0.10"
         and value["strict_real_admission"] is False
         and value["ex_record_pay_dates_and_original_cash_are_assumed"] is False
-        and value["SEC_403_retry_authorized"] is False,
+        and value["SEC_403_retry_authorized"] is False
+        and value["dividend_cash_source_policy"]
+        == "native_Massive_original_cash_with_issuer_1E-8_match_Yahoo_diagnostic_only"
+        and value["yahoo_cash_comparison_threshold_usd"] == "0.0002",
         "ASSUMPTION_CONTRACT",
     )
     return value, body
@@ -92,17 +95,37 @@ def check_events(ticker, events, history, yahoo_dividends):
         and set(actual) == set(dates) == set(yahoo_dividends),
         "INPUT_EVENT_COVERAGE_CONFLICT",
     )
-    s.need(
-        all(
-            abs(event["amount"] - yahoo_dividends[event["ex"]]) <= Decimal("0.0002")
-            for event in events
-        ),
-        "INPUT_YAHOO_DIVIDEND_UNIT_CONFLICT",
-    )
     evidence = c.p.history_match(history, ticker, events)
     s.need(evidence["status"] == "ISSUER_HISTORY_FIELD_MATCH", "INPUT_EVENT_FIELDS_CONFLICT")
     cusips = {row["issuer_cells"]["C"] for row in evidence["rows"]}
     s.need(len(cusips) == 1, "INPUT_ETF_IDENTITY_CHANGED")
+    # The issuer and native original-cash event must agree at the existing
+    # 1E-8 threshold before considering this secondary diagnostic. Yahoo's
+    # historical cash values can disagree beyond rounding; they never supply
+    # signal income, receivables or credits. Preserve every discrepancy rather
+    # than increasing the old comparison threshold or replacing source bytes.
+    comparison = [
+        {
+            "ex_date": event["ex"],
+            "issuer_matched_original_cash": event["amount"],
+            "yahoo_derived_original_cash": yahoo_dividends[event["ex"]],
+            "difference_usd": yahoo_dividends[event["ex"]] - event["amount"],
+            "above_original_comparison_threshold": abs(
+                yahoo_dividends[event["ex"]] - event["amount"]
+            )
+            > Decimal("0.0002"),
+        }
+        for event in sorted(events, key=lambda event: event["ex"])
+    ]
+    evidence["yahoo_cash_comparison"] = {
+        "role": "non_authoritative_diagnostic_only",
+        "used_for_signal_or_cash": False,
+        "comparison_threshold_usd": "0.0002",
+        "rows_above_original_threshold": sum(
+            row["above_original_comparison_threshold"] for row in comparison
+        ),
+        "rows": comparison,
+    }
     return next(iter(cusips)), evidence
 
 
@@ -279,6 +302,7 @@ def build_inputs(factory, source, *, docs=None, published_at=None):
                 "issuer_field_match_count": len(evidence["rows"]),
                 "three_source_ex_date_coverage_exact": True,
                 "issuer_original_cash_tolerance_usd": "1E-8",
+                "yahoo_cash_comparison": evidence["yahoo_cash_comparison"],
                 "native_daily_closes": len(native),
                 "derived_pre_overlap_closes": sum(
                     row["session"] < s.OVERLAP for row in derivation["closes"]

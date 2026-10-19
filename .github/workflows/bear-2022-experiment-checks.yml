@@ -28,4 +28,4 @@ jobs:
       - if: always()
         run: uv run ty check tools/bear_2022_inputs.py tools/bear_2022_experiment.py tools/bear_2022_calendar.py
       - if: always()
-        run: uv run pytest tests/test_bear_2022_inputs.py tests/test_bear_2022_experiment.py tests/test_bear_2022_calendar.py tests/strategies/test_rotation_assumed_distribution.py tests/test_rotation_frequency.py -q --no-cov
+        run: uv run pytest tests/test_bear_2022_inputs.py tests/test_bear_2022_cash_authority.py tests/test_bear_2022_experiment.py tests/test_bear_2022_calendar.py tests/strategies/test_rotation_assumed_distribution.py tests/test_rotation_frequency.py -q --no-cov
