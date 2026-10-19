@@ -164,15 +164,30 @@ def main():
                 c.m.DESTINATION,
                 os.environ.get("ARCHIVE_WRITE_TOKEN", ""),
                 writable=mode == "capture",
+            )
+        )
         _, made = capture(
-            archive, ticker, source, lambda: os.environ.get("MASSIVE_API_KEY", ""),
+            archive,
+            ticker,
+            source,
+            lambda: os.environ.get("MASSIVE_API_KEY", ""),
             verify_only=mode == "verify",
         )
-        print(json.dumps({
-            "status": "BEAR2022_RECOVERY_RETAINED_NOT_ECONOMIC_ADMISSION", "ticker": ticker,
-            "new_market_requests": made, "products": 86, "recovery_plan_sha256": PLAN_HASH,
-            "original_refs_unchanged": True, "engine_invoked": False, "PIT_verified": False,
-        }, sort_keys=True))
+        print(
+            json.dumps(
+                {
+                    "status": "BEAR2022_RECOVERY_RETAINED_NOT_ECONOMIC_ADMISSION",
+                    "ticker": ticker,
+                    "new_market_requests": made,
+                    "products": 86,
+                    "recovery_plan_sha256": PLAN_HASH,
+                    "original_refs_unchanged": True,
+                    "engine_invoked": False,
+                    "PIT_verified": False,
+                },
+                sort_keys=True,
+            )
+        )
         return 0
     except Exception as error:
         print(json.dumps({"status": "BLOCKED", "reason": reason(error), "engine_invoked": False}))
