@@ -34,7 +34,7 @@ jobs:
           ref: ${{ env.DOCUMENT_SOURCE_SHA }}
           fetch-depth: 0
           persist-credentials: false
-      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
       - run: uv sync --dev --locked --python 3.12
       - name: Require the exact source revision's complete qualification
         env:
@@ -64,7 +64,7 @@ jobs:
           ref: ${{ env.DOCUMENT_SOURCE_SHA }}
           fetch-depth: 0
           persist-credentials: false
-      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
       - run: uv sync --dev --locked --python 3.12
       - name: Three fixed public filings, no market key, immutable private evidence
         env:
@@ -84,7 +84,7 @@ jobs:
           ref: ${{ env.DOCUMENT_SOURCE_SHA }}
           fetch-depth: 0
           persist-credentials: false
-      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
       - run: uv sync --dev --locked --python 3.12
       - name: Fresh byte-identical evidence rebuild, no source requests or writes
         env:
