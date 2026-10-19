@@ -1,0 +1,114 @@
+name: Frozen quantity exit paired execution audit
+
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/rotation-quantity-exit.yml]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: real-action-capture-v1
+  cancel-in-progress: false
+
+env:
+  EXPERIMENT_SOURCE_SHA: '6c6e8e36799c788111c86b157d652a56ea7ec5c3'
+  ACTIONS_STEP_DEBUG: ${{ secrets.ACTIONS_STEP_DEBUG }}
+  ACTIONS_RUNNER_DEBUG: ${{ secrets.ACTIONS_RUNNER_DEBUG }}
+
+jobs:
+  preflight:
+    permissions:
+      contents: read
+      actions: read
+    if: >-
+      github.repository == 'dczhhh/quant-strategies-code' &&
+      github.actor == 'dczhhh' && github.event_name == 'push' &&
+      github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ env.EXPERIMENT_SOURCE_SHA }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4
+      - run: uv sync --dev --locked --python 3.12
+      - name: Require exact source quality and completed immutable anchors
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh api "repos/dczhhh/quant-strategies-code/actions/runs?head_sha=$EXPERIMENT_SOURCE_SHA&event=pull_request&per_page=100" > "$RUNNER_TEMP/quantity-exit-checks.json"
+          jq --exit-status --arg sha "$EXPERIMENT_SOURCE_SHA" '
+            [.workflow_runs[] | select(.head_sha == $sha)] |
+            group_by(.name) | map(sort_by(.run_started_at) | last) |
+            [.[] | select(.status == "completed" and .conclusion == "success") | .name] as $passed |
+            ["CI", "Ecosystem qualification", "Quantity exit research checks",
+             "Signal SPY research checks", "Bear 2022 experiment checks",
+             "Bear 2022 source checks", "Bear 2022 market checks",
+             "Bear 2022 recovery checks", "Frequency research checks"] |
+            all(. as $name | $passed | index($name) != null)
+          ' "$RUNNER_TEMP/quantity-exit-checks.json"
+          for run_id in 39114645604 39195602408 39204313507; do
+            gh api "repos/dczhhh/quant-strategies-code/actions/runs/$run_id" > "$RUNNER_TEMP/quantity-exit-anchor.json"
+            jq --exit-status '.status == "completed" and .conclusion == "success"' "$RUNNER_TEMP/quantity-exit-anchor.json"
+            gh api "repos/dczhhh/quant-strategies-code/actions/runs/$run_id/jobs?filter=latest&per_page=100" > "$RUNNER_TEMP/quantity-exit-anchor-jobs.json"
+            jq --exit-status '.jobs | length == 3 and all(.status == "completed" and .conclusion == "success")' "$RUNNER_TEMP/quantity-exit-anchor-jobs.json"
+          done
+      - run: uv run ruff format --check tools/rotation_quantity_exit*.py tests/test_rotation_quantity_exit*.py
+      - run: uv run ruff check --no-fix tools/rotation_quantity_exit*.py tests/test_rotation_quantity_exit*.py
+      - run: uv run ty check tools/rotation_quantity_exit*.py
+      - run: uv run pytest tests/test_rotation_quantity_exit.py tests/test_rotation_quantity_exit_audit.py tests/accounting/test_gatekeeper.py tests/test_rotation_frequency.py tests/test_bear_2022_signal_spy.py -q --no-cov
+
+  replay:
+    needs: preflight
+    strategy:
+      fail-fast: false
+      matrix:
+        window: [bear2022, primary, secondary]
+    environment: private-archive
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ env.EXPERIMENT_SOURCE_SHA }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4
+      - run: uv sync --dev --locked --python 3.12
+      - name: Ten exact original controls plus ten isolated correction cells
+        env:
+          RUNNER_ENVIRONMENT: ${{ runner.environment }}
+          ARCHIVE_WRITE_TOKEN: ${{ secrets.ARCHIVE_WRITE_TOKEN }}
+          PYTHONHASHSEED: '1'
+          REPLAY_WINDOW: ${{ matrix.window }}
+        run: uv run python tools/rotation_quantity_exit_audit.py run "$EXPERIMENT_SOURCE_SHA" "$REPLAY_WINDOW"
+
+  fresh_verify:
+    needs: replay
+    strategy:
+      fail-fast: false
+      matrix:
+        window: [bear2022, primary, secondary]
+    environment: private-archive
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ env.EXPERIMENT_SOURCE_SHA }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4
+      - run: uv sync --dev --locked --python 3.12
+      - name: Independent new runner, different seed, complete byte-exact no-write rebuild
+        env:
+          RUNNER_ENVIRONMENT: ${{ runner.environment }}
+          ARCHIVE_WRITE_TOKEN: ${{ secrets.ARCHIVE_WRITE_TOKEN }}
+          PYTHONHASHSEED: '33'
+          REPLAY_WINDOW: ${{ matrix.window }}
+        run: uv run python tools/rotation_quantity_exit_audit.py verify "$EXPERIMENT_SOURCE_SHA" "$REPLAY_WINDOW"
