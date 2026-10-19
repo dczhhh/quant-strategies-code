@@ -11,7 +11,7 @@ on:
   push:
     branches: [main, develop]
   pull_request:
-    branches: [main, issue-3-us-cash-constraints, issue-5a-data-contracts, issue-5b-archive, issue-5c-offline-validator, issue-5d-pit-core, issue-5e1-verification-contracts, issue-5e2-verification-orchestration, issue-5e3-research-entry, issue-5e4-entry-e2e, issue-5f0-readiness-plan, issue-5f1-demand-archive, issue-5f1-slice-preparation, issue-5f1-private-operator, issue-5f2-private-intake, issue-5f3-private-samples, feat/spdr-sector-rotation-a2-20261014]
+    branches: [main, issue-3-us-cash-constraints, issue-5a-data-contracts, issue-5b-archive, issue-5c-offline-validator, issue-5d-pit-core, issue-5e1-verification-contracts, issue-5e2-verification-orchestration, issue-5e3-research-entry, issue-5e4-entry-e2e, issue-5f0-readiness-plan, issue-5f1-demand-archive, issue-5f1-slice-preparation, issue-5f1-private-operator, issue-5f2-private-intake, issue-5f3-private-samples, feat/spdr-sector-rotation-a2-20261014, feat/rotation-tenths-stress-20261016]
 
 permissions:
   contents: read
@@ -138,6 +138,11 @@ jobs:
           uv run ty check tools/rotation_stress_tenths_compare.py
           uv run pytest tests/constraints/test_fractional_order_fees.py tests/strategies/test_rotation_fractional_fees.py tests/test_fractional_fee_report.py -q --no-cov
           uv run python -m tests.fractional_fee_process_probe compare
+          uv run ruff check --no-fix tools/rotation_ablation_oracle.py tools/rotation_ablation_spy.py tools/rotation_v_reversal_experiment.py tests/test_rotation_v_reversal.py tests/rotation_ablation_process_probe.py
+          uv run ruff format --check tools/rotation_ablation_oracle.py tools/rotation_ablation_spy.py tools/rotation_v_reversal_experiment.py tests/test_rotation_v_reversal.py tests/rotation_ablation_process_probe.py
+          uv run ty check tools/rotation_ablation_oracle.py tools/rotation_ablation_spy.py tools/rotation_v_reversal_experiment.py
+          uv run pytest tests/test_rotation_v_reversal.py tests/strategies/test_rotation_causal_ablation.py -q --no-cov
+          uv run python -m tests.rotation_ablation_process_probe compare
 
       - name: Validate private sample workflow expressions without executing capture
         run: |
