@@ -1,0 +1,74 @@
+name: Read-only quantity archive access probe
+
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/quantity-archive-read-probe.yml]
+
+permissions:
+  contents: read
+
+env:
+  RESEARCH_SOURCE_SHA: '6c6e8e36799c788111c86b157d652a56ea7ec5c3'
+  ACTIONS_STEP_DEBUG: ${{ secrets.ACTIONS_STEP_DEBUG }}
+  ACTIONS_RUNNER_DEBUG: ${{ secrets.ACTIONS_RUNNER_DEBUG }}
+
+jobs:
+  access_probe:
+    if: >-
+      github.repository == 'dczhhh/quant-strategies-code' &&
+      github.actor == 'dczhhh' && github.event_name == 'push' &&
+      github.ref == 'refs/heads/main'
+    environment: private-archive
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ env.RESEARCH_SOURCE_SHA }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4
+      - run: uv sync --dev --locked --python 3.12
+      - name: One GET with the configured archive client, no Engine or writes
+        env:
+          RUNNER_ENVIRONMENT: ${{ runner.environment }}
+          ARCHIVE_WRITE_TOKEN: ${{ secrets.ARCHIVE_WRITE_TOKEN }}
+        run: |
+          uv run python - <<'PY'
+          import json
+          import os
+          import re
+          import subprocess
+          from datetime import UTC, datetime
+          from tools import rotation_quantity_exit_audit as q
+
+          expected = "6c6e8e36799c788111c86b157d652a56ea7ec5c3"
+          valid = (
+              os.environ.get("GITHUB_REPOSITORY") == q.c.m.CODE
+              and os.environ.get("GITHUB_ACTOR") == "dczhhh"
+              and os.environ.get("GITHUB_EVENT_NAME") == "push"
+              and os.environ.get("GITHUB_REF") == "refs/heads/main"
+              and os.environ.get("GITHUB_WORKFLOW_REF") == q.c.m.CODE + "/.github/workflows/quantity-archive-read-probe.yml@refs/heads/main"
+              and os.environ.get("RUNNER_ENVIRONMENT") == "github-hosted"
+              and os.environ.get("RUNNER_OS") == "Linux"
+              and all(os.environ.get(k, "").lower() != "true" for k in ("ACTIONS_STEP_DEBUG", "ACTIONS_RUNNER_DEBUG"))
+              and not os.environ.get("MASSIVE_API_KEY")
+              and subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip() == expected
+          )
+          if not valid:
+              print(json.dumps({"status": "ARCHIVE_PROBE_BLOCKED", "reason": "RUNNER_CONTEXT"}))
+              raise SystemExit(1)
+          try:
+              archive = q.c.PacedGitHub(q.c.m.DESTINATION, os.environ.get("ARCHIVE_WRITE_TOKEN", ""), writable=False)
+              archive.visibility(True)
+          except q.c.m.Stopped as error:
+              code = error.code if re.fullmatch(r"[A-Z_0-9]{1,64}", error.code) else "UNVERIFIED_ARCHIVE_FAILURE"
+              retry = datetime.fromtimestamp(error.retry_at, UTC).isoformat() if isinstance(error.retry_at, int) else None
+              print(json.dumps({"status": "ARCHIVE_READ_STOPPED", "code": code, "retry_at_utc": retry, "engine_invoked": False, "archive_writes": 0}))
+              raise SystemExit(1)
+          except Exception:
+              print(json.dumps({"status": "ARCHIVE_READ_STOPPED", "code": "UNVERIFIED_ARCHIVE_FAILURE", "engine_invoked": False, "archive_writes": 0}))
+              raise SystemExit(1)
+          print(json.dumps({"status": "ARCHIVE_READ_ACCESS_PASS", "engine_invoked": False, "archive_writes": 0}))
+          PY
