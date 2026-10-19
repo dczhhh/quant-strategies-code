@@ -1,0 +1,107 @@
+name: Frozen bear 2022 assumed-ordinary frequency replay
+
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/bear-2022-experiment.yml]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: real-action-capture-v1
+  cancel-in-progress: false
+
+env:
+  EXPERIMENT_SOURCE_SHA: 'e90f5f59f578c3835ca6af6a97654eb14b2f6aa3'
+  RECOVERY_CAPTURE_RUN: '39188392569'
+  ACTIONS_STEP_DEBUG: ${{ secrets.ACTIONS_STEP_DEBUG }}
+  ACTIONS_RUNNER_DEBUG: ${{ secrets.ACTIONS_RUNNER_DEBUG }}
+
+jobs:
+  preflight:
+    permissions:
+      contents: read
+      actions: read
+    if: >-
+      github.repository == 'dczhhh/quant-strategies-code' &&
+      github.actor == 'dczhhh' && github.event_name == 'push' &&
+      github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ env.EXPERIMENT_SOURCE_SHA }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4
+      - run: uv sync --dev --locked --python 3.12
+      - name: Require exact source qualification and all retained minute fresh checks
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh api "repos/dczhhh/quant-strategies-code/actions/runs?head_sha=$EXPERIMENT_SOURCE_SHA&event=pull_request&per_page=100" > "$RUNNER_TEMP/bear2022-experiment-checks.json"
+          jq --exit-status --arg sha "$EXPERIMENT_SOURCE_SHA" '
+            [.workflow_runs[] | select(.head_sha == $sha)] |
+            group_by(.name) | map(sort_by(.run_started_at) | last) |
+            [.[] | select(.status == "completed" and .conclusion == "success") | .name] |
+            index("CI") != null and index("Ecosystem qualification") != null and
+            index("Bear 2022 experiment checks") != null and
+            index("Frequency research checks") != null and
+            index("Bear 2022 recovery checks") != null and
+            index("Bear 2022 source checks") != null and index("Bear 2022 market checks") != null
+          ' "$RUNNER_TEMP/bear2022-experiment-checks.json"
+          gh api "repos/dczhhh/quant-strategies-code/actions/runs/$RECOVERY_CAPTURE_RUN" > "$RUNNER_TEMP/bear2022-market-run.json"
+          jq --exit-status '
+            .head_sha == "43b65d807832efaac8ed6a52baf47e167a031db8" and
+            .name == "Frozen bear 2022 approved input recovery" and
+            .status == "completed" and .conclusion == "success"
+          ' "$RUNNER_TEMP/bear2022-market-run.json"
+          gh api "repos/dczhhh/quant-strategies-code/actions/runs/$RECOVERY_CAPTURE_RUN/jobs?filter=latest&per_page=100" > "$RUNNER_TEMP/bear2022-market-jobs.json"
+          jq --exit-status '.jobs | length == 20 and all(.status == "completed" and .conclusion == "success")' "$RUNNER_TEMP/bear2022-market-jobs.json"
+      - run: uv run ruff format --check tools/bear_2022_inputs.py tools/bear_2022_experiment.py tools/bear_2022_calendar.py tests/test_bear_2022_inputs.py tests/test_bear_2022_experiment.py tests/test_bear_2022_calendar.py
+      - run: uv run ruff check --no-fix tools/bear_2022_inputs.py tools/bear_2022_experiment.py tools/bear_2022_calendar.py tests/test_bear_2022_inputs.py tests/test_bear_2022_experiment.py tests/test_bear_2022_calendar.py
+      - run: uv run ty check tools/bear_2022_inputs.py tools/bear_2022_experiment.py tools/bear_2022_calendar.py
+      - run: uv run pytest tests/test_bear_2022_inputs.py tests/test_bear_2022_experiment.py tests/test_bear_2022_calendar.py tests/strategies/test_rotation_assumed_distribution.py tests/test_rotation_frequency.py -q --no-cov
+
+  replay:
+    needs: preflight
+    environment: private-archive
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ env.EXPERIMENT_SOURCE_SHA }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4
+      - run: uv sync --dev --locked --python 3.12
+      - name: Ten strategy cells plus funded SPY, no market key, private-only raw results
+        env:
+          RUNNER_ENVIRONMENT: ${{ runner.environment }}
+          ARCHIVE_WRITE_TOKEN: ${{ secrets.ARCHIVE_WRITE_TOKEN }}
+          PYTHONHASHSEED: '1'
+        run: uv run python tools/bear_2022_experiment.py run "$EXPERIMENT_SOURCE_SHA"
+
+  fresh_verify:
+    needs: replay
+    environment: private-archive
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ env.EXPERIMENT_SOURCE_SHA }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4
+      - run: uv sync --dev --locked --python 3.12
+      - name: Independent fresh runner, different hash seed, byte-exact no-write rebuild
+        env:
+          RUNNER_ENVIRONMENT: ${{ runner.environment }}
+          ARCHIVE_WRITE_TOKEN: ${{ secrets.ARCHIVE_WRITE_TOKEN }}
+          PYTHONHASHSEED: '33'
+        run: uv run python tools/bear_2022_experiment.py verify "$EXPERIMENT_SOURCE_SHA"
