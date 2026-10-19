@@ -1,0 +1,128 @@
+name: Frozen bear 2022 approved input recovery
+
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/bear-2022-recovery.yml]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: real-action-capture-v1
+  cancel-in-progress: false
+
+env:
+  RECOVERY_SOURCE_SHA: '1d6b86d895baf1d3eda35a7e8763fc1681031574'
+  ACTIONS_STEP_DEBUG: ${{ secrets.ACTIONS_STEP_DEBUG }}
+  ACTIONS_RUNNER_DEBUG: ${{ secrets.ACTIONS_RUNNER_DEBUG }}
+
+jobs:
+  preflight:
+    permissions:
+      contents: read
+      actions: read
+    if: >-
+      github.repository == 'dczhhh/quant-strategies-code' &&
+      github.actor == 'dczhhh' && github.event_name == 'push' &&
+      github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ env.RECOVERY_SOURCE_SHA }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4
+      - run: uv sync --dev --locked --python 3.12
+      - name: Require exact recovery source qualification
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh api "repos/dczhhh/quant-strategies-code/actions/runs?head_sha=$RECOVERY_SOURCE_SHA&event=pull_request&per_page=100" > "$RUNNER_TEMP/bear2022-recovery-checks.json"
+          jq --exit-status --arg sha "$RECOVERY_SOURCE_SHA" '
+            [.workflow_runs[] | select(.head_sha == $sha)] |
+            group_by(.name) | map(sort_by(.run_started_at) | last) |
+            [.[] | select(.status == "completed" and .conclusion == "success") | .name] |
+            index("CI") != null and index("Ecosystem qualification") != null and
+            index("Bear 2022 recovery checks") != null and
+            index("Bear 2022 source checks") != null and index("Bear 2022 market checks") != null
+          ' "$RUNNER_TEMP/bear2022-recovery-checks.json"
+      - run: uv run ruff format --check tools/bear_2022_recovery.py tests/test_bear_2022_recovery.py
+      - run: uv run ruff check --no-fix tools/bear_2022_recovery.py tests/test_bear_2022_recovery.py
+      - run: uv run ty check tools/bear_2022_recovery.py
+      - run: uv run pytest tests/test_bear_2022_recovery.py -q --no-cov
+
+  canary:
+    needs: preflight
+    environment: private-archive
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ env.RECOVERY_SOURCE_SHA }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4
+      - run: uv sync --dev --locked --python 3.12
+      - name: XLI missing 2 products only, all old refs immutable
+        env:
+          RUNNER_ENVIRONMENT: ${{ runner.environment }}
+          ARCHIVE_WRITE_TOKEN: ${{ secrets.ARCHIVE_WRITE_TOKEN }}
+          MASSIVE_API_KEY: ${{ secrets.massive }}
+          PYTHONHASHSEED: '1'
+        run: uv run python tools/bear_2022_recovery.py capture XLI "$RECOVERY_SOURCE_SHA"
+
+  recover:
+    needs: canary
+    environment: private-archive
+    strategy:
+      fail-fast: true
+      max-parallel: 1
+      matrix:
+        ticker: [XLK, XLP, XLRE, XLU, XLV, XLY]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ env.RECOVERY_SOURCE_SHA }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4
+      - run: uv sync --dev --locked --python 3.12
+      - name: Finite missing groups only, no Engine or SEC requests
+        env:
+          RUNNER_ENVIRONMENT: ${{ runner.environment }}
+          ARCHIVE_WRITE_TOKEN: ${{ secrets.ARCHIVE_WRITE_TOKEN }}
+          MASSIVE_API_KEY: ${{ secrets.massive }}
+          PYTHONHASHSEED: '1'
+        run: uv run python tools/bear_2022_recovery.py capture "${{ matrix.ticker }}" "$RECOVERY_SOURCE_SHA"
+
+  fresh_verify:
+    needs: [canary, recover]
+    environment: private-archive
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        ticker: [SPY, XLB, XLC, XLE, XLF, XLI, XLK, XLP, XLRE, XLU, XLV, XLY]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ env.RECOVERY_SOURCE_SHA }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4
+      - run: uv sync --dev --locked --python 3.12
+      - name: Fresh retained-byte verification, no market key or archive writes
+        env:
+          RUNNER_ENVIRONMENT: ${{ runner.environment }}
+          ARCHIVE_WRITE_TOKEN: ${{ secrets.ARCHIVE_WRITE_TOKEN }}
+          PYTHONHASHSEED: '33'
+        run: uv run python tools/bear_2022_recovery.py verify "${{ matrix.ticker }}" "$RECOVERY_SOURCE_SHA"
