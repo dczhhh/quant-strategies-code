@@ -1,0 +1,104 @@
+name: Frozen 2022 same-signal SPY controls
+
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/bear-2022-signal-spy.yml]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: real-action-capture-v1
+  cancel-in-progress: false
+
+env:
+  EXPERIMENT_SOURCE_SHA: '9da73f812b7451706065eb6628da540a3d0de7a5'
+  ANCHOR_REPLAY_RUN: '39195602408'
+  ACTIONS_STEP_DEBUG: ${{ secrets.ACTIONS_STEP_DEBUG }}
+  ACTIONS_RUNNER_DEBUG: ${{ secrets.ACTIONS_RUNNER_DEBUG }}
+
+jobs:
+  preflight:
+    permissions:
+      contents: read
+      actions: read
+    if: >-
+      github.repository == 'dczhhh/quant-strategies-code' &&
+      github.actor == 'dczhhh' && github.event_name == 'push' &&
+      github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ env.EXPERIMENT_SOURCE_SHA }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4
+      - run: uv sync --dev --locked --python 3.12
+      - name: Require exact source quality and completed original replay
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh api "repos/dczhhh/quant-strategies-code/actions/runs?head_sha=$EXPERIMENT_SOURCE_SHA&event=pull_request&per_page=100" > "$RUNNER_TEMP/signal-spy-checks.json"
+          jq --exit-status --arg sha "$EXPERIMENT_SOURCE_SHA" '
+            [.workflow_runs[] | select(.head_sha == $sha)] |
+            group_by(.name) | map(sort_by(.run_started_at) | last) |
+            [.[] | select(.status == "completed" and .conclusion == "success") | .name] |
+            index("CI") != null and index("Ecosystem qualification") != null and
+            index("Signal SPY research checks") != null and index("Bear 2022 experiment checks") != null
+          ' "$RUNNER_TEMP/signal-spy-checks.json"
+          gh api "repos/dczhhh/quant-strategies-code/actions/runs/$ANCHOR_REPLAY_RUN" > "$RUNNER_TEMP/signal-spy-anchor.json"
+          jq --exit-status '
+            .head_sha == "8e2e3615a750c4e3ee4445df68304fd15d2cba94" and
+            .name == "Frozen bear 2022 assumed-ordinary frequency replay" and
+            .status == "completed" and .conclusion == "success"
+          ' "$RUNNER_TEMP/signal-spy-anchor.json"
+          gh api "repos/dczhhh/quant-strategies-code/actions/runs/$ANCHOR_REPLAY_RUN/jobs?filter=latest&per_page=100" > "$RUNNER_TEMP/signal-spy-anchor-jobs.json"
+          jq --exit-status '.jobs | length == 3 and all(.status == "completed" and .conclusion == "success")' "$RUNNER_TEMP/signal-spy-anchor-jobs.json"
+      - run: uv run ruff format --check tools/bear_2022_signal_spy.py tests/test_bear_2022_signal_spy.py
+      - run: uv run ruff check --no-fix tools/bear_2022_signal_spy.py tests/test_bear_2022_signal_spy.py
+      - run: uv run ty check tools/bear_2022_signal_spy.py
+      - run: uv run pytest tests/test_bear_2022_signal_spy.py tests/test_bear_2022_experiment.py tests/test_rotation_v_reversal.py tests/test_rotation_frequency.py -q --no-cov
+
+  replay:
+    needs: preflight
+    environment: private-archive
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ env.EXPERIMENT_SOURCE_SHA }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4
+      - run: uv sync --dev --locked --python 3.12
+      - name: Two signal SPY cells plus exact passive controls, retained inputs only
+        env:
+          RUNNER_ENVIRONMENT: ${{ runner.environment }}
+          ARCHIVE_WRITE_TOKEN: ${{ secrets.ARCHIVE_WRITE_TOKEN }}
+          PYTHONHASHSEED: '1'
+        run: uv run python tools/bear_2022_signal_spy.py run "$EXPERIMENT_SOURCE_SHA"
+
+  fresh_verify:
+    needs: replay
+    environment: private-archive
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ env.EXPERIMENT_SOURCE_SHA }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4
+      - run: uv sync --dev --locked --python 3.12
+      - name: Independent fresh runner, different hash seed, byte-exact no-write rebuild
+        env:
+          RUNNER_ENVIRONMENT: ${{ runner.environment }}
+          ARCHIVE_WRITE_TOKEN: ${{ secrets.ARCHIVE_WRITE_TOKEN }}
+          PYTHONHASHSEED: '33'
+        run: uv run python tools/bear_2022_signal_spy.py verify "$EXPERIMENT_SOURCE_SHA"
