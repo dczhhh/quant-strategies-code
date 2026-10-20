@@ -13,7 +13,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  INPUT_SOURCE_SHA: 'ddaac328d7745324ff3aa864ef0fa39ad5d028e7'
+  INPUT_SOURCE_SHA: 'e98a407ac4dca819fe60c7749904cb199a308e3f'
   GAP_CAPTURE_RUN_ID: '39384146590'
   ACTIONS_STEP_DEBUG: ${{ secrets.ACTIONS_STEP_DEBUG }}
   ACTIONS_RUNNER_DEBUG: ${{ secrets.ACTIONS_RUNNER_DEBUG }}
