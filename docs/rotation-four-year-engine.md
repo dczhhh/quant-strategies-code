@@ -8,7 +8,7 @@ Monthly versus fifteen-session recovery produces two distinct matching SPY
 controls; actual risk-state changes are the only SPY rebalancing signals.
 
 The runner rebuilds all raw-backed inputs using frozen source
-`ddaac328d7745324ff3aa864ef0fa39ad5d028e7` and compares every private input/audit
+`e98a407ac4dca819fe60c7749904cb199a308e3f` and compares every private input/audit
 file against the already qualified archive before invoking any Engine. Original
 strategy, execution, costs, numeric exit correction and independent Decimal
 ledger tolerances apply. Every sector account also runs the independent signal

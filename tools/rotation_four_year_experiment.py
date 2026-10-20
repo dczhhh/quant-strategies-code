@@ -20,7 +20,7 @@ from tools import rotation_four_year_metrics as metrics  # noqa: E402
 
 a, c, u = inputs_archive.a, inputs_archive.c, inputs_archive.u
 q = a.q
-INPUT_SOURCE = "ddaac328d7745324ff3aa864ef0fa39ad5d028e7"
+INPUT_SOURCE = "e98a407ac4dca819fe60c7749904cb199a308e3f"
 STEPS = ("0.1", "1")
 CASES = (*m.CASES, *m.SPY_CASES)
 PREFIX = "research/verification/rotation_four_year_engine_v1/"

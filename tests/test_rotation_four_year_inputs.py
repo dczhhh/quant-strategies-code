@@ -2,13 +2,40 @@
 
 from copy import deepcopy
 from dataclasses import replace
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 
 import pytest
 
 from tests.strategies.test_rotation_research import inputs as invented_inputs
 from tools import rotation_four_year_inputs as a
+
+
+def test_issuer_tax_namespacing_preserves_the_original_receipt_clock():
+    item = {
+        "body": b"invented issuer workbook bytes",
+        "receipt": {
+            "schema": "real_etf_issuer_receipt_v1",
+            "fetched_at": "2026-10-14T10:39:23.632039+00:00",
+            "response_received_at": "2026-10-20T08:00:00+00:00",
+        },
+    }
+    before = deepcopy(item)
+    result = a.issuer_tax_source(item)
+    assert result.identifier == "four-year:tax:2025"
+    assert result.observed_at == datetime.fromisoformat(item["receipt"]["fetched_at"])
+    assert result.sha256 == a.c.m.sha256(item["body"])
+    assert result.url == a.c.p.DOCUMENTS[1]["url"]
+    assert item == before
+
+
+def test_market_receipt_cannot_replace_issuer_observation_provenance():
+    item = {
+        "body": b"invented",
+        "receipt": {"schema": "market", "response_received_at": "2026-10-20T08:00:00+00:00"},
+    }
+    with pytest.raises(a.u.c.p.Blocked, match="ISSUER_RECEIPT_SCHEMA_INVALID"):
+        a.issuer_tax_source(item)
 
 
 def test_namespace_and_overlap_are_deterministic_without_source_id_collision():

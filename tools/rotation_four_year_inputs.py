@@ -326,6 +326,13 @@ def finish(rows, days, settlement_sid):
     )
 
 
+def issuer_tax_source(item):
+    """Validate the original issuer receipt before assigning the merged source ID."""
+    doc = c.p.DOCUMENTS[1]
+    original = u.source(doc["id"], item["body"], item["receipt"], doc["url"])
+    return replace(original, identifier="four-year:tax:2025")
+
+
 def build(factory, source):
     c.m.sha(source)
     old, normalized = old_inputs(factory)
@@ -340,12 +347,7 @@ def build(factory, source):
     tax_by_year = {year: c.p.workbook(item["body"]) for year, item in archival.items()}
     for year, item in archival.items():
         rows.source(replace(item["source"], identifier=f"four-year:tax:{year}"))
-    doc = c.p.DOCUMENTS[1]
-    rows.source(
-        u.source(
-            "four-year:tax:2025", docs[doc["id"]]["body"], docs[doc["id"]]["receipt"], doc["url"]
-        )
-    )
+    rows.source(issuer_tax_source(docs[c.p.DOCUMENTS[1]["id"]]))
     receipts = add_gaps(rows, factory)
     split_pins = add_original_splits(rows, factory, normalized["bear2022"])
     cash_checks, counts = classify(rows, history, tax_2025, tax_by_year)
