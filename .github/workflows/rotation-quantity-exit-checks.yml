@@ -1,0 +1,27 @@
+name: Quantity exit research checks
+
+on:
+  pull_request:
+    paths:
+      - tools/rotation_quantity_exit*.py
+      - tests/test_rotation_quantity_exit*.py
+      - .github/workflows/rotation-quantity-exit-checks.yml
+
+permissions:
+  contents: read
+
+jobs:
+  quantity_exit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4
+      - run: uv sync --dev --locked --python 3.12
+      - run: uv run ruff format --check tools/rotation_quantity_exit*.py tests/test_rotation_quantity_exit*.py
+      - run: uv run ruff check --no-fix tools/rotation_quantity_exit*.py tests/test_rotation_quantity_exit*.py
+        if: always()
+      - run: uv run ty check tools/rotation_quantity_exit*.py
+        if: always()
+      - run: uv run pytest tests/test_rotation_quantity_exit.py tests/test_rotation_quantity_exit_audit.py tests/accounting/test_gatekeeper.py tests/test_rotation_frequency.py tests/test_bear_2022_signal_spy.py -q --no-cov
+        if: always()
