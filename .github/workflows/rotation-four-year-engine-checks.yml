@@ -5,7 +5,9 @@ on:
     paths:
       - tools/rotation_four_year_experiment.py
       - tools/rotation_four_year_metrics.py
+      - tools/rotation_four_year_spy_recovery.py
       - tests/test_rotation_four_year_experiment.py
+      - tests/test_rotation_four_year_spy_recovery.py
       - .github/workflows/rotation-four-year-engine-checks.yml
 
 permissions:
@@ -22,10 +24,10 @@ jobs:
           persist-credentials: false
       - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4
       - run: uv sync --dev --locked --python 3.12
-      - run: uv run ruff format --check tools/rotation_four_year_experiment.py tools/rotation_four_year_metrics.py tests/test_rotation_four_year_experiment.py
-      - run: uv run ruff check --no-fix tools/rotation_four_year_experiment.py tools/rotation_four_year_metrics.py tests/test_rotation_four_year_experiment.py
+      - run: uv run ruff format --check tools/rotation_four_year_experiment.py tools/rotation_four_year_metrics.py tools/rotation_four_year_spy_recovery.py tests/test_rotation_four_year_experiment.py tests/test_rotation_four_year_spy_recovery.py
+      - run: uv run ruff check --no-fix tools/rotation_four_year_experiment.py tools/rotation_four_year_metrics.py tools/rotation_four_year_spy_recovery.py tests/test_rotation_four_year_experiment.py tests/test_rotation_four_year_spy_recovery.py
         if: always()
-      - run: uv run ty check tools/rotation_four_year_experiment.py tools/rotation_four_year_metrics.py
+      - run: uv run ty check tools/rotation_four_year_experiment.py tools/rotation_four_year_metrics.py tools/rotation_four_year_spy_recovery.py
         if: always()
-      - run: uv run pytest tests/test_rotation_four_year_experiment.py tests/test_rotation_four_year_matrix.py tests/test_rotation_four_year_inputs.py tests/test_rotation_four_year_input_archive.py -q --no-cov
+      - run: uv run pytest tests/test_rotation_four_year_experiment.py tests/test_rotation_four_year_spy_recovery.py tests/test_rotation_four_year_matrix.py tests/test_rotation_four_year_inputs.py tests/test_rotation_four_year_input_archive.py -q --no-cov
         if: always()

@@ -17,14 +17,15 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from tools import rotation_four_year_input_archive as inputs_archive  # noqa: E402
 from tools import rotation_four_year_matrix as m  # noqa: E402
 from tools import rotation_four_year_metrics as metrics  # noqa: E402
+from tools import rotation_four_year_spy_recovery as spy_recovery  # noqa: E402
 
 a, c, u = inputs_archive.a, inputs_archive.c, inputs_archive.u
 q = a.q
 INPUT_SOURCE = "e98a407ac4dca819fe60c7749904cb199a308e3f"
 STEPS = ("0.1", "1")
 CASES = (*m.CASES, *m.SPY_CASES)
-PREFIX = "research/verification/rotation_four_year_engine_v1/"
-REF = "research-data/rotation-four-year-continuous-engine-v1"
+PREFIX = "research/verification/rotation_four_year_engine_v2/"
+REF = "research-data/rotation-four-year-continuous-engine-v2"
 WORKFLOW = ".github/workflows/rotation-four-year-engine.yml"
 MAX_RAW, MAX_PARTS, MAX_FILES = 128 * 1024 * 1024, 64, 401
 ASSUMPTION_SOURCE = "bear2022:assumption:2022"
@@ -118,6 +119,7 @@ def run_cell(inputs, assumption, case, settings=None):
         else m.benchmark_engine(inputs, assumption, case, settings)
     )
     oracle = m.MatrixOracle(engine, case) if case in m.CASES else None
+    recovery = spy_recovery.bind(engine) if case in {"SPY_SIGNAL_M", "SPY_SIGNAL_T15R"} else None
     broker, admitted = engine.broker, []
     original = broker.submit_order
 
@@ -146,6 +148,7 @@ def run_cell(inputs, assumption, case, settings=None):
     broker.submit_order = capture
     result = u.engine_result(engine)
     signal = oracle.finish() if oracle else None
+    recovery_audit = recovery.finish() if recovery else None
     need(result["engine"]["status"] == "RETROSPECTIVE_ENGINE_LEDGER_PASS", "LEDGER")
     fees = q.w.f.order_fee_audit(engine)
     if assumption.share_step < 1:
@@ -191,6 +194,7 @@ def run_cell(inputs, assumption, case, settings=None):
         parent_order_day_groups=len(fees["orders"]),
         partial_fill_groups=sum(row["fill_count"] > 1 for row in fees["orders"]),
         independent_ledger=result["engine"]["independent_ledger"],
+        spy_recovery_execution=recovery_audit,
         phases=[
             q.w.period(portfolio["daily"], date(2025, 2, 19), date(2025, 4, 8)),
             q.w.period(portfolio["daily"], date(2025, 4, 8), date(2025, 6, 30)),
@@ -202,6 +206,7 @@ def run_cell(inputs, assumption, case, settings=None):
         "result": result,
         "portfolio": portfolio,
         "signal_oracle": signal,
+        "spy_recovery_execution": recovery_audit,
         "strategy_settings": asdict(engine.strategy.config),
         "assumptions": asdict(assumption),
         "observed_spy_signals": getattr(engine.strategy, "observed_signals", []),
@@ -287,7 +292,9 @@ def matrix(inputs, source, *, input_bundle, settings=None, progress=None):
             },
         }
     comparison = {
-        "schema": "rotation_four_year_continuous_experiment_v1",
+        "schema": "rotation_four_year_continuous_experiment_v2",
+        "superseded_control_source": "20b5d6904c4ef8b0f7b7ac74d4973c3297df8c20",
+        "control_correction": "causal_recovery_plan_calendar_and_canonical_cash_funding",
         "source_commit": source,
         "input_source_commit": INPUT_SOURCE,
         "input_bundle_sha256": input_bundle,
@@ -317,7 +324,7 @@ def matrix(inputs, source, *, input_bundle, settings=None, progress=None):
     add_logical(files, index, "comparison.json", u.canonical(comparison))
     files[PREFIX + "manifest.json"] = u.canonical(
         {
-            "schema": "rotation_four_year_engine_manifest_v1",
+            "schema": "rotation_four_year_engine_manifest_v2",
             "source_commit": source,
             "input_source_commit": INPUT_SOURCE,
             "input_bundle_sha256": input_bundle,

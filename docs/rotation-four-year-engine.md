@@ -26,6 +26,38 @@ the report; the qualified input archive is never rewritten. Regression checks
 compare all sixteen complete Engine results against the original canonical-ID
 fixture and reject other years, sources, collisions and unrelated references.
 
+## SPY recovery execution correction (report v2)
+
+The original SPY control reused a monthly-only plan-creation gate. Fifteen-session
+recovery signals could therefore be rejected solely for occurring outside the
+monthly calendar. Recovery sizing also used total NAV, including an unpaid
+dividend receivable. The cash guard correctly rejected an allocation that would
+spend that receivable or consume the fixed cash reserve. These implementation
+effects made the v1 SPY recovery controls unsuitable for the frozen comparison.
+
+The isolated v2 adapter permits plan creation only during a validated, observed
+recovery on its next execution session. It requires the exact SPY signal plan ID,
+current recovered state and existing trading window. It cannot create calendar
+top-ups. Before forwarding to the unchanged original plan manager, it sizes the
+increment downward in the existing share quantum until the canonical account
+guard accepts its estimated execution cost and fees. The requested target is an
+upper bound; cash, reserves, settlement, dividend payment dates, fees, participation,
+plan continuation and actual-fill checks retain their original rules. No unpaid
+dividend is credited early. An independent signal reference checks every recovery
+creation; the report records the sizing decisions and canonical cash snapshot.
+
+Tests reproduce both the rejected non-monthly recovery and the unpaid-dividend
+cash rejection. They require actual recovery buys, retain the receivable, reject
+unobserved recovery authorization and compare downgrade-only 2022 results byte
+for byte with the original controls. A real normalized-input diagnostic also
+reproduces the first 2023 cash rejection and verifies a funded next-minute recovery
+fill under the original account guard and independent ledger.
+
+Source `20b5d6904c4ef8b0f7b7ac74d4973c3297df8c20` and its v1 report are superseded
+for four-year performance comparisons. Corrected reports use the explicit
+`rotation_four_year_engine_v2` prefix and create-only v2 ref; existing v1 bytes are
+never overwritten. The qualified input source and input archive remain unchanged.
+
 Complete orders, admissions, rejections, controller checks, fees, fills, actions,
 monthly net trades, holdings, NAV paths and oracles are retained privately per
 account. Year/quarter returns use the previous period's ending NAV; the first
