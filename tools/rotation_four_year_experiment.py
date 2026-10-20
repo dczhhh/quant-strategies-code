@@ -8,7 +8,7 @@ import os
 import subprocess
 import sys
 from collections import Counter
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from datetime import date
 from decimal import Decimal
 from pathlib import Path
@@ -27,11 +27,87 @@ PREFIX = "research/verification/rotation_four_year_engine_v1/"
 REF = "research-data/rotation-four-year-continuous-engine-v1"
 WORKFLOW = ".github/workflows/rotation-four-year-engine.yml"
 MAX_RAW, MAX_PARTS, MAX_FILES = 128 * 1024 * 1024, 64, 401
+ASSUMPTION_SOURCE = "bear2022:assumption:2022"
+ENGINE_ASSUMPTION_SOURCE = "assumption:2022"
 
 
 def need(ok, code):
     if not ok:
         raise ValueError("FOUR_YEAR_ENGINE_" + code)
+
+
+def engine_input_view(inputs):
+    """Restore only the original year-bound identifier after archive comparison.
+
+    The continuous archive namespaces source IDs. The original research provider
+    deliberately accepts only assumption:2022; its guard remains unchanged.
+    """
+    assumed = [e for e in inputs.distributions if e.classification == "assumed_ordinary_fund"]
+    if not assumed:
+        return inputs, None
+    need(
+        all(
+            e.ex_date.year == 2022 and e.classification_source_id == ASSUMPTION_SOURCE
+            for e in assumed
+        ),
+        "ASSUMPTION_ALIAS_SCOPE",
+    )
+    source = inputs.source_map.get(ASSUMPTION_SOURCE)
+    _, body = q.e.x.contract()
+    need(
+        source is not None
+        and source.sha256 == c.m.sha256(body)
+        and source.url == f"https://github.com/{c.m.CODE}/blob/{q.b.BASE}/{q.e.x.ASSUMPTION_PATH}",
+        "ASSUMPTION_ALIAS_BINDING",
+    )
+    need(ENGINE_ASSUMPTION_SOURCE not in inputs.source_map, "ASSUMPTION_ALIAS_COLLISION")
+    need(
+        inputs.settlement_source_id != ASSUMPTION_SOURCE
+        and all(
+            row.source_id != ASSUMPTION_SOURCE
+            for group in (
+                inputs.closes,
+                inputs.bars,
+                inputs.distributions,
+                inputs.splits,
+                inputs.securities,
+            )
+            for row in group
+        )
+        and all(
+            e.classification == "assumed_ordinary_fund"
+            for e in inputs.distributions
+            if e.classification_source_id == ASSUMPTION_SOURCE
+        ),
+        "ASSUMPTION_ALIAS_REFERENCE",
+    )
+    view = replace(
+        inputs,
+        sources=tuple(
+            replace(row, identifier=ENGINE_ASSUMPTION_SOURCE)
+            if row.identifier == ASSUMPTION_SOURCE
+            else row
+            for row in inputs.sources
+        ),
+        distributions=tuple(
+            replace(row, classification_source_id=ENGINE_ASSUMPTION_SOURCE)
+            if row.classification_source_id == ASSUMPTION_SOURCE
+            else row
+            for row in inputs.distributions
+        ),
+    )
+    return view, {
+        "archive_identifier": ASSUMPTION_SOURCE,
+        "engine_identifier": ENGINE_ASSUMPTION_SOURCE,
+        "source_sha256": source.sha256,
+        "source_url": source.url,
+        "source_observed_at": source.observed_at,
+        "assumed_event_year": 2022,
+        "affected_events": len(assumed),
+        "economic_fields_changed": False,
+        "provider_guard_changed": False,
+        "qualified_archive_rewritten": False,
+    }
 
 
 def run_cell(inputs, assumption, case, settings=None):
@@ -168,6 +244,7 @@ def add_logical(files, index, name, raw):
 
 
 def matrix(inputs, source, *, input_bundle, settings=None, progress=None):
+    inputs, identifier_alias = engine_input_view(inputs)
     files, index, cells, contrasts, risk_checks = {}, {}, {}, {}, {}
     for step in STEPS:
         reference_by_control = {}
@@ -214,6 +291,8 @@ def matrix(inputs, source, *, input_bundle, settings=None, progress=None):
         "source_commit": source,
         "input_source_commit": INPUT_SOURCE,
         "input_bundle_sha256": input_bundle,
+        "engine_input_identifier_alias": identifier_alias,
+        "engine_input_fingerprint": inputs.fingerprint,
         "execution_first": str(inputs.bars[0].end.astimezone(u.NY).date()),
         "execution_last": str(inputs.bars[-1].end.astimezone(u.NY).date()),
         "accounts": 16,

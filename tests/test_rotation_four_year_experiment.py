@@ -3,12 +3,14 @@
 import copy
 import gzip
 import json
+from dataclasses import replace
 from datetime import date, datetime
 from decimal import Decimal
 
 import pytest
 
 from tests.strategies.test_rotation_research import inputs, settings
+from tests.test_bear_2022_experiment import assumed_inputs
 from tests.test_private_archive_migration import FakeGitHub
 from tools import rotation_four_year_experiment as a
 from tools import rotation_four_year_metrics as metrics
@@ -64,6 +66,106 @@ def test_risk_path_corruption_or_duplicate_observation_fails():
         a.check_spy_path(data, reference, changed)
     with pytest.raises(ValueError, match="MATCHING_SPY_RISK_PATH"):
         a.check_spy_path(data, reference, observed + observed[-1:])
+
+
+def namespaced_assumption_inputs():
+    original = assumed_inputs()
+    _, body = a.q.e.x.contract()
+    source = replace(
+        original.source_map[a.ENGINE_ASSUMPTION_SOURCE],
+        sha256=a.c.m.sha256(body),
+        url=f"https://github.com/{a.c.m.CODE}/blob/{a.q.b.BASE}/{a.q.e.x.ASSUMPTION_PATH}",
+    )
+    original = replace(
+        original,
+        sources=tuple(source if r.identifier == source.identifier else r for r in original.sources),
+    )
+    namespaced = replace(
+        original,
+        sources=tuple(
+            replace(r, identifier=a.ASSUMPTION_SOURCE)
+            if r.identifier == a.ENGINE_ASSUMPTION_SOURCE
+            else r
+            for r in original.sources
+        ),
+        distributions=tuple(
+            replace(r, classification_source_id=a.ASSUMPTION_SOURCE) for r in original.distributions
+        ),
+    )
+    return original, namespaced
+
+
+def test_namespaced_2022_alias_preserves_all_sixteen_original_engine_results():
+    original, namespaced = namespaced_assumption_inputs()
+    before = a.u.canonical(namespaced)
+    with pytest.raises(ValueError, match="explicit year-bound"):
+        a.m.matrix_engine(namespaced, a.q.e.assumptions("0.1"), "M", settings())
+    view, alias = a.engine_input_view(namespaced)
+    assert a.u.canonical(view) == a.u.canonical(original)
+    assert a.u.canonical(namespaced) == before
+    assert alias["affected_events"] == 1
+    assert alias["provider_guard_changed"] is False
+    comparison, files = a.matrix(namespaced, "e" * 40, input_bundle="f" * 64, settings=settings())
+    assert comparison["engine_input_identifier_alias"] == alias
+    manifest = json.loads(files[a.PREFIX + "manifest.json"])
+    for step in a.STEPS:
+        for case in a.CASES:
+            expected, _, _ = a.run_cell(original, a.q.e.assumptions(step), case, settings())
+            item = manifest["logical_files"][f"P{step}_{case}.json"]
+            actual = gzip.decompress(b"".join(files[path] for path in item["parts"]))
+            assert actual == a.u.canonical(expected)
+
+
+@pytest.mark.parametrize("bad", ["year", "identifier", "hash", "url", "collision", "reference"])
+def test_assumption_alias_cannot_widen_year_source_or_reference_scope(bad):
+    _, data = namespaced_assumption_inputs()
+    if bad == "year":
+        data = replace(
+            data,
+            distributions=tuple(
+                replace(
+                    e,
+                    ex_date=date(2023, 1, 3),
+                    record_date=date(2023, 1, 3),
+                    pay_date=date(2023, 1, 5),
+                )
+                for e in data.distributions
+            ),
+        )
+    elif bad == "identifier":
+        data = replace(
+            data,
+            distributions=tuple(
+                replace(e, classification_source_id="fixture") for e in data.distributions
+            ),
+        )
+    elif bad in {"hash", "url"}:
+        changed = (
+            {"sha256": "a" * 64} if bad == "hash" else {"url": "https://example.invalid/other"}
+        )
+        data = replace(
+            data,
+            sources=tuple(
+                replace(s, **changed) if s.identifier == a.ASSUMPTION_SOURCE else s
+                for s in data.sources
+            ),
+        )
+    elif bad == "collision":
+        data = replace(
+            data,
+            sources=(
+                *data.sources,
+                replace(
+                    data.source_map[a.ASSUMPTION_SOURCE], identifier=a.ENGINE_ASSUMPTION_SOURCE
+                ),
+            ),
+        )
+    else:
+        data = replace(
+            data, bars=(replace(data.bars[0], source_id=a.ASSUMPTION_SOURCE), *data.bars[1:])
+        )
+    with pytest.raises(ValueError, match="ASSUMPTION_ALIAS"):
+        a.engine_input_view(data)
 
 
 def test_create_only_report_and_fresh_verify_compare_every_file(replay):

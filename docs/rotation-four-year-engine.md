@@ -15,6 +15,17 @@ ledger tolerances apply. Every sector account also runs the independent signal
 and submitted-intent oracle. Both SPY signal calendars are compared against the
 corresponding sector reference on every available signal date.
 
+After the qualified archive is compared, an explicit Engine input view restores
+only `bear2022:assumption:2022` to the provider's original `assumption:2022` ID.
+The source must match the frozen 2022 policy hash and original source URL; all
+affected events must remain in 2022. Only the source identifier and its tax-source
+references change. Source bytes, observation clock, event identity, cash, dates,
+classification, tax rate and every other input remain unchanged. The original
+provider guard is preserved. The alias and Engine input fingerprint accompany
+the report; the qualified input archive is never rewritten. Regression checks
+compare all sixteen complete Engine results against the original canonical-ID
+fixture and reject other years, sources, collisions and unrelated references.
+
 Complete orders, admissions, rejections, controller checks, fees, fills, actions,
 monthly net trades, holdings, NAV paths and oracles are retained privately per
 account. Year/quarter returns use the previous period's ending NAV; the first
