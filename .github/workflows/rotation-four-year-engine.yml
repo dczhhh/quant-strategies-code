@@ -13,8 +13,8 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  ENGINE_SOURCE_SHA: '8a5fa6a1605a172b7b2763e7e43a4efe1789f2ca'
-  INPUT_QUALIFICATION_RUN_ID: '39393282378'
+  ENGINE_SOURCE_SHA: '9d5c61de74c06718920da1380a648baebf166a71'
+  INPUT_QUALIFICATION_WORKFLOW_BLOB: 'b494f626dd15cb057a05f90b502eefaef2256906'
   ACTIONS_STEP_DEBUG: ${{ secrets.ACTIONS_STEP_DEBUG }}
   ACTIONS_RUNNER_DEBUG: ${{ secrets.ACTIONS_RUNNER_DEBUG }}
 
@@ -49,8 +49,30 @@ jobs:
             [.[] | select(.status == "completed" and .conclusion == "success") | .name] |
             index("CI") != null and index("Ecosystem qualification") != null and index("Four-year sixteen-account Engine checks") != null
           ' "$RUNNER_TEMP/four-year-engine-checks.json"
-          gh api "repos/dczhhh/quant-strategies-code/actions/runs/$INPUT_QUALIFICATION_RUN_ID" > "$RUNNER_TEMP/four-year-input-qualification.json"
-          jq --exit-status '.name == "Frozen four-year continuous input qualification" and .status == "completed" and .conclusion == "success"' "$RUNNER_TEMP/four-year-input-qualification.json"
+          gh api "repos/dczhhh/quant-strategies-code/actions/workflows/rotation-four-year-continuous-inputs.yml/runs?event=push&per_page=100" > "$RUNNER_TEMP/four-year-input-runs.json"
+          qualified=false
+          while IFS=$'\t' read -r run_id head; do
+            [[ "$run_id" =~ ^[0-9]+$ && "$head" =~ ^[0-9a-f]{40}$ ]]
+            blob="$(gh api "repos/dczhhh/quant-strategies-code/contents/.github/workflows/rotation-four-year-continuous-inputs.yml?ref=$head" --jq '.sha')"
+            if [[ "$blob" != "$INPUT_QUALIFICATION_WORKFLOW_BLOB" ]]; then
+              continue
+            fi
+            gh api "repos/dczhhh/quant-strategies-code/actions/runs/$run_id/jobs?filter=latest&per_page=100" > "$RUNNER_TEMP/four-year-input-jobs.json"
+            jq --exit-status '
+              [.jobs[] | select(.name == "preflight" or .name == "audit" or .name == "verify")] |
+              length == 3 and all(.[]; .status == "completed" and .conclusion == "success")
+            ' "$RUNNER_TEMP/four-year-input-jobs.json"
+            printf 'Qualified original input run: %s\n' "$run_id"
+            qualified=true
+            break
+          done < <(jq --raw-output '
+            .workflow_runs | sort_by(.id) | reverse | .[] |
+            select(.name == "Frozen four-year continuous input qualification" and
+                   .event == "push" and .head_branch == "main" and
+                   .status == "completed" and .conclusion == "success" and
+                   .actor.login == "dczhhh") | [.id, .head_sha] | @tsv
+          ' "$RUNNER_TEMP/four-year-input-runs.json")
+          [[ "$qualified" == true ]]
       - run: uv run pytest tests/test_rotation_four_year_experiment.py -q --no-cov
 
   replay:
