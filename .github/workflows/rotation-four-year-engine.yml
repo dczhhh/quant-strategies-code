@@ -13,7 +13,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  ENGINE_SOURCE_SHA: '20b5d6904c4ef8b0f7b7ac74d4973c3297df8c20'
+  ENGINE_SOURCE_SHA: '44cc424cea3cedf36ac816046181a38a2e243e83'
   INPUT_QUALIFICATION_WORKFLOW_BLOB: 'b494f626dd15cb057a05f90b502eefaef2256906'
   ACTIONS_STEP_DEBUG: ${{ secrets.ACTIONS_STEP_DEBUG }}
   ACTIONS_RUNNER_DEBUG: ${{ secrets.ACTIONS_RUNNER_DEBUG }}
@@ -73,7 +73,7 @@ jobs:
                    .actor.login == "dczhhh") | [.id, .head_sha] | @tsv
           ' "$RUNNER_TEMP/four-year-input-runs.json")
           [[ "$qualified" == true ]]
-      - run: uv run pytest tests/test_rotation_four_year_experiment.py -q --no-cov
+      - run: uv run pytest tests/test_rotation_four_year_experiment.py tests/test_rotation_four_year_spy_recovery.py -q --no-cov
 
   replay:
     needs: preflight
