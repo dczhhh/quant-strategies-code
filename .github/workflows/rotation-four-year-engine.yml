@@ -1,0 +1,116 @@
+name: Frozen four-year sixteen-account Engine replay
+
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/rotation-four-year-engine.yml]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: real-action-capture-v1
+  cancel-in-progress: false
+
+env:
+  ENGINE_SOURCE_SHA: '9d5c61de74c06718920da1380a648baebf166a71'
+  INPUT_QUALIFICATION_WORKFLOW_BLOB: 'b494f626dd15cb057a05f90b502eefaef2256906'
+  ACTIONS_STEP_DEBUG: ${{ secrets.ACTIONS_STEP_DEBUG }}
+  ACTIONS_RUNNER_DEBUG: ${{ secrets.ACTIONS_RUNNER_DEBUG }}
+
+jobs:
+  preflight:
+    permissions:
+      contents: read
+      actions: read
+    if: >-
+      github.repository == 'dczhhh/quant-strategies-code' &&
+      github.actor == 'dczhhh' && github.event_name == 'push' &&
+      github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ env.ENGINE_SOURCE_SHA }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4
+      - run: uv sync --dev --locked --python 3.12
+      - name: Require complete source checks and successful independent input qualification
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh api "repos/dczhhh/quant-strategies-code/actions/runs?head_sha=$ENGINE_SOURCE_SHA&event=pull_request&per_page=100" > "$RUNNER_TEMP/four-year-engine-checks.json"
+          jq --exit-status --arg sha "$ENGINE_SOURCE_SHA" '
+            [.workflow_runs[] | select(.head_sha == $sha)] |
+            group_by(.name) | map(sort_by(.run_started_at) | last) |
+            [.[] | select(.status == "completed" and .conclusion == "success") | .name] |
+            index("CI") != null and index("Ecosystem qualification") != null and index("Four-year sixteen-account Engine checks") != null
+          ' "$RUNNER_TEMP/four-year-engine-checks.json"
+          gh api "repos/dczhhh/quant-strategies-code/actions/workflows/rotation-four-year-continuous-inputs.yml/runs?event=push&per_page=100" > "$RUNNER_TEMP/four-year-input-runs.json"
+          qualified=false
+          while IFS=$'\t' read -r run_id head; do
+            [[ "$run_id" =~ ^[0-9]+$ && "$head" =~ ^[0-9a-f]{40}$ ]]
+            blob="$(gh api "repos/dczhhh/quant-strategies-code/contents/.github/workflows/rotation-four-year-continuous-inputs.yml?ref=$head" --jq '.sha')"
+            if [[ "$blob" != "$INPUT_QUALIFICATION_WORKFLOW_BLOB" ]]; then
+              continue
+            fi
+            gh api "repos/dczhhh/quant-strategies-code/actions/runs/$run_id/jobs?filter=latest&per_page=100" > "$RUNNER_TEMP/four-year-input-jobs.json"
+            jq --exit-status '
+              [.jobs[] | select(.name == "preflight" or .name == "audit" or .name == "verify")] |
+              length == 3 and all(.[]; .status == "completed" and .conclusion == "success")
+            ' "$RUNNER_TEMP/four-year-input-jobs.json"
+            printf 'Qualified original input run: %s\n' "$run_id"
+            qualified=true
+            break
+          done < <(jq --raw-output '
+            .workflow_runs | sort_by(.id) | reverse | .[] |
+            select(.name == "Frozen four-year continuous input qualification" and
+                   .event == "push" and .head_branch == "main" and
+                   .status == "completed" and .conclusion == "success" and
+                   .actor.login == "dczhhh") | [.id, .head_sha] | @tsv
+          ' "$RUNNER_TEMP/four-year-input-runs.json")
+          [[ "$qualified" == true ]]
+      - run: uv run pytest tests/test_rotation_four_year_experiment.py -q --no-cov
+
+  replay:
+    needs: preflight
+    environment: private-archive
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ env.ENGINE_SOURCE_SHA }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4
+      - run: uv sync --dev --locked --python 3.12
+      - name: Rebuild qualified raw inputs and run sixteen continuous accounts
+        env:
+          RUNNER_ENVIRONMENT: ${{ runner.environment }}
+          ARCHIVE_WRITE_TOKEN: ${{ secrets.ARCHIVE_WRITE_TOKEN }}
+          PYTHONHASHSEED: '1'
+        run: uv run python tools/rotation_four_year_experiment.py run "$ENGINE_SOURCE_SHA"
+
+  verify:
+    needs: replay
+    environment: private-archive
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ env.ENGINE_SOURCE_SHA }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4
+      - run: uv sync --dev --locked --python 3.12
+      - name: Fresh raw-backed sixteen-account reproduction and complete byte comparison
+        env:
+          RUNNER_ENVIRONMENT: ${{ runner.environment }}
+          ARCHIVE_WRITE_TOKEN: ${{ secrets.ARCHIVE_WRITE_TOKEN }}
+          PYTHONHASHSEED: '33'
+        run: uv run python tools/rotation_four_year_experiment.py verify "$ENGINE_SOURCE_SHA"
