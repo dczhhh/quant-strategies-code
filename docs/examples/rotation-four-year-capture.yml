@@ -1,0 +1,126 @@
+name: Frozen four-year gap capture
+
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/rotation-four-year-capture.yml]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: real-action-capture-v1
+  cancel-in-progress: false
+
+env:
+  GAP_SOURCE_SHA: '__REVIEWED_SOURCE_SHA__'
+  ACTIONS_STEP_DEBUG: ${{ secrets.ACTIONS_STEP_DEBUG }}
+  ACTIONS_RUNNER_DEBUG: ${{ secrets.ACTIONS_RUNNER_DEBUG }}
+
+jobs:
+  preflight:
+    permissions:
+      contents: read
+      actions: read
+    if: >-
+      github.repository == 'dczhhh/quant-strategies-code' &&
+      github.actor == 'dczhhh' && github.event_name == 'push' &&
+      github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ env.GAP_SOURCE_SHA }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4
+      - run: uv sync --dev --locked --python 3.12
+      - name: Require complete successful checks on the exact immutable source
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh api "repos/dczhhh/quant-strategies-code/actions/runs?head_sha=$GAP_SOURCE_SHA&event=pull_request&per_page=100" > "$RUNNER_TEMP/four-year-source-checks.json"
+          jq --exit-status --arg sha "$GAP_SOURCE_SHA" '
+            [.workflow_runs[] | select(.head_sha == $sha)] |
+            group_by(.name) | map(sort_by(.run_started_at) | last) |
+            [.[] | select(.status == "completed" and .conclusion == "success") | .name] |
+            index("CI") != null and index("Ecosystem qualification") != null and index("Four-year gap capture checks") != null
+          ' "$RUNNER_TEMP/four-year-source-checks.json"
+      - run: uv run ruff format --check tools/rotation_four_year_capture.py tests/test_rotation_four_year_capture.py
+      - run: uv run ruff check --no-fix tools/rotation_four_year_capture.py tests/test_rotation_four_year_capture.py
+      - run: uv run ty check tools/rotation_four_year_capture.py
+      - run: uv run pytest tests/test_rotation_four_year_capture.py tests/test_rotation_four_year_inventory.py -q --no-cov
+
+  canary:
+    needs: preflight
+    environment: private-archive
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ env.GAP_SOURCE_SHA }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4
+      - run: uv sync --dev --locked --python 3.12
+      - name: SPY only, bounded 192 products, any failure stops remaining symbols
+        env:
+          RUNNER_ENVIRONMENT: ${{ runner.environment }}
+          ARCHIVE_WRITE_TOKEN: ${{ secrets.ARCHIVE_WRITE_TOKEN }}
+          MASSIVE_API_KEY: ${{ secrets.massive }}
+          PYTHONHASHSEED: '1'
+        run: uv run python tools/rotation_four_year_capture.py capture SPY "$GAP_SOURCE_SHA"
+
+  capture:
+    needs: canary
+    environment: private-archive
+    strategy:
+      fail-fast: true
+      max-parallel: 2
+      matrix:
+        ticker: [XLB, XLC, XLE, XLF, XLI, XLK, XLP, XLRE, XLU, XLV, XLY]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ env.GAP_SOURCE_SHA }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4
+      - run: uv sync --dev --locked --python 3.12
+      - name: Immutable finite raw minute and action inputs, no Engine
+        env:
+          RUNNER_ENVIRONMENT: ${{ runner.environment }}
+          ARCHIVE_WRITE_TOKEN: ${{ secrets.ARCHIVE_WRITE_TOKEN }}
+          MASSIVE_API_KEY: ${{ secrets.massive }}
+          PYTHONHASHSEED: '1'
+        run: uv run python tools/rotation_four_year_capture.py capture "${{ matrix.ticker }}" "$GAP_SOURCE_SHA"
+
+  verify:
+    needs: [canary, capture]
+    environment: private-archive
+    strategy:
+      fail-fast: true
+      max-parallel: 2
+      matrix:
+        ticker: [SPY, XLB, XLC, XLE, XLF, XLI, XLK, XLP, XLRE, XLU, XLV, XLY]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ env.GAP_SOURCE_SHA }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4
+      - run: uv sync --dev --locked --python 3.12
+      - name: Fresh retained-byte verification without market key or archive writes
+        env:
+          RUNNER_ENVIRONMENT: ${{ runner.environment }}
+          ARCHIVE_WRITE_TOKEN: ${{ secrets.ARCHIVE_WRITE_TOKEN }}
+          PYTHONHASHSEED: '33'
+        run: uv run python tools/rotation_four_year_capture.py verify "${{ matrix.ticker }}" "$GAP_SOURCE_SHA"
