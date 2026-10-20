@@ -1,0 +1,31 @@
+name: Bear 2022 market checks
+
+on:
+  pull_request:
+    paths:
+      - tools/bear_2022_market.py
+      - tests/test_bear_2022_market.py
+      - .github/workflows/bear-2022-market-checks.yml
+
+permissions:
+  contents: read
+
+jobs:
+  market_contracts:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4
+      - run: uv sync --dev --locked --python 3.12
+      - run: uv run ruff format --diff tools/bear_2022_market.py tests/test_bear_2022_market.py
+      - if: always()
+        run: uv run ruff check --no-fix tools/bear_2022_market.py tests/test_bear_2022_market.py
+      - if: always()
+        run: uv run ty check tools/bear_2022_market.py
+      - if: always()
+        run: uv run pytest tests/test_bear_2022_market.py -q --no-cov
+      - if: always()
+        run: uv run python -c 'from tools import bear_2022_market as m; print(m.PLAN_HASH)'
