@@ -1,0 +1,19 @@
+{
+  "lookback": 252,
+  "skip": 21,
+  "names": 5,
+  "exposure": 0.95,
+  "cost_buffer": 0.002,
+  "min_weight": 0.10,
+  "max_weight": 0.25,
+  "industry_cap": 0.40,
+  "min_market_cap": 10000000000.0,
+  "min_dollar_volume": 20000000.0,
+  "min_price": 5.0,
+  "missing_data": "abort",
+  "market_filter": false,
+  "market_ma": 200,
+  "market_confirmation": 2,
+  "frequency": "monthly",
+  "plan_sessions": 5
+}
