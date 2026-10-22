@@ -121,7 +121,7 @@ class MomentumPlanManager(RebalancePlanManager):
     def advance(self) -> None:
         broker = self.broker
         assert isinstance(broker, StockMomentumBroker)
-        now = broker._market_state.time
+        now = broker.momentum_time
         assert now is not None
         for identifier, plan in tuple(self.records.items()):
             if plan.active and now >= plan.valid_until:
@@ -132,6 +132,11 @@ class MomentumPlanManager(RebalancePlanManager):
 
 class StockMomentumBroker(ConstrainedBroker):
     momentum_strategy: StockMomentumStrategy
+
+    @property
+    def momentum_time(self) -> datetime | None:
+        """Read-only event clock for the plan collaborator."""
+        return self._market_state.time
 
     def in_window(self, now: datetime) -> bool:
         bounds = self.controller.calendar.bounds(now)
