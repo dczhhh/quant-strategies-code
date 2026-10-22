@@ -502,6 +502,15 @@ ranking.
 
 ## Development
 
+### Stock momentum research V1
+
+The opt-in `ml4t.backtest.strategies.stock_momentum` module implements long-only
+12-1 stock momentum, monthly/semi-monthly schedules, industry limits, and a constrained
+cash-account adapter. Run `uv run python examples/stock_momentum_demo.py` for an invented-input
+smoke run. See [the research design and admission limits](docs/research-stock-momentum-v1.md).
+The V1 engine accepts synthetic fixtures only; it does not change production defaults or establish
+real-data performance, historical-universe validity, or accepted fractional-fee parity.
+
 ```bash
 git clone https://github.com/ml4t/backtest.git
 cd backtest
