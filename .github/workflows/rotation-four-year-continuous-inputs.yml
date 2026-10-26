@@ -35,7 +35,7 @@ jobs:
           ref: ${{ env.INPUT_SOURCE_SHA }}
           fetch-depth: 0
           persist-credentials: false
-      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e
       - run: uv sync --dev --locked --python 3.12
       - name: Require complete exact-source checks and successful original capture
         env:
@@ -64,7 +64,7 @@ jobs:
           ref: ${{ env.INPUT_SOURCE_SHA }}
           fetch-depth: 0
           persist-credentials: false
-      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e
       - run: uv sync --dev --locked --python 3.12
       - name: Rebuild all original raw-backed continuous inputs and retain private bytes
         env:
@@ -84,7 +84,7 @@ jobs:
           ref: ${{ env.INPUT_SOURCE_SHA }}
           fetch-depth: 0
           persist-credentials: false
-      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e
       - run: uv sync --dev --locked --python 3.12
       - name: Fresh complete raw-backed input rebuild without provider keys or archive writes
         env:

@@ -34,7 +34,7 @@ jobs:
           ref: ${{ env.RECOVERY_SOURCE_SHA }}
           fetch-depth: 0
           persist-credentials: false
-      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e
       - run: uv sync --dev --locked --python 3.12
       - name: Require exact recovery source qualification
         env:
@@ -66,7 +66,7 @@ jobs:
           ref: ${{ env.RECOVERY_SOURCE_SHA }}
           fetch-depth: 0
           persist-credentials: false
-      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e
       - run: uv sync --dev --locked --python 3.12
       - name: XLI missing 2 products only, all old refs immutable
         env:
@@ -92,7 +92,7 @@ jobs:
           ref: ${{ env.RECOVERY_SOURCE_SHA }}
           fetch-depth: 0
           persist-credentials: false
-      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e
       - run: uv sync --dev --locked --python 3.12
       - name: Finite missing groups only, no Engine or SEC requests
         env:
@@ -118,7 +118,7 @@ jobs:
           ref: ${{ env.RECOVERY_SOURCE_SHA }}
           fetch-depth: 0
           persist-credentials: false
-      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e
       - run: uv sync --dev --locked --python 3.12
       - name: Fresh retained-byte verification, no market key or archive writes
         env:

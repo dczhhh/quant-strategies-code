@@ -35,7 +35,7 @@ jobs:
           ref: ${{ env.MARKET_SOURCE_SHA }}
           fetch-depth: 0
           persist-credentials: false
-      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e
       - run: uv sync --dev --locked --python 3.12
       - name: Require exact source qualification and all 12 fresh source audits
         env:
@@ -73,7 +73,7 @@ jobs:
           ref: ${{ env.MARKET_SOURCE_SHA }}
           fetch-depth: 0
           persist-credentials: false
-      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e
       - run: uv sync --dev --locked --python 3.12
       - name: SPY only, bounded 86 products, any failure stops remaining symbols
         env:
@@ -99,7 +99,7 @@ jobs:
           ref: ${{ env.MARKET_SOURCE_SHA }}
           fetch-depth: 0
           persist-credentials: false
-      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e
       - run: uv sync --dev --locked --python 3.12
       - name: Immutable finite raw minute and action inputs, no Engine
         env:
@@ -125,7 +125,7 @@ jobs:
           ref: ${{ env.MARKET_SOURCE_SHA }}
           fetch-depth: 0
           persist-credentials: false
-      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e
       - run: uv sync --dev --locked --python 3.12
       - name: Fresh retained-byte verification without market key or archive writes
         env:

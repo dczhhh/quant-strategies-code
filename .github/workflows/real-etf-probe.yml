@@ -32,7 +32,7 @@ jobs:
         with:
           ref: ${{ vars.REAL_ETF_PROBE_REVIEWED_SHA }}
           persist-credentials: false
-      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e
       - name: Install locked fixture dependencies before archive credential exposure
         run: uv sync --dev --locked --python 3.12
       - name: Validate invented source/archive/return fixtures without credentials
