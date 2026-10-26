@@ -2,7 +2,7 @@
 # Independent package configuration for standalone distribution
 
 [build-system]
-requires = ["hatchling==1.32.3", "hatch-vcs==0.5.0"]
+requires = ["hatchling==1.32.4", "hatch-vcs==0.5.0"]
 build-backend = "hatchling.build"
 
 [tool.hatch.version]
@@ -79,7 +79,7 @@ requires-python = ">=3.12"
 
 # Core dependencies
 dependencies = [
-    "ml4t-specs>=0.1.4,<0.2",
+    "ml4t-specs>=0.1.4,<0.3",
     "polars>=1.36.1",
     "pandas>=2.3.3; python_version < '3.15'",
     "pandas>=3.0.5; python_version >= '3.15'",
