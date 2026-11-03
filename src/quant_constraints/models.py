@@ -82,6 +82,15 @@ class MarketContext:
     execution_data_mode: str | None = None
     signal_data_mode: str | None = None
     risk_data_mode: str | None = None  # ATR/absolute risk inputs must use raw share units
+    issuer_country: str | None = None  # domicile, never listing locale or address state
+    tax_source_country: str | None = None
+    security_type: str | None = None  # CS/ETF; ADR variants are ineligible for new buys
+    is_depositary_receipt: bool | None = None
+    security_metadata_available_at: datetime | None = None
+    security_metadata_source: str | None = None
+    security_metadata_sha256: str | None = None
+    security_metadata_symbol: str | None = None
+    security_metadata_security_id: str | None = None
 
     def __post_init__(self):
         aware(self.asof)
@@ -93,6 +102,7 @@ class MarketContext:
             self.liquidity_available_at,
             self.vix_available_at,
             self.fee_metadata_available_at,
+            self.security_metadata_available_at,
         ):
             if timestamp is not None:
                 aware(timestamp)

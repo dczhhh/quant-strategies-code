@@ -66,8 +66,17 @@ from .verification_contracts import (
 )
 from .verification_wire import RECORD_TYPES, _encode, decode_records, safe_field
 
-VERIFICATION_VERSION = "research_verification_orchestration_synthetic_v1"
-REVIEWED_IMPLEMENTATION_BASE = "fb870fd70a5d3438c20adcdb3c606c04533719a0"
+VERIFICATION_VERSION = "research_verification_orchestration_synthetic_v11_assumed_distribution"
+LEGACY_IMPLEMENTATION_BASE = "fb870fd70a5d3438c20adcdb3c606c04533719a0"
+TAX_RUNTIME_SOURCE_REVISION = "9938de9c441e289b9eb5b5e5bf3814e2ff726ebb"
+SECURITY_ENTRY_SOURCE_REVISION = "f38b3e8b75e1e555d3d66d8dad0b609371515e22"
+RESEARCH_RUNTIME_SOURCE_REVISION = "0b2b716ed44e00f8a1027b6ef2ee3ca9257e60c6"
+RESEARCH_INTEGRITY_SOURCE_REVISION = "4ccf9456d5d91efe1ff3fd718c7a06d18e6fdc1d"
+RESEARCH_CLOSE_POLICY_SOURCE_REVISION = "e11883fca0a70f2b10bb9b547c8589e6efd27682"
+RESEARCH_EXECUTION_SOURCE_REVISION = "a8942d9621badaf8ee949655b0a135cc98e0fb1f"
+RESEARCH_BENCHMARK_SOURCE_REVISION = "61540910b9dc8349562d3ae7b845762f28397d61"
+RESEARCH_ASSUMPTION_SOURCE_REVISION = "f507ba87893aeb0ae9ec4dca5e516f93149d4058"
+REVIEWED_IMPLEMENTATION_BASE = RESEARCH_ASSUMPTION_SOURCE_REVISION
 # Source bytes of the accepted 5A/B/C/D implementations and their direct contracts.
 # Wheel source files must match too; a declared git SHA alone is not evidence.
 BASE_SOURCE_SHA256 = {
@@ -92,6 +101,65 @@ BASE_SOURCE_SHA256 = {
     "quant_constraints.research.data.contracts.market_data": "f6792e6d64bd340a67f0f9b90c3fd392295a69d004482a4791a5e4a01f0c6b00",
     "quant_constraints.research.data.contracts.identities": "44c16b70caa76c0282a786b8b6bf19921b460ea2ed5b12bfa609a3aa6b53787a",
     "quant_constraints.research.data.contracts.corporate_actions": "9c60d4d1406fbd3a009a0e4952bfe406629c942c27f3b6bf21368dd77828b074",
+}
+# Preserve the original evidence pins verbatim. The additive tax-runtime source
+# commit is separately identified; old snapshots must not silently certify new code.
+TAX_RUNTIME_SOURCE_SHA256 = {
+    "quant_constraints.config": "85c6b0fa6712208c6e210defa5aa872a6527d9cc5a1f9645c7427895abae7e67",
+    "quant_constraints.dividend_tax": "822e144f2e35c26f57d38234d55b55f28a47307d6afac004a25dc9d047ce3991",
+    "quant_constraints.corporate_actions.events": "84f9a54dc6c6252bb4661d65773be03d920ce3aad1d43398a605391145c2ae42",
+    "quant_constraints.corporate_actions.processor": "36cb7e98c52efb9629d98d0a73ef884a347fbbb21c22cb26dff9d3c3983d8e3e",
+}
+# Preserve the accepted tax/legacy provenance above. The owner entry policy is
+# a new source overlay, never a rewrite of old archives or PIT evidence.
+ENTRY_RUNTIME_SOURCE_SHA256 = {
+    "quant_constraints.config": "4f88c236dd6c4dc542af493a3daa24ed934e7154c44b057e1b466b093e80513c",
+    "quant_constraints.models": "9f949c47a8c93b7009c86af871dde32fe74d50b47fafede209a4de00648db068",
+    "quant_constraints.controller": "0ac31cb3109606eee280b41a2c0fa2955fd74386ff56684544bab20ae71468b9",
+    "quant_constraints.security_policy": "945e821e9cb1908648cc0b3190375b0e2dbeb3562059252d52cc567f62f50d33",
+    "ml4t.backtest.strategies.sector_rotation.config": "b21a2973b2ac71b41cc217b179c15ac9144a058ca0567d2f3162a7e729f3eda7",
+    "ml4t.backtest.strategies.sector_rotation.adapter": "86bd3c30a98a25b5b44e97d8f14e76b113ebb3fe709b8b836987c7394b41b50c",
+}
+# Separate additive source overlay. The default real rejection and all older
+# evidence pins remain intact; v5 snapshots cannot silently approve this runtime.
+RESEARCH_RUNTIME_SOURCE_SHA256 = {
+    "ml4t.backtest.accounting.cash": "bfd5c0fe0d3b79ee782e2d1744fd8ac641056f3446e326a011eb36fd59ff588c",
+    "quant_constraints.adapter": "f058753278e3ac807be125da6e08b7f34e8e415b13f842510aed49320b3f3f16",
+    "quant_constraints.config": "4932b6442da22e2a2b029b280e3fd291a5328b2c2fd6b2529f323bfbd0bb61db",
+    "quant_constraints.dividend_tax": "f8cc7a1e41226ec8486a534ed26e1dd9511307eeff7a73dd638aa96665ff1171",
+    "quant_constraints.corporate_actions.processor": "12adc3d0b23060ac63ef4f12930294d7bba56946721edaf5f30abf2ab50a59d7",
+    "ml4t.backtest.strategies.sector_rotation.adapter": "0ce40f90325053003945cb438d0d1ff8e11b0f935da09ff7ee0f2c5fead84ee3",
+    "ml4t.backtest.strategies.sector_rotation.research": "1e5a571c48db7f60a7d49533d9fd48311644a28d0bdddcd2214b90b8f91942ed",
+    "ml4t.backtest.strategies.sector_rotation.research_inputs": "8a8e173f289eb32fca4010cf2516b0d7e2bf9445159b71216c49578f5557c0c3",
+    "ml4t.backtest.strategies.sector_rotation.research_ledger": "60501663ab43c562e3617d9ac2c080b93e9a14d474db94dee1c00a6801b8c308",
+}
+# Retain v6 source identities above. New replay-integrity checks need their own
+# source binding, so an older snapshot cannot attest this stricter implementation.
+RESEARCH_INTEGRITY_SOURCE_SHA256 = {
+    "ml4t.backtest.strategies.sector_rotation.research_inputs": "2a243bb06e993a6811f6131f21a0115b37977a9bb8c32eb7cc963713f980da77",
+    "ml4t.backtest.strategies.sector_rotation.research_ledger": "2825831ca15f670a1e1cec6d185b72d728336bddc2ab8a17a1e082ebb1f98c67",
+}
+# Preserve all preceding overlays. Explicit price conventions and their reports
+# require a new source identity; v7 cannot attest the new research input schema.
+RESEARCH_CLOSE_POLICY_SOURCE_SHA256 = {
+    "ml4t.backtest.strategies.sector_rotation.research": "a1d2a9278f2f36c5d84f2df85f83e1c8a9c6e7f78c612267940465e2ddd89f42",
+    "ml4t.backtest.strategies.sector_rotation.research_inputs": "5564ea837fe3798a1fa89e525892e49f71663ab10519340836dc7d5d0cad3bd7",
+}
+# Bind the completed-minute execution override separately; the v8 input/price
+# policy remains preserved and cannot silently attest a different fill policy.
+RESEARCH_EXECUTION_SOURCE_SHA256 = {
+    "ml4t.backtest.strategies.sector_rotation.research": "95b32f79c45e9a49789ea5e250bdd4702c112a30065ebafa634f32ef699a103c",
+}
+# The funded comparator is additive. Preserve rotation's v9 execution source and
+# every earlier overlay; a v9 snapshot cannot attest this additional Engine path.
+RESEARCH_BENCHMARK_SOURCE_SHA256 = {
+    "ml4t.backtest.strategies.sector_rotation.research_benchmark": "61da2cb7a74c01d97ca8802540bf406d7003d73e00d0970af2405969549d7ee1",
+}
+# Explicit classification assumptions have their own schema, origin and default-off
+# scenario gate. A v10 snapshot cannot attest this added conditional research mode.
+RESEARCH_ASSUMPTION_SOURCE_SHA256 = {
+    "ml4t.backtest.strategies.sector_rotation.research": "eedfe43adfead70d653a33feab5219f199d44f2e5db8e06c3798d63324d1a7e8",
+    "ml4t.backtest.strategies.sector_rotation.research_inputs": "36a8d01a82472eede36829894afe21a16ab530ded4e91f6136d3b0fd49104017",
 }
 ROLE_DEPENDENCIES = {
     EvidenceRole.RAW: {EvidenceRole.IDENTITIES},
@@ -133,12 +201,41 @@ def _versions(snapshot: FrozenDatasetInput) -> dict:
     for name, actual in versions.items():
         if getattr(snapshot.versions, name) != actual:
             _deny("VERSION_MISMATCH", name, "versions")
-    actual_sources = {name: _source_digest(name) for name in BASE_SOURCE_SHA256}
-    if actual_sources != BASE_SOURCE_SHA256:
+    expected_sources = {
+        **BASE_SOURCE_SHA256,
+        **TAX_RUNTIME_SOURCE_SHA256,
+        **ENTRY_RUNTIME_SOURCE_SHA256,
+        **RESEARCH_RUNTIME_SOURCE_SHA256,
+        **RESEARCH_INTEGRITY_SOURCE_SHA256,
+        **RESEARCH_CLOSE_POLICY_SOURCE_SHA256,
+        **RESEARCH_EXECUTION_SOURCE_SHA256,
+        **RESEARCH_BENCHMARK_SOURCE_SHA256,
+        **RESEARCH_ASSUMPTION_SOURCE_SHA256,
+    }
+    actual_sources = {name: _source_digest(name) for name in expected_sources}
+    if actual_sources != expected_sources:
         _deny("IMPLEMENTATION_MISMATCH", "code_revision", "versions")
     return {
         "checked_versions": versions,
-        "code_revision_scope": "reviewed_5A_B_C_D_and_5E1_source_base",
+        "code_revision_scope": "reviewed_5A_B_C_D_5E1_plus_tax_security_and_isolated_research_runtime",
+        "legacy_source_revision": LEGACY_IMPLEMENTATION_BASE,
+        "legacy_source_sha256": BASE_SOURCE_SHA256,
+        "tax_runtime_source_sha256": TAX_RUNTIME_SOURCE_SHA256,
+        "tax_runtime_source_revision": TAX_RUNTIME_SOURCE_REVISION,
+        "entry_runtime_source_sha256": ENTRY_RUNTIME_SOURCE_SHA256,
+        "entry_runtime_source_revision": SECURITY_ENTRY_SOURCE_REVISION,
+        "research_runtime_source_sha256": RESEARCH_RUNTIME_SOURCE_SHA256,
+        "research_runtime_source_revision": RESEARCH_RUNTIME_SOURCE_REVISION,
+        "research_integrity_source_sha256": RESEARCH_INTEGRITY_SOURCE_SHA256,
+        "research_integrity_source_revision": RESEARCH_INTEGRITY_SOURCE_REVISION,
+        "research_close_policy_source_sha256": RESEARCH_CLOSE_POLICY_SOURCE_SHA256,
+        "research_close_policy_source_revision": RESEARCH_CLOSE_POLICY_SOURCE_REVISION,
+        "research_execution_source_sha256": RESEARCH_EXECUTION_SOURCE_SHA256,
+        "research_execution_source_revision": RESEARCH_EXECUTION_SOURCE_REVISION,
+        "research_benchmark_source_sha256": RESEARCH_BENCHMARK_SOURCE_SHA256,
+        "research_benchmark_source_revision": RESEARCH_BENCHMARK_SOURCE_REVISION,
+        "research_assumption_source_sha256": RESEARCH_ASSUMPTION_SOURCE_SHA256,
+        "research_assumption_source_revision": RESEARCH_ASSUMPTION_SOURCE_REVISION,
         "reviewed_source_sha256": actual_sources,
         "orchestration_version": VERIFICATION_VERSION,
         "orchestration_source_sha256": {

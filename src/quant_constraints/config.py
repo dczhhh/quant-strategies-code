@@ -2,11 +2,13 @@
 
 import math
 from dataclasses import dataclass, fields
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 from typing import Literal
 
 import yaml
+
+from .dividend_tax import DividendTaxQualification, DividendTaxRule
 
 
 @dataclass(frozen=True)
@@ -80,6 +82,15 @@ class ConstraintConfig:
     )
     dividend_withholding_rate: float = 0.0
     dividend_tax_scenario: str = "gross_no_withholding"
+    dividend_tax_profile: Literal[
+        "legacy", "cn_mainland_individual_treaty", "explicit_rules", "retrospective_scenario"
+    ] = "legacy"
+    dividend_tax_rules: tuple[DividendTaxRule, ...] = ()
+    dividend_tax_qualification: DividendTaxQualification | None = None
+    dividend_tax_conflict_policy: Literal["record_actual", "reject"] = "record_actual"
+    unknown_dividend_tax_policy: Literal["reject"] = "reject"
+    capital_gains_tax_mode: Literal["none"] = "none"
+    security_entry_policy: Literal["legacy", "exclude_canada_and_adrs"] = "legacy"
 
     def __post_init__(self):
         for item in fields(self):
@@ -98,6 +109,16 @@ class ConstraintConfig:
         ):
             raise ValueError("Invalid drawdown reduction fraction")
         choices = {
+            "security_entry_policy": {"legacy", "exclude_canada_and_adrs"},
+            "dividend_tax_profile": {
+                "legacy",
+                "cn_mainland_individual_treaty",
+                "explicit_rules",
+                "retrospective_scenario",
+            },
+            "dividend_tax_conflict_policy": {"record_actual", "reject"},
+            "unknown_dividend_tax_policy": {"reject"},
+            "capital_gains_tax_mode": {"none"},
             "split_order_policy": {"adjust", "cancel"},
             "execution_data_mode": {"raw_execution"},
             "signal_data_mode": {"raw_execution", "split_adjusted_signal", "total_return_signal"},
@@ -226,6 +247,20 @@ class ConstraintConfig:
             raise ValueError("An explicit dividend tax scenario is required")
         if self.dividend_withholding_rate and self.dividend_tax_scenario == "gross_no_withholding":
             raise ValueError("Nonzero withholding requires a named investor tax scenario")
+        if not isinstance(self.dividend_tax_rules, tuple) or any(
+            not isinstance(rule, DividendTaxRule) for rule in self.dividend_tax_rules
+        ):
+            raise ValueError("dividend_tax_rules must be an immutable tuple of DividendTaxRule")
+        if self.dividend_tax_qualification is not None and not isinstance(
+            self.dividend_tax_qualification, DividendTaxQualification
+        ):
+            raise ValueError("Invalid dividend tax qualification")
+        if self.dividend_tax_profile not in {"legacy", "retrospective_scenario"} and (
+            not self.dividend_tax_rules
+            or self.dividend_withholding_rate
+            or self.dividend_tax_scenario == "gross_no_withholding"
+        ):
+            raise ValueError("Country tax profiles require explicit versioned rules/scenario")
 
     @classmethod
     def from_yaml(cls, path: str | Path) -> "ConstraintConfig":
@@ -235,4 +270,23 @@ class ConstraintConfig:
         unknown = raw.keys() - {item.name for item in fields(cls)}
         if unknown:
             raise ValueError(f"Unknown constraint settings: {sorted(unknown)}")
+
+        def typed_terms(value):
+            terms = dict(value)
+            for name in ("effective_from", "effective_to"):
+                if isinstance(terms[name], str):
+                    terms[name] = date.fromisoformat(terms[name])
+            for name in ("known_at", "verified_at"):
+                if name in terms and isinstance(terms[name], str):
+                    terms[name] = datetime.fromisoformat(terms[name])
+            return terms
+
+        if "dividend_tax_rules" in raw:
+            raw["dividend_tax_rules"] = tuple(
+                DividendTaxRule(**typed_terms(rule)) for rule in raw["dividend_tax_rules"]
+            )
+        if raw.get("dividend_tax_qualification") is not None:
+            raw["dividend_tax_qualification"] = DividendTaxQualification(
+                **typed_terms(raw["dividend_tax_qualification"])
+            )
         return cls(**raw)

@@ -473,7 +473,7 @@ def test_config_invalid_values(changes):
 
 def test_sample_config_roundtrip_and_unknown_keys(tmp_path):
     config = ConstraintConfig.from_yaml("config/us_cash_concentrated.yaml")
-    assert config == ConstraintConfig()
+    assert config == ConstraintConfig(security_entry_policy="exclude_canada_and_adrs")
     path = tmp_path / "config.yaml"
     path.write_text(yaml.safe_dump(asdict(config)))
     assert ConstraintConfig.from_yaml(path) == config

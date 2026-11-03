@@ -47,13 +47,20 @@ def execute_buy(broker, quantity=20, asset="A", day="2026-10-09"):
 
 
 def test_default_yaml_profile_and_100_shares_pay_nonzero_cost():
+    from test_security_entry_policy import facts
+
     path = Path(__file__).parents[2] / "config/us_cash_concentrated.yaml"
     config = ConstraintConfig.from_yaml(path)
-    assert config == ConstraintConfig() and config.pricing_plan == "ibkr_pro_tiered"
+    assert config == ConstraintConfig(security_entry_policy="exclude_canada_and_adrs")
+    assert config.pricing_plan == "ibkr_pro_tiered"
     # Standalone use is a disclosed nonzero first-tier fallback, not full IBKR.
     standalone = Broker.from_config(cash_backtest_config())
     assert calculate_commission(standalone.commission_model, "A", 100, 100) == pytest.approx(0.35)
-    broker, _ = fee_broker(initial_cash=50000)
+    broker, _ = fee_broker(
+        config,
+        provider=lambda ts, asset, phase: facts(market(ts, asset, phase), asset),
+        initial_cash=50000,
+    )
     order = execute_buy(broker, 100)
     record = broker.fee_records[0]
     assert record.context.order_id == order.order_id and record.context.asset == "A"

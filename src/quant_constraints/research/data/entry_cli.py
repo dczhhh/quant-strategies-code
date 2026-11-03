@@ -59,9 +59,19 @@ def main(argv: list[str] | None = None) -> int:
         config = _keys(decode_json(content), {"schema_version", "backtest", "constraints"})
         if config["schema_version"] != CONFIG_SCHEMA:
             _deny("INVALID_CONFIG", "config", "cli")
+        constraints = dict(config["constraints"])
+        if (
+            constraints.get("dividend_tax_profile", "legacy") != "legacy"
+            or constraints.get("dividend_tax_rules", []) not in ([], ())
+            or constraints.get("dividend_tax_qualification") is not None
+        ):
+            _deny("RUNTIME_FEATURE_UNSUPPORTED", "feature_policy", "entry")
+        # JSON carries the legacy empty immutable rule tuple as []. This CLI
+        # remains a synthetic wiring probe, not the formal tax-evidence adapter.
+        constraints["dividend_tax_rules"] = ()
         settings = SyntheticRunSettings(
             BacktestConfig.from_dict(config["backtest"], strict=True),
-            ConstraintConfig(**config["constraints"]),
+            ConstraintConfig(**constraints),
         )
         plan = build_synthetic_test_engine(
             files, settings, _NoOrders, reviewed_root_sha256=args.input_root_sha256

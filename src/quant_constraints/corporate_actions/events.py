@@ -32,9 +32,37 @@ class CorporateAction:
     dividend_basis: str = "post_split"
     terms: str = "ordinary"
     cancelled: bool = False
+    tax_source_country: str | None = None
+    tax_source: str | None = None
+    tax_source_known_at: datetime | None = None
+    distribution_type: str | None = None
+    withholding_source: str | None = None
+    withholding_known_at: datetime | None = None
+    credited_gross: float | None = None
+    credited_withheld: float | None = None
+    credited_fee: float | None = None
+    credit_correction_of_version: int | None = None
+    credit_correction_prior_gross: float | None = None
+    credit_correction_quantity: float | None = None
+    credit_correction_source: str | None = None
+    credit_correction_known_at: datetime | None = None
 
     def __post_init__(self):
         aware(self.available_at)
+        for stamp in (
+            self.tax_source_known_at,
+            self.withholding_known_at,
+            self.credit_correction_known_at,
+        ):
+            if stamp is not None:
+                aware(stamp)
+        if self.tax_source_country is not None and (
+            len(self.tax_source_country) != 2
+            or not self.tax_source_country.isascii()
+            or not self.tax_source_country.isupper()
+            or not self.tax_source_country.isalpha()
+        ):
+            raise ValueError("Tax source country must be a two-letter uppercase code")
         if any(
             not isinstance(x, str) or not x.strip()
             for x in (self.security_id, self.event_id, self.kind, self.source, self.currency)
@@ -48,6 +76,11 @@ class CorporateAction:
             "credited_net",
             "withholding_rate",
             "fee_per_share",
+            "credited_gross",
+            "credited_withheld",
+            "credited_fee",
+            "credit_correction_prior_gross",
+            "credit_correction_quantity",
         ):
             value = getattr(self, name)
             if value is not None and (
@@ -63,6 +96,35 @@ class CorporateAction:
             raise ValueError("A dividend requires a per-share amount")
         if self.kind == "CASH_CREDIT" and not self.parent_event_id:
             raise ValueError("A credit requires its parent entitlement ID")
+        correction = (
+            self.credit_correction_of_version,
+            self.credit_correction_prior_gross,
+            self.credit_correction_quantity,
+            self.credit_correction_source,
+            self.credit_correction_known_at,
+        )
+        if any(value is not None for value in correction) and (
+            self.kind != "CASH_CREDIT"
+            or self.credit_correction_prior_gross is None
+            or self.credit_correction_quantity is None
+            or self.credit_correction_known_at is None
+            or type(self.credit_correction_of_version) is not int
+            or self.credit_correction_of_version < 1
+            or self.credit_correction_quantity <= 0
+            or not isinstance(self.credit_correction_source, str)
+            or not self.credit_correction_source.strip()
+            or self.credit_correction_known_at > self.available_at
+            or any(
+                value is None
+                for value in (
+                    self.credited_gross,
+                    self.credited_withheld,
+                    self.credited_fee,
+                    self.credited_net,
+                )
+            )
+        ):
+            raise ValueError("Credit correction requires complete, visible source and prior terms")
         if (
             self.kind == "CASH_CREDIT"
             and self.available_at.astimezone(NY).date() < self.effective_date
@@ -101,6 +163,20 @@ class CorporateAction:
             self.dividend_basis,
             self.terms,
             self.cancelled,
+            self.tax_source_country,
+            self.tax_source,
+            self.tax_source_known_at,
+            self.distribution_type,
+            self.withholding_source,
+            self.withholding_known_at,
+            self.credited_gross,
+            self.credited_withheld,
+            self.credited_fee,
+            self.credit_correction_of_version,
+            self.credit_correction_prior_gross,
+            self.credit_correction_quantity,
+            self.credit_correction_source,
+            self.credit_correction_known_at,
         )
 
 

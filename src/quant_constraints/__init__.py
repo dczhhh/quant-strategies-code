@@ -3,6 +3,7 @@
 from .adapter import ConstrainedBroker, broker_factory, cash_backtest_config, constrained_engine
 from .config import ConstraintConfig
 from .controller import ConstraintController
+from .dividend_tax import DividendTaxQualification, DividendTaxRule, resolve_dividend_tax_rate
 from .events import EarningsCoverage, EarningsEvent, EarningsProvider, InMemoryEarningsProvider
 from .fees import FeeBreakdown, FeeExecutionContext, FeeRecord, IBKRProTieredUSStock, RegulatoryRate
 from .gates import AccountConstraint, EarningsGate, PortfolioGate, RebalanceGate, SessionGate
@@ -28,6 +29,8 @@ __all__ = [
     "ConstraintConfig",
     "ConstraintController",
     "Decision",
+    "DividendTaxQualification",
+    "DividendTaxRule",
     "EarningsCoverage",
     "EarningsEvent",
     "EarningsGate",
@@ -54,4 +57,5 @@ __all__ = [
     "broker_factory",
     "cash_backtest_config",
     "constrained_engine",
+    "resolve_dividend_tax_rate",
 ]

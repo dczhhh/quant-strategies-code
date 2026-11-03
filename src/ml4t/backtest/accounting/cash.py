@@ -99,6 +99,9 @@ class CashAccountRules:
             return False
         if broker.share_type is ShareType.INTEGER:
             order.quantity = float(int(order.quantity))
+            if order.quantity == 0:
+                order.reject("Quantity rounds to zero whole shares", "account_restriction")
+                return False
         quantity = (
             self.orders.partial_quantities.get(order.order_id, order.quantity)
             if quantity is None

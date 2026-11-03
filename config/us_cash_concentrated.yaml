@@ -1,4 +1,5 @@
 pricing_plan: ibkr_pro_tiered
+security_entry_policy: exclude_canada_and_adrs
 fee_history_mode: current_snapshot_backcast
 fee_snapshot_date: '2026-10-10'
 fee_initial_monthly_volume: 0.0

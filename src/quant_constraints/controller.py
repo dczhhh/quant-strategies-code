@@ -15,6 +15,7 @@ from .gates import (
     reject,
 )
 from .models import ALLOW, Action, Audit, Decision, Intent, Kind, MarketContext, RiskRequest, State
+from .security_policy import security_entry_decision
 
 
 class ConstraintController:
@@ -34,8 +35,11 @@ class ConstraintController:
         # Even an outside-session risk request must not queue a short or invalid order.
         session = self.session.check(intent, state, context)
         account = self.account.check(intent, state, context)
+        security = security_entry_decision(intent, context, self.config.security_entry_policy)
         if account.action is not Action.ALLOW:
             decision = account
+        elif security.action is not Action.ALLOW:
+            decision = security
         elif session.action is not Action.ALLOW:
             decision = session
         elif intent.kind is Kind.RISK and intent.quantity > 0:
