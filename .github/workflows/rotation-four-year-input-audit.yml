@@ -1,0 +1,92 @@
+name: Frozen four-year input cash and settlement audit
+
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/rotation-four-year-input-audit.yml]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: real-action-capture-v1
+  cancel-in-progress: false
+
+env:
+  AUDIT_SOURCE_SHA: '5443cbc4fb294e95b70eee2e31fc8aa0b92fe86b'
+  GAP_CAPTURE_RUN_ID: '39384146590'
+  ACTIONS_STEP_DEBUG: ${{ secrets.ACTIONS_STEP_DEBUG }}
+  ACTIONS_RUNNER_DEBUG: ${{ secrets.ACTIONS_RUNNER_DEBUG }}
+
+jobs:
+  preflight:
+    permissions:
+      contents: read
+      actions: read
+    if: >-
+      github.repository == 'dczhhh/quant-strategies-code' &&
+      github.actor == 'dczhhh' && github.event_name == 'push' &&
+      github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ env.AUDIT_SOURCE_SHA }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4
+      - run: uv sync --dev --locked --python 3.12
+      - name: Require complete exact-source checks and successful original capture
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh api "repos/dczhhh/quant-strategies-code/actions/runs?head_sha=$AUDIT_SOURCE_SHA&event=pull_request&per_page=100" > "$RUNNER_TEMP/four-year-audit-checks.json"
+          jq --exit-status --arg sha "$AUDIT_SOURCE_SHA" '
+            [.workflow_runs[] | select(.head_sha == $sha)] |
+            group_by(.name) | map(sort_by(.run_started_at) | last) |
+            [.[] | select(.status == "completed" and .conclusion == "success") | .name] |
+            index("CI") != null and index("Ecosystem qualification") != null and index("Four-year input cash and settlement checks") != null
+          ' "$RUNNER_TEMP/four-year-audit-checks.json"
+          gh api "repos/dczhhh/quant-strategies-code/actions/runs/$GAP_CAPTURE_RUN_ID" > "$RUNNER_TEMP/four-year-capture-run.json"
+          jq --exit-status '.name == "Frozen four-year gap capture" and .status == "completed" and .conclusion == "success"' "$RUNNER_TEMP/four-year-capture-run.json"
+      - run: uv run pytest tests/test_rotation_four_year_gap_audit.py tests/test_rotation_four_year_settlement.py -q --no-cov
+
+  audit:
+    needs: preflight
+    environment: private-archive
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ env.AUDIT_SOURCE_SHA }}
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4
+      - run: uv sync --dev --locked --python 3.12
+      - name: Reopen original gap bytes and retain only the private diagnostic
+        env:
+          RUNNER_ENVIRONMENT: ${{ runner.environment }}
+          ARCHIVE_WRITE_TOKEN: ${{ secrets.ARCHIVE_WRITE_TOKEN }}
+          PYTHONHASHSEED: '1'
+        run: uv run python tools/rotation_four_year_gap_audit.py run "$AUDIT_SOURCE_SHA"
+
+  verify:
+    needs: audit
+    environment: private-archive
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ env.AUDIT_SOURCE_SHA }}
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4
+      - run: uv sync --dev --locked --python 3.12
+      - name: Fresh complete byte comparison without provider keys or archive writes
+        env:
+          RUNNER_ENVIRONMENT: ${{ runner.environment }}
+          ARCHIVE_WRITE_TOKEN: ${{ secrets.ARCHIVE_WRITE_TOKEN }}
+          PYTHONHASHSEED: '33'
+        run: uv run python tools/rotation_four_year_gap_audit.py verify "$AUDIT_SOURCE_SHA"
