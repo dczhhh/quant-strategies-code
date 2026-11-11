@@ -1,0 +1,166 @@
+name: Reviewed 2025 retrospective rotation replay
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: real-action-capture-v1
+  cancel-in-progress: false
+
+jobs:
+  plan:
+    if: >-
+      github.repository == 'dczhhh/quant-strategies-code' &&
+      github.actor == 'dczhhh' &&
+      github.event_name == 'workflow_dispatch' &&
+      github.ref == 'refs/heads/main' &&
+      vars.REAL_ETF_PROBE_ENABLED == 'true' &&
+      github.sha == vars.REAL_ETF_PROBE_REVIEWED_SHA
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      tickers: ${{ steps.scope.outputs.tickers }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ vars.REAL_ETF_PROBE_REVIEWED_SHA }}
+          persist-credentials: false
+      - id: scope
+        run: python3 -I tools/rotation_research_runner.py matrix >> "$GITHUB_OUTPUT"
+
+  prepare:
+    needs: plan
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        ticker: ${{ fromJSON(needs.plan.outputs.tickers) }}
+    environment: private-archive
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      REAL_ETF_PROBE_ENABLED: ${{ vars.REAL_ETF_PROBE_ENABLED }}
+      REAL_ETF_PROBE_REVIEWED_SHA: ${{ vars.REAL_ETF_PROBE_REVIEWED_SHA }}
+      ACTIONS_STEP_DEBUG: ${{ secrets.ACTIONS_STEP_DEBUG }}
+      ACTIONS_RUNNER_DEBUG: ${{ secrets.ACTIONS_RUNNER_DEBUG }}
+      CASE_TICKER: ${{ matrix.ticker }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ vars.REAL_ETF_PROBE_REVIEWED_SHA }}
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: eb70296eef3c79ed9bc259703504ed568e13b3ae
+          path: research-source
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4
+      - name: Install locked tested runtime before credential exposure
+        run: uv sync --project research-source --dev --locked --python 3.12
+      - name: Prepare missing inputs and regenerate immutable component
+        env:
+          RUNNER_ENVIRONMENT: ${{ runner.environment }}
+          GITHUB_TOKEN: ${{ github.token }}
+          ARCHIVE_WRITE_TOKEN: ${{ secrets.ARCHIVE_WRITE_TOKEN }}
+          MASSIVE_API_KEY: ${{ secrets.MASSIVE }}
+        run: uv run --project research-source --no-sync python -I tools/rotation_research_runner.py prepare "$CASE_TICKER"
+
+  verify-input:
+    needs: [plan, prepare]
+    if: ${{ always() && !cancelled() && needs.plan.result == 'success' }}
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        ticker: ${{ fromJSON(needs.plan.outputs.tickers) }}
+    environment: private-archive
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      REAL_ETF_PROBE_ENABLED: ${{ vars.REAL_ETF_PROBE_ENABLED }}
+      REAL_ETF_PROBE_REVIEWED_SHA: ${{ vars.REAL_ETF_PROBE_REVIEWED_SHA }}
+      ACTIONS_STEP_DEBUG: ${{ secrets.ACTIONS_STEP_DEBUG }}
+      ACTIONS_RUNNER_DEBUG: ${{ secrets.ACTIONS_RUNNER_DEBUG }}
+      CASE_TICKER: ${{ matrix.ticker }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ vars.REAL_ETF_PROBE_REVIEWED_SHA }}
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: eb70296eef3c79ed9bc259703504ed568e13b3ae
+          path: research-source
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4
+      - name: Install locked tested runtime before credential exposure
+        run: uv sync --project research-source --dev --locked --python 3.12
+      - name: Fresh runner regenerates from private raw bytes without market key
+        env:
+          RUNNER_ENVIRONMENT: ${{ runner.environment }}
+          GITHUB_TOKEN: ${{ github.token }}
+          ARCHIVE_WRITE_TOKEN: ${{ secrets.ARCHIVE_WRITE_TOKEN }}
+        run: uv run --project research-source --no-sync python -I tools/rotation_research_runner.py verify-input "$CASE_TICKER"
+
+  replay:
+    needs: [prepare, verify-input]
+    environment: private-archive
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      REAL_ETF_PROBE_ENABLED: ${{ vars.REAL_ETF_PROBE_ENABLED }}
+      REAL_ETF_PROBE_REVIEWED_SHA: ${{ vars.REAL_ETF_PROBE_REVIEWED_SHA }}
+      ACTIONS_STEP_DEBUG: ${{ secrets.ACTIONS_STEP_DEBUG }}
+      ACTIONS_RUNNER_DEBUG: ${{ secrets.ACTIONS_RUNNER_DEBUG }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ vars.REAL_ETF_PROBE_REVIEWED_SHA }}
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: eb70296eef3c79ed9bc259703504ed568e13b3ae
+          path: research-source
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4
+      - name: Install locked tested runtime before credential exposure
+        run: uv sync --project research-source --dev --locked --python 3.12
+      - name: Canonical Engine and independent Decimal ledger with private retention
+        env:
+          RUNNER_ENVIRONMENT: ${{ runner.environment }}
+          GITHUB_TOKEN: ${{ github.token }}
+          ARCHIVE_WRITE_TOKEN: ${{ secrets.ARCHIVE_WRITE_TOKEN }}
+        run: uv run --project research-source --no-sync python -I tools/rotation_research_runner.py replay
+
+  verify-replay:
+    needs: replay
+    environment: private-archive
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      REAL_ETF_PROBE_ENABLED: ${{ vars.REAL_ETF_PROBE_ENABLED }}
+      REAL_ETF_PROBE_REVIEWED_SHA: ${{ vars.REAL_ETF_PROBE_REVIEWED_SHA }}
+      ACTIONS_STEP_DEBUG: ${{ secrets.ACTIONS_STEP_DEBUG }}
+      ACTIONS_RUNNER_DEBUG: ${{ secrets.ACTIONS_RUNNER_DEBUG }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ vars.REAL_ETF_PROBE_REVIEWED_SHA }}
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: eb70296eef3c79ed9bc259703504ed568e13b3ae
+          path: research-source
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4
+      - name: Install locked tested runtime before credential exposure
+        run: uv sync --project research-source --dev --locked --python 3.12
+      - name: Fresh independent replay compares exact private report bytes read-only
+        env:
+          RUNNER_ENVIRONMENT: ${{ runner.environment }}
+          GITHUB_TOKEN: ${{ github.token }}
+          ARCHIVE_WRITE_TOKEN: ${{ secrets.ARCHIVE_WRITE_TOKEN }}
+        run: uv run --project research-source --no-sync python -I tools/rotation_research_runner.py verify-replay
