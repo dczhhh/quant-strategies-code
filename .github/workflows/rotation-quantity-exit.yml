@@ -34,7 +34,7 @@ jobs:
           ref: ${{ env.EXPERIMENT_SOURCE_SHA }}
           fetch-depth: 0
           persist-credentials: false
-      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4
+      - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d
       - run: uv sync --dev --locked --python 3.12
       - name: Require exact source quality and completed immutable anchors
         env:
@@ -78,7 +78,7 @@ jobs:
           ref: ${{ env.EXPERIMENT_SOURCE_SHA }}
           fetch-depth: 0
           persist-credentials: false
-      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4
+      - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d
       - run: uv sync --dev --locked --python 3.12
       - name: Ten exact original controls plus ten isolated correction cells
         env:
@@ -103,7 +103,7 @@ jobs:
           ref: ${{ env.EXPERIMENT_SOURCE_SHA }}
           fetch-depth: 0
           persist-credentials: false
-      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4
+      - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d
       - run: uv sync --dev --locked --python 3.12
       - name: Independent new runner, different seed, complete byte-exact no-write rebuild
         env:
